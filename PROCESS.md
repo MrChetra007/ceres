@@ -107,9 +107,33 @@ A single-page web app that shows a satellite map of rice-growing areas in Battam
 - Dashboard shows e.g. `🟡 Below expected — Tillering, Day 24 (NDVI 0.31)` instead of flat `🔴 Stressed`
 - Stage boundaries easily tunable — only one table to update with real agronomy data later
 
-### Feature C — PNG export ✅ Complete
-- "Export PNG" button in info panel header
-- Downloads `canvas.toDataURL('image/png')` from Chart.js chart
+### Feature E — UI Redesign ✅ Complete
+- `.panel` base class with consistent styling across slider panel, info panel, and dashboard
+- Segmented 3-way toggle (NDVI / NDWI / LSWI) replacing old two-state button
+- Compare checkbox switch replacing ON/OFF button
+- Export dropdown (PNG / PDF) with outside-click-to-close
+- `.status-toast` fading notification replacing old status bar
+- Restyled field cards with individual badge, stage label, NDVI value, and edit/delete buttons
+- Tabler Icons (`@tabler/icons-webfont`) for iconography
+- `buildStatusObject()` returns structured `{ badgeClass, badgeText, stageLabel }` instead of HTML string
+- `updateFieldStatus()` sets badge, stage, and NDVI value on individual card elements by ID
+
+### Feature F — LSWI Third Index ✅ Complete
+- Added `LSWI_VIS` config and `lswi` entry in `INDICES` (bands B8/B11, palette tan→lightblue→darkblue)
+- 3-way segmented control selects between NDVI, NDWI, LSWI
+- Dashboard status displays LSWI value without health vocabulary (no badge classes beyond neutral `.status-lswi`)
+- `.status-lswi` CSS style (light blue badge background)
+- Shares the same toggle/tile-swap mechanism as existing indices
+
+### Feature G — CHIRPS Rainfall Context ✅ Complete
+- `getRainfallMm()` queries `UCSB-CHG/CHIRPS/DAILY` over a trailing 21-day window, sums precipitation at 5km resolution
+- Wired into `checkStress()` — when a >15% NDVI drop is detected, rainfall for the same window is fetched via `evaluate()`
+- Stress alert text appends contextual note: "only Xmm rain — drought stress is plausible" or "Xmm rain — low rainfall likely isn't the cause"
+- Phrased as context, not diagnosis (per spec: correlation, not causation)
+
+### Area recalculation on edit ✅ Complete
+- `map.on(L.Draw.Event.EDITED)` now recalculates `field.areaHectares` via `getFieldAreaHectares()` before saving to localStorage
+- Field card area updates immediately after shape edit
 
 ---
 
@@ -134,4 +158,4 @@ A single-page web app that shows a satellite map of rice-growing areas in Battam
 
 ## Status
 
-All phases complete. The app is feature-stable with NDVI/NDWI analysis, time slider, draw & save fields, dashboard, compare mode, PNG/PDF export, event overlays, preset locations, and a help panel.
+All phases complete. The app is feature-stable with NDVI/NDWI/LSWI analysis, time slider, draw & save fields, dashboard with growth-stage-aware health badges, compare mode, PNG/PDF export, event overlays, CHIRPS rainfall context on stress alerts, preset locations, area recalculation on edit, and a help panel.
