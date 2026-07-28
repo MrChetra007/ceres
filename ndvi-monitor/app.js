@@ -51,8 +51,8 @@ map.addLayer(drawnItems);
 const drawControl = new L.Control.Draw({
   position: 'topright',
   draw: {
-    polygon: true,
-    rectangle: true,
+    polygon: { showArea: true, metric: ['ha'] },
+    rectangle: { showArea: true, metric: ['ha'] },
     marker: false,
     circle: false,
     circlemarker: false,
@@ -397,6 +397,7 @@ function saveField(name, geojson) {
     id: crypto.randomUUID(),
     name: name,
     geojson: geojson,
+    areaHectares: getFieldAreaHectares(geojson),
     createdAt: new Date().toISOString(),
   });
   localStorage.setItem('ndvi_fields', JSON.stringify(fields));
@@ -474,6 +475,7 @@ function renderFieldList() {
     return (
       '<div class="field-card" data-id="' + f.id + '">' +
         '<div class="field-name">' + escapeHtml(f.name) + '</div>' +
+        '<div class="field-area">' + formatHectares(getOrComputeArea(f)) + '</div>' +
         '<div class="field-status" id="status-' + f.id + '">Loading\u2026</div>' +
         '<button class="delete-btn" data-id="' + f.id + '">\u2715</button>' +
       '</div>'
@@ -757,6 +759,20 @@ function exportPdf() {
   doc.text('Data source: Sentinel-2 (ESA) via Google Earth Engine', 14, y + 4);
 
   doc.save('NDVI_Report_' + new Date().toISOString().slice(0, 10) + '.pdf');
+}
+
+function getFieldAreaHectares(geojson) {
+  return turf.area(geojson) / 10000;
+}
+
+function formatHectares(ha) {
+  if (ha < 0.1) return ha.toFixed(3) + ' ha';
+  return ha.toFixed(1) + ' ha';
+}
+
+function getOrComputeArea(field) {
+  if (typeof field.areaHectares === 'number') return field.areaHectares;
+  return getFieldAreaHectares(field.geojson);
 }
 
 function escapeHtml(str) {

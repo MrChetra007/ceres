@@ -356,6 +356,13 @@ html, body {
   white-space: nowrap;
 }
 
+.field-area {
+  font-size: 0.7rem;
+  color: #999;
+  margin-top: -2px;
+  flex-basis: 100%;
+}
+
 .field-card .field-status {
   font-size: 0.75rem;
   color: #666;

@@ -78,14 +78,18 @@ A single-page web app that shows a satellite map of rice-growing areas in Battam
 
 ### Feature A — Draw & save fields ✅ Complete
 - leaflet-draw integration (polygon + rectangle tools in map toolbar)
+- Live area tooltip while drawing (`showArea: true`, metric in hectares)
 - Fields saved to `localStorage` as GeoJSON via `crypto.randomUUID()` keys
+- Field area (hectares) computed via turf.js and cached at save time
 - `saveField()`, `deleteField()`, `getSavedFields()`, `loadField()` CRUD
 - Clicking a saved field: loads polygon, fits map bounds, recomputes NDVI for that geometry
 - NDVI functions refactored to accept optional `ee.Geometry` parameter
 
 ### Feature B — Dashboard ✅ Complete
 - ☰ toggle button opens 280px left sidebar listing saved fields
-- Each field card: name + live NDVI health badge (🟢 Healthy >0.6 / 🟡 Moderate >0.3 / 🔴 Stressed)
+- Each field card: name + area in hectares + live health badge (🟢 Healthy >0.6 / 🟡 Moderate >0.3 / 🔴 Stressed)
+- Area computed via turf.js geodesic calculation from saved GeoJSON, cached at save time
+- Backward-compatible fallback for pre-patch fields
 - Status computed via `reduceRegion` over the field polygon for the most recent month
 - Click card to load field; hover ✕ to delete
 
@@ -110,6 +114,7 @@ A single-page web app that shows a satellite map of rice-growing areas in Battam
 | Satellite compute | Google Earth Engine (JS client via CDN `<script>` tag, v1.7.36) |
 | Auth | Earth Engine OAuth popup (`ee.data.authenticateViaOauth`) |
 | Drawing | leaflet-draw (v1.0.4) |
+| Area calc | turf.js (v6) |
 | Charts | Chart.js (v4.4.7) |
 | Storage | localStorage (fields, auth token) |
 
