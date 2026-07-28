@@ -36,6 +36,22 @@ const EVENTS = [
 
 const EVENT_COLORS = { flood: '#3b82f6', drought: '#f59e0b' };
 
+const RICE_GROWTH_STAGES = [
+  { maxDay: 10,  stage: 'Transplanting',                min: -0.1, max: 0.3 },
+  { maxDay: 30,  stage: 'Tillering',                    min: 0.3,  max: 0.55 },
+  { maxDay: 55,  stage: 'Stem Elongation / Booting',    min: 0.5,  max: 0.75 },
+  { maxDay: 75,  stage: 'Flowering / Heading',           min: 0.6,  max: 0.85 },
+  { maxDay: 100, stage: 'Grain Filling / Maturity',      min: 0.4,  max: 0.7 },
+  { maxDay: 130, stage: 'Harvest / Senescence',          min: -0.1, max: 0.4 },
+];
+
+function getGrowthStage(daysSincePlanting) {
+  for (var i = 0; i < RICE_GROWTH_STAGES.length; i++) {
+    if (daysSincePlanting <= RICE_GROWTH_STAGES[i].maxDay) return RICE_GROWTH_STAGES[i];
+  }
+  return RICE_GROWTH_STAGES[RICE_GROWTH_STAGES.length - 1];
+}
+
 const map = L.map('map', { center: [13.05, 103.175], zoom: 11 });
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
   attribution: '&copy; OpenStreetMap contributors',
@@ -203,8 +219,18 @@ map.on('click', function (e) {
   });
 });
 
+map.on(L.Draw.Event.EDITSTART, function () {
+  if (drawnItems.getLayers().length === 0) {
+    showToast('Draw a field on the map first, then edit');
+    if (drawControl && drawControl._toolbars && drawControl._toolbars.edit) {
+      drawControl._toolbars.edit.disable();
+    }
+  }
+});
+
 map.on(L.Draw.Event.CREATED, function (e) {
   drawnItems.addLayer(e.layer);
+  updateDrawEditVisibility();
   promptSaveField(e.layer.toGeoJSON());
 });
 
@@ -234,6 +260,16 @@ function syncLeftFromRight() {
   syncing = true;
   map.setView(mapRight.getCenter(), mapRight.getZoom());
   syncing = false;
+}
+
+function updateDrawEditVisibility() {
+  var visible = drawnItems.getLayers().length > 0;
+  var sections = document.querySelectorAll('.leaflet-draw-section');
+  sections.forEach(function (s) {
+    if (s.querySelector('.leaflet-draw-edit-edit, .leaflet-draw-edit-remove')) {
+      s.style.display = visible ? '' : 'none';
+    }
+  });
 }
 
 function setSliderLoading(active) {
@@ -285,6 +321,7 @@ function initializeEE() {
       document.getElementById('auth-overlay').style.display = 'none';
       renderEventMarkers();
       renderFieldList();
+      updateDrawEditVisibility();
       setStatus('computing', 'Computing NDVI...');
       loadNdviForMonth(parseInt(document.getElementById('month-slider').value), null);
     },
@@ -391,13 +428,14 @@ function getSavedFields() {
   return JSON.parse(localStorage.getItem('ndvi_fields') || '[]');
 }
 
-function saveField(name, geojson) {
+function saveField(name, geojson, plantingDate) {
   var fields = getSavedFields();
   fields.push({
     id: crypto.randomUUID(),
     name: name,
     geojson: geojson,
     areaHectares: getFieldAreaHectares(geojson),
+    plantingDate: plantingDate || null,
     createdAt: new Date().toISOString(),
   });
   localStorage.setItem('ndvi_fields', JSON.stringify(fields));
@@ -412,6 +450,7 @@ function deleteField(id) {
     currentFieldName = null;
     currentGeometry = null;
     drawnItems.clearLayers();
+    updateDrawEditVisibility();
     loadNdviForMonth(parseInt(document.getElementById('month-slider').value), null);
     if (compareMode) {
       loadNdviForMonthRight(parseInt(document.getElementById('month-slider-right').value));
@@ -425,9 +464,15 @@ function promptSaveField(geojson) {
   if (!name) {
     var layers = drawnItems.getLayers();
     drawnItems.removeLayer(layers[layers.length - 1]);
+    updateDrawEditVisibility();
     return;
   }
-  saveField(name, geojson);
+  var plantingDateStr = prompt('Planting date (YYYY-MM-DD), or leave blank if unknown:');
+  var plantingDate = null;
+  if (plantingDateStr && !isNaN(Date.parse(plantingDateStr))) {
+    plantingDate = plantingDateStr;
+  }
+  saveField(name, geojson, plantingDate);
   var fields = getSavedFields();
   loadFieldById(fields[fields.length - 1].id);
 }
@@ -443,8 +488,10 @@ function loadField(field) {
   currentFieldName = field.name;
   currentFieldId = field.id;
   drawnItems.clearLayers();
-  var layer = L.geoJSON(field.geojson).addTo(drawnItems);
-  map.fitBounds(layer.getBounds());
+  var geo = L.geoJSON(field.geojson);
+  geo.eachLayer(function (l) { drawnItems.addLayer(l); });
+  updateDrawEditVisibility();
+  map.fitBounds(geo.getBounds());
 
   var geom = field.geojson && (field.geojson.geometry || field.geojson);
   if (!geom || !geom.coordinates) {
@@ -475,7 +522,8 @@ function renderFieldList() {
     return (
       '<div class="field-card" data-id="' + f.id + '">' +
         '<div class="field-name">' + escapeHtml(f.name) + '</div>' +
-        '<div class="field-area">' + formatHectares(getOrComputeArea(f)) + '</div>' +
+        '<div class="field-area">' + formatHectares(getOrComputeArea(f)) +
+          ' <button class="plant-date-btn" data-id="' + f.id + '" title="Set planting date">\ud83d\udcc5</button></div>' +
         '<div class="field-status" id="status-' + f.id + '">Loading\u2026</div>' +
         '<button class="delete-btn" data-id="' + f.id + '">\u2715</button>' +
       '</div>'
@@ -498,6 +546,53 @@ function renderFieldList() {
       deleteField(btn.dataset.id);
     });
   });
+
+  container.querySelectorAll('.plant-date-btn').forEach(function (btn) {
+    btn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      var fields = getSavedFields();
+      var field = fields.find(function (f) { return f.id === btn.dataset.id; });
+      if (!field) return;
+      var hint = field.plantingDate ? 'Current: ' + field.plantingDate : 'No planting date set';
+      var str = prompt('Planting date (YYYY-MM-DD), or leave blank to clear:\n' + hint);
+      if (str && !isNaN(Date.parse(str))) {
+        field.plantingDate = str;
+      } else if (str === '' || str === null) {
+        field.plantingDate = null;
+      } else {
+        return;
+      }
+      localStorage.setItem('ndvi_fields', JSON.stringify(fields));
+      renderFieldList();
+    });
+  });
+}
+
+function buildStatusText(field, value, index) {
+  index = index || 'ndvi';
+  if (index !== 'ndvi') {
+    if (index === 'ndwi') {
+      return (value > 0.3 ? '\ud83d\udca7 Water' : value > 0 ? '\ud83d\udfe7 Moist' : '\ud83c\udf3e Dry') + ' (' + value.toFixed(2) + ')';
+    }
+    return '';
+  }
+  if (!field.plantingDate) {
+    var lbl = value > 0.6 ? '\ud83d\udfe2 Healthy' : value > 0.3 ? '\ud83d\udfe1 Moderate' : '\ud83d\udd34 Stressed';
+    return lbl + ' (NDVI ' + value.toFixed(2) + ')';
+  }
+  var daysSincePlanting = Math.floor((Date.now() - new Date(field.plantingDate).getTime()) / 86400000);
+  if (daysSincePlanting < 0) return 'Planting date is in the future';
+  var stage = getGrowthStage(daysSincePlanting);
+  var label;
+  if (value >= stage.min && value <= stage.max) {
+    label = '\ud83d\udfe2 Healthy';
+  } else if (value < stage.min) {
+    var deficit = stage.min - value;
+    label = deficit > 0.15 ? '\ud83d\udd34 Stressed' : '\ud83d\udfe1 Below expected';
+  } else {
+    label = '\ud83d\udfe2 Healthy';
+  }
+  return label + ' \u2014 ' + stage.stage + ', Day ' + daysSincePlanting + ' (NDVI ' + value.toFixed(2) + ')';
 }
 
 function updateFieldStatus(field) {
@@ -530,13 +625,7 @@ function updateFieldStatus(field) {
       el.textContent = 'No recent data';
       return;
     }
-    var label;
-    if (currentIndex === 'ndvi') {
-      label = value > 0.6 ? '\ud83d\udfe2 Healthy' : value > 0.3 ? '\ud83d\udfe1 Moderate' : '\ud83d\udd34 Stressed';
-    } else {
-      label = value > 0.3 ? '\ud83d\udca7 Water' : value > 0 ? '\ud83d\udfe7 Moist' : '\ud83c\udf3e Dry';
-    }
-    el.textContent = label + ' (' + value.toFixed(2) + ')';
+    el.textContent = buildStatusText(field, value, currentIndex);
   });
 }
 

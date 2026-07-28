@@ -363,6 +363,22 @@ html, body {
   flex-basis: 100%;
 }
 
+.plant-date-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 0.72rem;
+  padding: 0 2px;
+  vertical-align: middle;
+  line-height: 1;
+  opacity: 0.5;
+  transition: opacity 0.15s;
+}
+
+.plant-date-btn:hover {
+  opacity: 1;
+}
+
 .field-card .field-status {
   font-size: 0.75rem;
   color: #666;

@@ -81,17 +81,31 @@ A single-page web app that shows a satellite map of rice-growing areas in Battam
 - Live area tooltip while drawing (`showArea: true`, metric in hectares)
 - Fields saved to `localStorage` as GeoJSON via `crypto.randomUUID()` keys
 - Field area (hectares) computed via turf.js and cached at save time
+- Optional planting date captured at save time for growth-stage-aware health assessment
 - `saveField()`, `deleteField()`, `getSavedFields()`, `loadField()` CRUD
 - Clicking a saved field: loads polygon, fits map bounds, recomputes NDVI for that geometry
 - NDVI functions refactored to accept optional `ee.Geometry` parameter
+- Edit/delete toolbar buttons only visible when `drawnItems` has layers (field loaded or just drawn)
 
 ### Feature B — Dashboard ✅ Complete
 - ☰ toggle button opens 280px left sidebar listing saved fields
-- Each field card: name + area in hectares + live health badge (🟢 Healthy >0.6 / 🟡 Moderate >0.3 / 🔴 Stressed)
+- Each field card: name + area in hectares + live health badge (🟢 Healthy / 🟡 Below expected / 🔴 Stressed)
+- 📅 button on each card to set/change planting date after save
 - Area computed via turf.js geodesic calculation from saved GeoJSON, cached at save time
 - Backward-compatible fallback for pre-patch fields
 - Status computed via `reduceRegion` over the field polygon for the most recent month
 - Click card to load field; hover ✕ to delete
+
+### Feature C — PNG export ✅ Complete
+- "Export PNG" button in info panel header
+- Downloads `canvas.toDataURL('image/png')` from Chart.js chart
+
+### Feature D — Growth-Stage-Aware Thresholds ✅ Complete
+- `RICE_GROWTH_STAGES` table: 6-stage rice phenology curve (Transplanting → Harvest/Senescence) with expected NDVI ranges per stage
+- `buildStatusText()` compares actual NDVI against stage-expected range when planting date is known
+- Flat threshold fallback when planting date is unknown (backward-compatible)
+- Dashboard shows e.g. `🟡 Below expected — Tillering, Day 24 (NDVI 0.31)` instead of flat `🔴 Stressed`
+- Stage boundaries easily tunable — only one table to update with real agronomy data later
 
 ### Feature C — PNG export ✅ Complete
 - "Export PNG" button in info panel header
