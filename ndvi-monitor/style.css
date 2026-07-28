@@ -301,15 +301,30 @@ html, body {
 
 .event-markers {
   display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.event-markers-row,
+.auto-markers-row {
+  display: flex;
   gap: 2px;
   height: 5px;
-  margin: 0;
 }
 
 .event-marker {
   flex: 1;
   border-radius: 2px;
   height: 100%;
+}
+
+.auto-marker {
+  flex: 1;
+  border-radius: 2px;
+  height: 100%;
+}
+.auto-marker.auto-dry {
+  background: repeating-linear-gradient(45deg, #fcd34d 0px, #fcd34d 3px, #fef3c7 3px, #fef3c7 6px);
 }
 
 .event-badge {

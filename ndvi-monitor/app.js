@@ -126,6 +126,32 @@ const EVENTS = [
 ];
 
 const EVENT_COLORS = { flood: '#3b82f6', drought: '#f59e0b' };
+const DRY_MONTH_THRESHOLD = 50;
+var dryMonthSet = new Set();
+
+function fetchDryMonths() {
+  var geom = ee.Geometry.Rectangle(AOI_COORDS);
+  dryMonthSet.clear();
+  var pending = MONTHS.length;
+  MONTHS.forEach(function (m, i) {
+    var start = ee.Date.fromYMD(m.year, m.month, 1);
+    var end = start.advance(1, 'month');
+    ee.ImageCollection('UCSB-CHG/CHIRPS/DAILY')
+      .filterDate(start, end)
+      .filterBounds(geom)
+      .sum()
+      .reduceRegion({ reducer: ee.Reducer.mean(), geometry: geom, scale: 5000, maxPixels: 1e9 })
+      .evaluate(function (result) {
+        var mm = result && result.precipitation;
+        if (mm != null && mm < DRY_MONTH_THRESHOLD) dryMonthSet.add(i);
+        pending--;
+        if (pending === 0) {
+          renderEventMarkers();
+          renderEventMarkersRight();
+        }
+      });
+  });
+}
 
 const RICE_GROWTH_STAGES = [
   { maxDay: 10,  stage: 'Transplanting',                min: -0.1, max: 0.3 },
@@ -429,6 +455,7 @@ function initializeEE() {
       document.getElementById('slider-panel').style.display = 'block';
       document.getElementById('auth-overlay').style.display = 'none';
       renderEventMarkers();
+      fetchDryMonths();
       renderFieldList();
       updateDrawEditVisibility();
       setStatus('computing', 'Computing NDVI...');
@@ -469,13 +496,25 @@ function renderEventMarkersRight() {
 function renderEventMarkersFor(containerId) {
   var container = document.getElementById(containerId);
   if (!container) return;
-  container.innerHTML = MONTHS.map(function (m, i) {
-    var event = EVENTS.find(function (e) { return e.monthIdx === i; });
-    if (event) {
-      return '<div class="event-marker" style="background:' + EVENT_COLORS[event.type] + '" title="' + event.label + '"></div>';
-    }
-    return '<div class="event-marker" style="background:transparent"></div>';
-  }).join('');
+  container.innerHTML = (
+    '<div class="event-markers-row">' +
+      MONTHS.map(function (m, i) {
+        var event = EVENTS.find(function (e) { return e.monthIdx === i; });
+        if (event) {
+          return '<div class="event-marker" style="background:' + EVENT_COLORS[event.type] + '" title="' + event.label + '"></div>';
+        }
+        return '<div class="event-marker" style="background:transparent"></div>';
+      }).join('') +
+    '</div>' +
+    '<div class="auto-markers-row">' +
+      MONTHS.map(function (m, i) {
+        if (dryMonthSet.has(i)) {
+          return '<div class="auto-marker auto-dry" title="Low rainfall"></div>';
+        }
+        return '<div class="auto-marker" style="background:transparent"></div>';
+      }).join('') +
+    '</div>'
+  );
 }
 
 function updateEventBadge(idx, badgeId) {

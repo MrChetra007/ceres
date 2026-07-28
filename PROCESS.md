@@ -135,6 +135,20 @@ A single-page web app that shows a satellite map of rice-growing areas in Battam
 - `map.on(L.Draw.Event.EDITED)` now recalculates `field.areaHectares` via `getFieldAreaHectares()` before saving to localStorage
 - Field card area updates immediately after shape edit
 
+### Feature H — UI-managed preset locations ✅ Complete
+- Preset locations defined in `PRESETS` array, rendered dynamically by `renderPresets()`
+- Pencil icon next to "Jump to:" opens an editor overlay
+- Editor shows all presets with editable name, lat, lng, zoom fields and delete button
+- "Add current view" captures live map center + zoom as a new preset
+- "Reset defaults" restores the original four locations
+- All changes persisted to `localStorage` under `ndvi_presets`
+
+### Feature I — CHIRPS auto dry-month markers ✅ Complete
+- `fetchDryMonths()` queries `UCSB-CHG/CHIRPS/DAILY` for each month individually, flags months below 50mm total precipitation
+- Dry months rendered as a second row of striped amber markers below the hand-placed event markers
+- Runs once after EE initialization, re-renders both left and right slider markers when all results arrive
+- Complements existing hand-placed flood/drought markers without replacing them
+
 ---
 
 ## OAuth setup (Google Cloud Console)
