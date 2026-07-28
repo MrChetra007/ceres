@@ -28,6 +28,95 @@ const MONTHS = [
   { year: 2026, month: 7,  label: 'Jul 2026' },
 ];
 
+var PRESETS = [
+  { label: 'Central', lat: 13.00, lng: 103.175, zoom: 14 },
+  { label: 'North', lat: 13.04, lng: 103.15, zoom: 14 },
+  { label: 'South', lat: 12.97, lng: 103.20, zoom: 14 },
+  { label: 'Svay Cheat', lat: 13.02, lng: 103.22, zoom: 14 },
+];
+
+function loadPresets() {
+  var saved = localStorage.getItem('ndvi_presets');
+  if (saved) { PRESETS = JSON.parse(saved); }
+}
+function savePresets() {
+  localStorage.setItem('ndvi_presets', JSON.stringify(PRESETS));
+  renderPresets();
+}
+
+function renderPresets() {
+  var container = document.getElementById('preset-panel');
+  container.querySelectorAll('.preset-btn').forEach(function (b) { b.remove(); });
+  PRESETS.forEach(function (p) {
+    var btn = document.createElement('button');
+    btn.className = 'preset-btn';
+    btn.dataset.lat = p.lat;
+    btn.dataset.lng = p.lng;
+    btn.dataset.zoom = p.zoom;
+    btn.textContent = p.label;
+    container.appendChild(btn);
+  });
+}
+
+function showPresetEditor() {
+  var overlay = document.getElementById('preset-editor');
+  if (!overlay) return;
+  overlay.style.display = 'flex';
+  var list = document.getElementById('preset-editor-list');
+  list.innerHTML = PRESETS.map(function (p, i) {
+    return (
+      '<div class="preset-editor-row" data-idx="' + i + '">' +
+        '<input class="pe-name" value="' + escapeHtml(p.label) + '" placeholder="Label" />' +
+        '<input class="pe-lat" type="number" step="0.0001" value="' + p.lat + '" placeholder="Lat" />' +
+        '<input class="pe-lng" type="number" step="0.0001" value="' + p.lng + '" placeholder="Lng" />' +
+        '<input class="pe-zoom" type="number" min="1" max="19" value="' + (p.zoom || 14) + '" placeholder="Zoom" />' +
+        '<button class="pe-delete" data-idx="' + i + '"><i class="ti ti-trash"></i></button>' +
+      '</div>'
+    );
+  }).join('');
+
+  document.getElementById('pe-add-current').onclick = function () {
+    var c = map.getCenter();
+    var z = map.getZoom();
+    PRESETS.push({ label: 'New location', lat: c.lat, lng: c.lng, zoom: z });
+    savePresets();
+    showPresetEditor();
+  };
+
+  document.getElementById('pe-reset').onclick = function () {
+    localStorage.removeItem('ndvi_presets');
+    loadPresets();
+    renderPresets();
+    showPresetEditor();
+  };
+
+  document.getElementById('pe-save').onclick = function () {
+    list.querySelectorAll('.preset-editor-row').forEach(function (row) {
+      var idx = parseInt(row.dataset.idx);
+      PRESETS[idx] = {
+        label: row.querySelector('.pe-name').value.trim(),
+        lat: parseFloat(row.querySelector('.pe-lat').value),
+        lng: parseFloat(row.querySelector('.pe-lng').value),
+        zoom: parseInt(row.querySelector('.pe-zoom').value) || 14,
+      };
+    });
+    savePresets();
+    overlay.style.display = 'none';
+  };
+
+  document.getElementById('pe-cancel').onclick = function () {
+    overlay.style.display = 'none';
+  };
+
+  list.querySelectorAll('.pe-delete').forEach(function (btn) {
+    btn.onclick = function () {
+      PRESETS.splice(parseInt(btn.dataset.idx), 1);
+      savePresets();
+      showPresetEditor();
+    };
+  });
+}
+
 const EVENTS = [
   { monthIdx: 2, label: 'Flood', type: 'flood' },
   { monthIdx: 3, label: 'Flood', type: 'flood' },
@@ -189,6 +278,12 @@ document.querySelectorAll('.segmented-btn').forEach(function (btn) {
   });
 });
 
+loadPresets();
+renderPresets();
+document.getElementById('preset-manage-btn').addEventListener('click', function (e) {
+  e.stopPropagation();
+  showPresetEditor();
+});
 document.getElementById('preset-panel').addEventListener('click', function (e) {
   var btn = e.target.closest('.preset-btn');
   if (!btn) return;

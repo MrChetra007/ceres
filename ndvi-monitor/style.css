@@ -602,6 +602,60 @@ html, body {
   background: #dbeafe;
 }
 
+.preset-manage-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 2px 4px;
+  font-size: 13px;
+  color: #666;
+  line-height: 1;
+}
+.preset-manage-btn:hover { color: #1a56db; }
+
+.preset-editor-overlay {
+  position: fixed; inset: 0; z-index: 2000;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(0,0,0,0.4);
+}
+.preset-editor-modal {
+  background: #fff; border-radius: 12px; padding: 1.5rem;
+  width: 90%; max-width: 560px; max-height: 80vh; overflow-y: auto;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.25);
+}
+.preset-editor-modal h3 { margin-bottom: 1rem; font-size: 1.1rem; }
+.preset-editor-row {
+  display: flex; gap: 6px; align-items: center; margin-bottom: 8px;
+}
+.preset-editor-row input {
+  flex: 1; padding: 5px 8px; border: 1px solid #ccc; border-radius: 6px;
+  font-size: 0.8rem; min-width: 0;
+}
+.preset-editor-row .pe-name { flex: 2; }
+.preset-editor-row .pe-lat,
+.preset-editor-row .pe-lng { flex: 1.5; }
+.preset-editor-row .pe-zoom { flex: 0.8; }
+.pe-delete {
+  background: none; border: none; cursor: pointer; color: #ef4444; font-size: 1rem; padding: 4px;
+}
+.preset-editor-actions {
+  display: flex; gap: 8px; margin: 0.75rem 0;
+}
+.preset-editor-actions button {
+  flex: 1; padding: 6px 12px; border: 1px solid #ccc; border-radius: 6px;
+  background: #f9f9f9; cursor: pointer; font-size: 0.8rem;
+}
+.preset-editor-actions button:hover { background: #eee; }
+.preset-editor-footer {
+  display: flex; justify-content: flex-end; gap: 8px; margin-top: 0.75rem;
+}
+.preset-editor-footer button {
+  padding: 7px 18px; border-radius: 8px; border: none; cursor: pointer; font-size: 0.85rem;
+}
+#pe-cancel { background: #f3f3f3; color: #333; }
+.pe-save-btn { background: #1a56db; color: #fff; }
+.pe-save-btn:hover { background: #1648c0; }
+
 .help-btn {
   position: fixed;
   bottom: 80px;

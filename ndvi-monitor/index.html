@@ -22,10 +22,7 @@
 
   <div id="preset-panel" class="preset-panel">
     <span class="preset-label">Jump to:</span>
-    <button class="preset-btn" data-lat="13.00" data-lng="103.175" data-zoom="14">Central</button>
-    <button class="preset-btn" data-lat="13.04" data-lng="103.15" data-zoom="14">North</button>
-    <button class="preset-btn" data-lat="12.97" data-lng="103.20" data-zoom="14">South</button>
-    <button class="preset-btn" data-lat="13.02" data-lng="103.22" data-zoom="14">Svay Cheat</button>
+    <button id="preset-manage-btn" class="preset-manage-btn" title="Manage locations"><i class="ti ti-pencil"></i></button>
   </div>
 
   <div class="map-container">
@@ -33,6 +30,20 @@
     <div id="map-right" class="map-right" style="display:none"></div>
   </div>
   <div id="status-bar" class="status-toast hidden"></div>
+  <div id="preset-editor" class="preset-editor-overlay" style="display:none">
+    <div class="preset-editor-modal">
+      <h3>Manage Locations</h3>
+      <div id="preset-editor-list"></div>
+      <div class="preset-editor-actions">
+        <button id="pe-add-current"><i class="ti ti-plus"></i> Add current view</button>
+        <button id="pe-reset"><i class="ti ti-refresh"></i> Reset defaults</button>
+      </div>
+      <div class="preset-editor-footer">
+        <button id="pe-cancel">Cancel</button>
+        <button id="pe-save" class="pe-save-btn">Save</button>
+      </div>
+    </div>
+  </div>
   <div id="slider-panel" class="panel" style="display:none">
     <div class="control-row">
       <div class="segmented" role="group" aria-label="Index">
