@@ -103,3 +103,47 @@ html, body {
   background: #f8d7da;
   color: #721c24;
 }
+
+.slider-panel {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 998;
+  background: rgba(255, 255, 255, 0.95);
+  border-radius: 10px;
+  padding: 0.75rem 1.5rem;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.25);
+  text-align: center;
+  min-width: 280px;
+}
+
+.slider-panel label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #333;
+  display: block;
+  margin-bottom: 0.4rem;
+}
+
+#month-slider {
+  width: 100%;
+  cursor: pointer;
+}
+
+.slider-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.7rem;
+  color: #888;
+  margin-top: 0.2rem;
+}
+
+.slider-panel.loading label::after {
+  content: ' ⟳';
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}

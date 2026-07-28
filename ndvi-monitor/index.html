@@ -10,6 +10,14 @@
 <body>
   <div id="map"></div>
   <div id="status-bar" class="status-bar"></div>
+  <div id="slider-panel" class="slider-panel" style="display:none">
+    <label for="month-slider">Month: <span id="month-label">June 2026</span></label>
+    <input type="range" id="month-slider" min="0" max="13" value="12" step="1" />
+    <div class="slider-labels">
+      <span>Jun 2025</span>
+      <span>Jul 2026</span>
+    </div>
+  </div>
   <div id="auth-overlay" class="auth-overlay">
     <div class="auth-card">
       <h2>NDVI Rice Crop Health Monitor</h2>
