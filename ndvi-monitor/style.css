@@ -139,6 +139,40 @@ html, body {
   margin-top: 0.2rem;
 }
 
+.event-markers {
+  display: flex;
+  gap: 2px;
+  margin: 2px 0 0;
+  height: 6px;
+}
+
+.event-marker {
+  flex: 1;
+  border-radius: 2px;
+  height: 100%;
+}
+
+.event-badge {
+  display: inline-block;
+  font-size: 0.65rem;
+  font-weight: 700;
+  padding: 1px 6px;
+  border-radius: 4px;
+  margin-left: 4px;
+  vertical-align: middle;
+  text-transform: uppercase;
+}
+
+.event-badge.flood {
+  background: #dbeafe;
+  color: #1d4ed8;
+}
+
+.event-badge.drought {
+  background: #fef3c7;
+  color: #b45309;
+}
+
 .slider-panel.loading label::after {
   content: ' ⟳';
   animation: spin 1s linear infinite;

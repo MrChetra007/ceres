@@ -20,6 +20,16 @@ const MONTHS = [
   { year: 2026, month: 7,  label: 'Jul 2026' },
 ];
 
+const EVENTS = [
+  { monthIdx: 2, label: 'Flood', type: 'flood' },
+  { monthIdx: 3, label: 'Flood', type: 'flood' },
+  { monthIdx: 7, label: 'Dry spell', type: 'drought' },
+  { monthIdx: 8, label: 'Dry spell', type: 'drought' },
+  { monthIdx: 9, label: 'Dry spell', type: 'drought' },
+];
+
+const EVENT_COLORS = { flood: '#3b82f6', drought: '#f59e0b' };
+
 const map = L.map('map', { center: [13.05, 103.175], zoom: 11 });
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
   attribution: '&copy; OpenStreetMap contributors',
@@ -144,6 +154,7 @@ function initializeEE() {
     () => {
       document.getElementById('slider-panel').style.display = 'block';
       document.getElementById('auth-overlay').style.display = 'none';
+      renderEventMarkers();
       renderFieldList();
       setStatus('computing', 'Computing NDVI...');
       loadNdviForMonth(parseInt(document.getElementById('month-slider').value), null);
@@ -170,11 +181,32 @@ function getNdviForMonth(year, month, geometry) {
     .rename('NDVI');
 }
 
+function renderEventMarkers() {
+  const container = document.getElementById('event-markers');
+  container.innerHTML = MONTHS.map(function (m, i) {
+    const event = EVENTS.find(function (e) { return e.monthIdx === i; });
+    if (event) {
+      return '<div class="event-marker" style="background:' + EVENT_COLORS[event.type] + '" title="' + event.label + '"></div>';
+    }
+    return '<div class="event-marker" style="background:transparent"></div>';
+  }).join('');
+}
+
 function loadNdviForMonth(idx, geometry) {
   const m = MONTHS[idx];
   if (!m) return;
   document.getElementById('month-label').textContent = m.label;
   setStatus('computing', `Computing NDVI — ${m.label}...`);
+
+  const event = EVENTS.find(function (e) { return e.monthIdx === idx; });
+  const badge = document.getElementById('event-badge');
+  if (event) {
+    badge.textContent = event.label;
+    badge.className = 'event-badge ' + event.type;
+    badge.style.display = 'inline-block';
+  } else {
+    badge.style.display = 'none';
+  }
 
   const ndvi = getNdviForMonth(m.year, m.month, geometry);
   ndvi.getMap(NDVI_VIS, (mapId, err) => {
