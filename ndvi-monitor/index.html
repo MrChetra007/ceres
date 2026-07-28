@@ -26,8 +26,18 @@
     </div>
   </div>
 
+  <div id="info-panel" class="info-panel" style="display:none">
+    <button id="close-panel" class="close-btn">&times;</button>
+    <div id="panel-content">
+      <p id="point-coords" class="coords"></p>
+      <div id="stress-alert" class="stress-alert" style="display:none"></div>
+      <canvas id="trend-chart"></canvas>
+    </div>
+  </div>
+
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
   <script src="https://ajax.googleapis.com/ajax/libs/earthengine/1.7.36/earthengine-api.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

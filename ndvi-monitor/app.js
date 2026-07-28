@@ -28,6 +28,8 @@ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
 
 let ndviLayer = null;
 let debounceTimer = null;
+let trendChart = null;
+let clickMarker = null;
 
 document.getElementById('sign-in-btn').addEventListener('click', authenticate);
 
@@ -37,6 +39,27 @@ document.getElementById('month-slider').addEventListener('input', function () {
   debounceTimer = setTimeout(() => {
     loadNdviForMonth(parseInt(this.value));
   }, 300);
+});
+
+document.getElementById('close-panel').addEventListener('click', function () {
+  document.getElementById('info-panel').style.display = 'none';
+});
+
+map.on('click', function (e) {
+  const { lat, lng } = e.latlng;
+  document.getElementById('point-coords').textContent =
+    `Lat: ${lat.toFixed(4)}, Lng: ${lng.toFixed(4)}`;
+  document.getElementById('info-panel').style.display = 'flex';
+  setStatus('computing', 'Fetching NDVI trend...');
+  getNdviTimeSeriesAtPoint(lat, lng, function (data) {
+    if (data.length === 0) {
+      setStatus('error', 'No NDVI data for this point');
+      return;
+    }
+    renderChart(data);
+    checkStress(data);
+    setStatus('ready', `NDVI trend loaded — ${data.length} observations`);
+  });
 });
 
 const savedCreds = localStorage.getItem('ee_auth_creds');
@@ -119,6 +142,146 @@ function loadNdviForMonth(idx) {
     }).addTo(map);
     setStatus('ready', `NDVI layer loaded — ${m.label}`);
   });
+}
+
+function getNdviTimeSeriesAtPoint(lat, lng, callback) {
+  const point = ee.Geometry.Point([lng, lat]);
+  const startDate = ee.Date('2025-06-01');
+  const endDate = ee.Date('2026-07-01');
+
+  const allImages = ee.ImageCollection('COPERNICUS/S2_SR_HARMONIZED')
+    .filterBounds(point)
+    .filterDate(startDate, endDate)
+    .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', 40));
+
+  const ndviSeries = allImages.map(function (img) {
+    const ndvi = img.normalizedDifference(['B8', 'B4']).rename('NDVI');
+    const value = ndvi.reduceRegion({
+      reducer: ee.Reducer.mean(),
+      geometry: point,
+      scale: 10,
+    });
+    return ee.Feature(null, {
+      date: img.date().format('YYYY-MM-dd'),
+      ndvi: value.get('NDVI'),
+    });
+  });
+
+  ndviSeries
+    .filter(ee.Filter.notNull(['ndvi']))
+    .evaluate(function (result) {
+      if (!result || !result.features) {
+        callback([]);
+        return;
+      }
+      const data = result.features.map(function (f) {
+        return {
+          date: f.properties.date,
+          ndvi: f.properties.ndvi,
+        };
+      });
+      callback(data);
+    });
+}
+
+function renderChart(data) {
+  const ctx = document.getElementById('trend-chart').getContext('2d');
+  if (trendChart) trendChart.destroy();
+
+  const labels = data.map(function (d) { return d.date; });
+  const values = data.map(function (d) { return d.ndvi; });
+
+  trendChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: labels,
+      datasets: [{
+        label: 'NDVI',
+        data: values,
+        borderColor: '#22c55e',
+        backgroundColor: 'rgba(34, 197, 94, 0.15)',
+        borderWidth: 2,
+        pointRadius: 3,
+        pointBackgroundColor: '#22c55e',
+        fill: true,
+        tension: 0.3,
+      }],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: function (ctx) {
+              return 'NDVI: ' + ctx.parsed.y.toFixed(3);
+            },
+          },
+        },
+      },
+      scales: {
+        x: {
+          ticks: { font: { size: 10 }, maxTicksLimit: 8 },
+          grid: { display: false },
+        },
+        y: {
+          min: -0.5,
+          max: 1,
+          ticks: { font: { size: 10 } },
+          grid: { color: '#f0f0f0' },
+          title: {
+            display: true,
+            text: 'NDVI',
+            font: { size: 11 },
+          },
+        },
+      },
+    },
+  });
+}
+
+function checkStress(data) {
+  const alertEl = document.getElementById('stress-alert');
+  if (data.length < 2) {
+    alertEl.style.display = 'none';
+    return;
+  }
+
+  const sorted = data.slice().sort(function (a, b) {
+    return a.date.localeCompare(b.date);
+  });
+
+  const recent = sorted[sorted.length - 1];
+  if (!recent || recent.ndvi === null) {
+    alertEl.style.display = 'none';
+    return;
+  }
+
+  let earlier = null;
+  for (let i = sorted.length - 2; i >= 0; i--) {
+    const d = sorted[i];
+    if (d.ndvi !== null) {
+      const daysDiff = (new Date(recent.date) - new Date(d.date)) / 86400000;
+      if (daysDiff >= 14) {
+        earlier = d;
+        break;
+      }
+    }
+  }
+
+  if (!earlier || !earlier.ndvi) {
+    alertEl.style.display = 'none';
+    return;
+  }
+
+  const drop = ((earlier.ndvi - recent.ndvi) / earlier.ndvi) * 100;
+  if (drop > 15) {
+    alertEl.textContent = `⚠ Possible stress detected — NDVI dropped ${drop.toFixed(0)}% (${earlier.date} → ${recent.date})`;
+    alertEl.style.display = 'block';
+  } else {
+    alertEl.style.display = 'none';
+  }
 }
 
 function setStatus(state, text) {
