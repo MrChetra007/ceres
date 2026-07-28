@@ -2,6 +2,12 @@ const EE_PROJECT_ID = 'gen-lang-client-0978198347';
 const CLIENT_ID = '355514869488-q3v52vvkb7c3gikr0og89o26m51ev403.apps.googleusercontent.com';
 const AOI_COORDS = [103.10, 12.95, 103.25, 13.05];
 const NDVI_VIS = { min: -0.2, max: 0.8, palette: ['red', 'yellow', 'green'] };
+const NDWI_VIS = { min: -1, max: 1, palette: ['brown', 'tan', '#e0f0ff', '#4a90d9', '#003366'] };
+
+const INDICES = {
+  ndvi: { name: 'NDVI', bands: ['B8', 'B4'], vis: NDVI_VIS, label: 'Vegetation' },
+  ndwi: { name: 'NDWI', bands: ['B3', 'B8'], vis: NDWI_VIS, label: 'Water' },
+};
 
 const MONTHS = [
   { year: 2025, month: 6,  label: 'Jun 2025' },
@@ -62,6 +68,7 @@ let debounceTimer = null;
 let debounceTimerRight = null;
 let trendChart = null;
 let currentGeometry = null;
+let currentIndex = 'ndvi';
 let compareMode = false;
 let loadingCount = 0;
 let currentFieldName = null;
@@ -137,6 +144,21 @@ document.getElementById('compare-toggle').addEventListener('click', function () 
     rightSlider.style.display = 'none';
     map.invalidateSize();
   }
+});
+
+document.getElementById('index-toggle-btn').className = 'index-btn ndvi';
+document.getElementById('index-toggle-btn').addEventListener('click', function () {
+  currentIndex = currentIndex === 'ndvi' ? 'ndwi' : 'ndvi';
+  var btn = document.getElementById('index-toggle-btn');
+  btn.textContent = currentIndex === 'ndvi' ? 'NDWI' : 'NDVI';
+  btn.className = 'index-btn ' + currentIndex;
+  var idx = parseInt(document.getElementById('month-slider').value);
+  setSliderLoading(true);
+  loadNdviForMonth(idx, currentGeometry);
+  if (compareMode) {
+    loadNdviForMonthRight(parseInt(document.getElementById('month-slider-right').value));
+  }
+  renderFieldList();
 });
 
 document.getElementById('preset-panel').addEventListener('click', function (e) {
@@ -275,7 +297,9 @@ function initializeEE() {
   );
 }
 
-function getNdviForMonth(year, month, geometry) {
+function getIndexImage(year, month, geometry, index) {
+  index = index || currentIndex;
+  var cfg = INDICES[index];
   var start = ee.Date.fromYMD(year, month, 1);
   var end = start.advance(1, 'month');
   var geom = geometry || ee.Geometry.Rectangle(AOI_COORDS);
@@ -284,8 +308,8 @@ function getNdviForMonth(year, month, geometry) {
     .filterDate(start, end)
     .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', 40))
     .median()
-    .normalizedDifference(['B8', 'B4'])
-    .rename('NDVI');
+    .normalizedDifference(cfg.bands)
+    .rename(cfg.name);
 }
 
 function renderEventMarkers() {
@@ -323,12 +347,13 @@ function updateEventBadge(idx, badgeId) {
 function loadNdviForMonth(idx, geometry) {
   var m = MONTHS[idx];
   if (!m) return;
+  var cfg = INDICES[currentIndex];
   document.getElementById('month-label').textContent = m.label;
   updateEventBadge(idx, 'event-badge');
-  setStatus('computing', 'Computing NDVI \u2014 ' + m.label + '...');
+  setStatus('computing', 'Computing ' + cfg.name + ' \u2014 ' + m.label + '...');
 
-  var ndvi = getNdviForMonth(m.year, m.month, geometry);
-  ndvi.getMap(NDVI_VIS, function (mapId, err) {
+  var img = getIndexImage(m.year, m.month, geometry);
+  img.getMap(cfg.vis, function (mapId, err) {
     setSliderLoading(false);
     if (err || !mapId?.urlFormat) {
       setStatus('error', 'No data for ' + m.label + ' \u2014 try a different month');
@@ -339,18 +364,19 @@ function loadNdviForMonth(idx, geometry) {
       attribution: 'Sentinel-2 / Google Earth Engine',
       opacity: 0.8,
     }).addTo(map);
-    setStatus('ready', 'NDVI layer loaded \u2014 ' + m.label);
+    setStatus('ready', cfg.name + ' layer loaded \u2014 ' + m.label);
   });
 }
 
 function loadNdviForMonthRight(idx) {
   var m = MONTHS[idx];
   if (!m) return;
+  var cfg = INDICES[currentIndex];
   document.getElementById('month-label-right').textContent = m.label;
   updateEventBadge(idx, 'event-badge-right');
 
-  var ndvi = getNdviForMonth(m.year, m.month, currentGeometry);
-  ndvi.getMap(NDVI_VIS, function (mapId, err) {
+  var img = getIndexImage(m.year, m.month, currentGeometry);
+  img.getMap(cfg.vis, function (mapId, err) {
     setSliderLoading(false);
     if (err || !mapId?.urlFormat) return;
     if (ndviLayerRight) mapRight.removeLayer(ndviLayerRight);
@@ -478,30 +504,36 @@ function updateFieldStatus(field) {
   var coords = geom.coordinates;
   var geometry = ee.Geometry.Polygon(coords);
 
+  var cfg = INDICES[currentIndex];
   var recent = ee.ImageCollection('COPERNICUS/S2_SR_HARMONIZED')
     .filterBounds(geometry)
     .filterDate(ee.Date(Date.now()).advance(-1, 'month'), ee.Date(Date.now()))
     .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', 40))
     .median()
-    .normalizedDifference(['B8', 'B4'])
-    .rename('NDVI');
+    .normalizedDifference(cfg.bands)
+    .rename(cfg.name);
 
-  var meanNdvi = recent.reduceRegion({
+  var meanVal = recent.reduceRegion({
     reducer: ee.Reducer.mean(),
     geometry: geometry,
     scale: 10,
     maxPixels: 1e9,
   });
 
-  meanNdvi.evaluate(function (result) {
+  meanVal.evaluate(function (result) {
     var el = document.getElementById('status-' + field.id);
     if (!el) return;
-    var value = result && result.NDVI;
+    var value = result && result[cfg.name];
     if (value == null || value === undefined) {
       el.textContent = 'No recent data';
       return;
     }
-    var label = value > 0.6 ? '\ud83d\udfe2 Healthy' : value > 0.3 ? '\ud83d\udfe1 Moderate' : '\ud83d\udd34 Stressed';
+    var label;
+    if (currentIndex === 'ndvi') {
+      label = value > 0.6 ? '\ud83d\udfe2 Healthy' : value > 0.3 ? '\ud83d\udfe1 Moderate' : '\ud83d\udd34 Stressed';
+    } else {
+      label = value > 0.3 ? '\ud83d\udca7 Water' : value > 0 ? '\ud83d\udfe7 Moist' : '\ud83c\udf3e Dry';
+    }
     el.textContent = label + ' (' + value.toFixed(2) + ')';
   });
 }

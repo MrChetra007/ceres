@@ -175,6 +175,33 @@ html, body {
   color: #fff;
 }
 
+.index-toggle {
+  display: flex;
+  align-items: center;
+}
+
+.index-btn {
+  background: #e5e7eb;
+  border: none;
+  border-radius: 4px;
+  padding: 3px 8px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  cursor: pointer;
+  color: #555;
+  transition: background 0.2s, color 0.2s;
+}
+
+.index-btn.ndvi {
+  background: #22c55e;
+  color: #fff;
+}
+
+.index-btn.ndwi {
+  background: #3b82f6;
+  color: #fff;
+}
+
 .slider-group {
   margin-bottom: 0.3rem;
 }
