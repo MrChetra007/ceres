@@ -36,6 +36,9 @@ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
   maxZoom: 19,
 }).addTo(map);
 
+let mapRight = null;
+let syncing = false;
+
 const drawnItems = new L.FeatureGroup();
 map.addLayer(drawnItems);
 
@@ -53,17 +56,28 @@ const drawControl = new L.Control.Draw({
 map.addControl(drawControl);
 
 let ndviLayer = null;
+let ndviLayerRight = null;
 let debounceTimer = null;
+let debounceTimerRight = null;
 let trendChart = null;
 let currentGeometry = null;
+let compareMode = false;
 
 document.getElementById('sign-in-btn').addEventListener('click', authenticate);
 
 document.getElementById('month-slider').addEventListener('input', function () {
   clearTimeout(debounceTimer);
   document.getElementById('slider-panel').classList.add('loading');
-  debounceTimer = setTimeout(() => {
-    loadNdviForMonth(parseInt(this.value), currentGeometry);
+  debounceTimer = setTimeout(function () {
+    loadNdviForMonth(parseInt(document.getElementById('month-slider').value), currentGeometry);
+  }, 300);
+});
+
+document.getElementById('month-slider-right').addEventListener('input', function () {
+  clearTimeout(debounceTimerRight);
+  document.getElementById('slider-panel').classList.add('loading');
+  debounceTimerRight = setTimeout(function () {
+    loadNdviForMonthRight(parseInt(document.getElementById('month-slider-right').value));
   }, 300);
 });
 
@@ -81,10 +95,48 @@ document.getElementById('dashboard-close').addEventListener('click', function ()
   document.getElementById('dashboard').style.display = 'none';
 });
 
+document.getElementById('compare-toggle').addEventListener('click', function () {
+  compareMode = !compareMode;
+  var btn = document.getElementById('compare-toggle');
+  var rightMap = document.getElementById('map-right');
+  var rightSlider = document.getElementById('slider-group-right');
+
+  if (compareMode) {
+    btn.textContent = 'Compare ON';
+    btn.classList.add('active');
+    rightMap.style.display = 'block';
+    rightSlider.style.display = 'block';
+
+    if (!mapRight) {
+      mapRight = L.map('map-right', { center: [13.05, 103.175], zoom: 11 });
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap contributors',
+        maxZoom: 19,
+      }).addTo(mapRight);
+      mapRight.on('move', syncLeftFromRight);
+      map.on('move', syncRightFromLeft);
+    }
+
+    mapRight.setView(map.getCenter(), map.getZoom());
+    map.invalidateSize();
+    mapRight.invalidateSize();
+
+    renderEventMarkersRight();
+    loadNdviForMonthRight(parseInt(document.getElementById('month-slider-right').value));
+  } else {
+    btn.textContent = 'Compare OFF';
+    btn.classList.remove('active');
+    rightMap.style.display = 'none';
+    rightSlider.style.display = 'none';
+    map.invalidateSize();
+  }
+});
+
 map.on('click', function (e) {
-  const { lat, lng } = e.latlng;
+  var lat = e.latlng.lat;
+  var lng = e.latlng.lng;
   document.getElementById('point-coords').textContent =
-    `Lat: ${lat.toFixed(4)}, Lng: ${lng.toFixed(4)}`;
+    'Lat: ' + lat.toFixed(4) + ', Lng: ' + lng.toFixed(4);
   document.getElementById('info-panel').style.display = 'flex';
   setStatus('computing', 'Fetching NDVI trend...');
   getNdviTimeSeriesAtPoint(lat, lng, function (data) {
@@ -94,7 +146,7 @@ map.on('click', function (e) {
     }
     renderChart(data);
     checkStress(data);
-    setStatus('ready', `NDVI trend loaded — ${data.length} observations`);
+    setStatus('ready', 'NDVI trend loaded \u2014 ' + data.length + ' observations');
   });
 });
 
@@ -104,11 +156,11 @@ map.on(L.Draw.Event.CREATED, function (e) {
 });
 
 map.on(L.Draw.Event.EDITED, function () {
-  const layers = [];
+  var layers = [];
   drawnItems.eachLayer(function (l) { layers.push(l.toGeoJSON()); });
   if (layers.length > 0) {
-    const fields = getSavedFields();
-    const updated = fields.map(function (f) {
+    var fields = getSavedFields();
+    var updated = fields.map(function (f) {
       f.geojson = layers[0];
       return f;
     });
@@ -118,10 +170,24 @@ map.on(L.Draw.Event.EDITED, function () {
   }
 });
 
-const savedCreds = localStorage.getItem('ee_auth_creds');
+function syncRightFromLeft() {
+  if (syncing || !mapRight) return;
+  syncing = true;
+  mapRight.setView(map.getCenter(), map.getZoom());
+  syncing = false;
+}
+
+function syncLeftFromRight() {
+  if (syncing || !mapRight) return;
+  syncing = true;
+  map.setView(mapRight.getCenter(), mapRight.getZoom());
+  syncing = false;
+}
+
+var savedCreds = localStorage.getItem('ee_auth_creds');
 if (savedCreds) {
   try {
-    const creds = JSON.parse(savedCreds);
+    var creds = JSON.parse(savedCreds);
     ee.data.setAuthToken(CLIENT_ID, creds.access_token, creds.expires_in);
     initializeEE();
   } catch (e) {
@@ -133,8 +199,8 @@ function authenticate() {
   setStatus('authenticating', 'Signing in...');
   ee.data.authenticateViaOauth(
     CLIENT_ID,
-    () => {
-      const token = ee.data.getAuthToken();
+    function () {
+      var token = ee.data.getAuthToken();
       if (token) {
         localStorage.setItem('ee_auth_creds', JSON.stringify({
           access_token: token,
@@ -143,7 +209,7 @@ function authenticate() {
       }
       initializeEE();
     },
-    (err) => setStatus('error', `Auth failed: ${err?.message || err}`)
+    function (err) { setStatus('error', 'Auth failed: ' + (err?.message || err)); }
   );
 }
 
@@ -151,7 +217,7 @@ function initializeEE() {
   setStatus('initializing', 'Initializing Earth Engine...');
   ee.initialize(
     null, null,
-    () => {
+    function () {
       document.getElementById('slider-panel').style.display = 'block';
       document.getElementById('auth-overlay').style.display = 'none';
       renderEventMarkers();
@@ -159,9 +225,9 @@ function initializeEE() {
       setStatus('computing', 'Computing NDVI...');
       loadNdviForMonth(parseInt(document.getElementById('month-slider').value), null);
     },
-    (err) => {
+    function (err) {
       localStorage.removeItem('ee_auth_creds');
-      setStatus('error', `Init failed: ${err?.message || err}`);
+      setStatus('error', 'Init failed: ' + (err?.message || err));
     },
     null,
     EE_PROJECT_ID
@@ -169,9 +235,9 @@ function initializeEE() {
 }
 
 function getNdviForMonth(year, month, geometry) {
-  const start = ee.Date.fromYMD(year, month, 1);
-  const end = start.advance(1, 'month');
-  const geom = geometry || ee.Geometry.Rectangle(AOI_COORDS);
+  var start = ee.Date.fromYMD(year, month, 1);
+  var end = start.advance(1, 'month');
+  var geom = geometry || ee.Geometry.Rectangle(AOI_COORDS);
   return ee.ImageCollection('COPERNICUS/S2_SR_HARMONIZED')
     .filterBounds(geom)
     .filterDate(start, end)
@@ -182,9 +248,18 @@ function getNdviForMonth(year, month, geometry) {
 }
 
 function renderEventMarkers() {
-  const container = document.getElementById('event-markers');
+  renderEventMarkersFor('event-markers');
+}
+
+function renderEventMarkersRight() {
+  renderEventMarkersFor('event-markers-right');
+}
+
+function renderEventMarkersFor(containerId) {
+  var container = document.getElementById(containerId);
+  if (!container) return;
   container.innerHTML = MONTHS.map(function (m, i) {
-    const event = EVENTS.find(function (e) { return e.monthIdx === i; });
+    var event = EVENTS.find(function (e) { return e.monthIdx === i; });
     if (event) {
       return '<div class="event-marker" style="background:' + EVENT_COLORS[event.type] + '" title="' + event.label + '"></div>';
     }
@@ -192,14 +267,9 @@ function renderEventMarkers() {
   }).join('');
 }
 
-function loadNdviForMonth(idx, geometry) {
-  const m = MONTHS[idx];
-  if (!m) return;
-  document.getElementById('month-label').textContent = m.label;
-  setStatus('computing', `Computing NDVI — ${m.label}...`);
-
-  const event = EVENTS.find(function (e) { return e.monthIdx === idx; });
-  const badge = document.getElementById('event-badge');
+function updateEventBadge(idx, badgeId) {
+  var event = EVENTS.find(function (e) { return e.monthIdx === idx; });
+  var badge = document.getElementById(badgeId);
   if (event) {
     badge.textContent = event.label;
     badge.className = 'event-badge ' + event.type;
@@ -207,12 +277,20 @@ function loadNdviForMonth(idx, geometry) {
   } else {
     badge.style.display = 'none';
   }
+}
 
-  const ndvi = getNdviForMonth(m.year, m.month, geometry);
-  ndvi.getMap(NDVI_VIS, (mapId, err) => {
+function loadNdviForMonth(idx, geometry) {
+  var m = MONTHS[idx];
+  if (!m) return;
+  document.getElementById('month-label').textContent = m.label;
+  updateEventBadge(idx, 'event-badge');
+  setStatus('computing', 'Computing NDVI \u2014 ' + m.label + '...');
+
+  var ndvi = getNdviForMonth(m.year, m.month, geometry);
+  ndvi.getMap(NDVI_VIS, function (mapId, err) {
     document.getElementById('slider-panel').classList.remove('loading');
     if (err || !mapId?.urlFormat) {
-      setStatus('error', `No data for ${m.label} — try a different month`);
+      setStatus('error', 'No data for ' + m.label + ' \u2014 try a different month');
       return;
     }
     if (ndviLayer) map.removeLayer(ndviLayer);
@@ -220,7 +298,25 @@ function loadNdviForMonth(idx, geometry) {
       attribution: 'Sentinel-2 / Google Earth Engine',
       opacity: 0.8,
     }).addTo(map);
-    setStatus('ready', `NDVI layer loaded — ${m.label}`);
+    setStatus('ready', 'NDVI layer loaded \u2014 ' + m.label);
+  });
+}
+
+function loadNdviForMonthRight(idx) {
+  var m = MONTHS[idx];
+  if (!m) return;
+  document.getElementById('month-label-right').textContent = m.label;
+  updateEventBadge(idx, 'event-badge-right');
+
+  var ndvi = getNdviForMonth(m.year, m.month, currentGeometry);
+  ndvi.getMap(NDVI_VIS, function (mapId, err) {
+    document.getElementById('slider-panel').classList.remove('loading');
+    if (err || !mapId?.urlFormat) return;
+    if (ndviLayerRight) mapRight.removeLayer(ndviLayerRight);
+    ndviLayerRight = L.tileLayer(mapId.urlFormat, {
+      attribution: 'Sentinel-2 / Google Earth Engine',
+      opacity: 0.8,
+    }).addTo(mapRight);
   });
 }
 
@@ -229,7 +325,7 @@ function getSavedFields() {
 }
 
 function saveField(name, geojson) {
-  const fields = getSavedFields();
+  var fields = getSavedFields();
   fields.push({
     id: crypto.randomUUID(),
     name: name,
@@ -241,50 +337,57 @@ function saveField(name, geojson) {
 }
 
 function deleteField(id) {
-  const fields = getSavedFields().filter(function (f) { return f.id !== id; });
+  var fields = getSavedFields().filter(function (f) { return f.id !== id; });
   localStorage.setItem('ndvi_fields', JSON.stringify(fields));
   if (fields.length === 0) {
     drawnItems.clearLayers();
     currentGeometry = null;
     loadNdviForMonth(parseInt(document.getElementById('month-slider').value), null);
+    if (compareMode) {
+      loadNdviForMonthRight(parseInt(document.getElementById('month-slider-right').value));
+    }
   }
   renderFieldList();
 }
 
 function promptSaveField(geojson) {
-  const name = prompt('Name this field (e.g. "North paddy — Svay Cheat"):');
+  var name = prompt('Name this field (e.g. "North paddy \u2014 Svay Cheat"):');
   if (!name) {
-    drawnItems.removeLayer(drawnItems.getLayers()[drawnItems.getLayers().length - 1]);
+    var layers = drawnItems.getLayers();
+    drawnItems.removeLayer(layers[layers.length - 1]);
     return;
   }
   saveField(name, geojson);
-  const fields = getSavedFields();
+  var fields = getSavedFields();
   loadFieldById(fields[fields.length - 1].id);
 }
 
 function loadFieldById(id) {
-  const fields = getSavedFields();
-  const field = fields.find(function (f) { return f.id === id; });
+  var fields = getSavedFields();
+  var field = fields.find(function (f) { return f.id === id; });
   if (!field) return;
   loadField(field);
 }
 
 function loadField(field) {
   drawnItems.clearLayers();
-  const layer = L.geoJSON(field.geojson).addTo(drawnItems);
+  var layer = L.geoJSON(field.geojson).addTo(drawnItems);
   map.fitBounds(layer.getBounds());
 
-  const coords = field.geojson.geometry.coordinates;
-  const eeGeometry = ee.Geometry.Polygon(coords);
+  var coords = field.geojson.geometry.coordinates;
+  var eeGeometry = ee.Geometry.Polygon(coords);
   currentGeometry = eeGeometry;
 
   document.getElementById('info-panel').style.display = 'none';
   loadNdviForMonth(parseInt(document.getElementById('month-slider').value), eeGeometry);
+  if (compareMode) {
+    loadNdviForMonthRight(parseInt(document.getElementById('month-slider-right').value));
+  }
 }
 
 function renderFieldList() {
-  const container = document.getElementById('field-list');
-  const fields = getSavedFields();
+  var container = document.getElementById('field-list');
+  var fields = getSavedFields();
 
   if (fields.length === 0) {
     container.innerHTML = '';
@@ -306,7 +409,7 @@ function renderFieldList() {
   container.querySelectorAll('.field-card').forEach(function (card) {
     card.addEventListener('click', function (e) {
       if (e.target.classList.contains('delete-btn')) return;
-      const field = fields.find(function (f) { return f.id === card.dataset.id; });
+      var field = fields.find(function (f) { return f.id === card.dataset.id; });
       if (field) loadField(field);
     });
   });
@@ -320,10 +423,10 @@ function renderFieldList() {
 }
 
 function updateFieldStatus(field) {
-  const coords = field.geojson.geometry.coordinates;
-  const geometry = ee.Geometry.Polygon(coords);
+  var coords = field.geojson.geometry.coordinates;
+  var geometry = ee.Geometry.Polygon(coords);
 
-  const recent = ee.ImageCollection('COPERNICUS/S2_SR_HARMONIZED')
+  var recent = ee.ImageCollection('COPERNICUS/S2_SR_HARMONIZED')
     .filterBounds(geometry)
     .filterDate(ee.Date(Date.now()).advance(-1, 'month'), ee.Date(Date.now()))
     .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', 40))
@@ -331,7 +434,7 @@ function updateFieldStatus(field) {
     .normalizedDifference(['B8', 'B4'])
     .rename('NDVI');
 
-  const meanNdvi = recent.reduceRegion({
+  var meanNdvi = recent.reduceRegion({
     reducer: ee.Reducer.mean(),
     geometry: geometry,
     scale: 10,
@@ -339,31 +442,31 @@ function updateFieldStatus(field) {
   });
 
   meanNdvi.evaluate(function (result) {
-    const el = document.getElementById('status-' + field.id);
+    var el = document.getElementById('status-' + field.id);
     if (!el) return;
-    const value = result && result.NDVI;
+    var value = result && result.NDVI;
     if (value == null || value === undefined) {
       el.textContent = 'No recent data';
       return;
     }
-    const label = value > 0.6 ? '🟢 Healthy' : value > 0.3 ? '🟡 Moderate' : '🔴 Stressed';
+    var label = value > 0.6 ? '\ud83d\udfe2 Healthy' : value > 0.3 ? '\ud83d\udfe1 Moderate' : '\ud83d\udd34 Stressed';
     el.textContent = label + ' (' + value.toFixed(2) + ')';
   });
 }
 
 function getNdviTimeSeriesAtPoint(lat, lng, callback) {
-  const point = ee.Geometry.Point([lng, lat]);
-  const startDate = ee.Date('2025-06-01');
-  const endDate = ee.Date('2026-07-01');
+  var point = ee.Geometry.Point([lng, lat]);
+  var startDate = ee.Date('2025-06-01');
+  var endDate = ee.Date('2026-07-01');
 
-  const allImages = ee.ImageCollection('COPERNICUS/S2_SR_HARMONIZED')
+  var allImages = ee.ImageCollection('COPERNICUS/S2_SR_HARMONIZED')
     .filterBounds(point)
     .filterDate(startDate, endDate)
     .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', 40));
 
-  const ndviSeries = allImages.map(function (img) {
-    const ndvi = img.normalizedDifference(['B8', 'B4']).rename('NDVI');
-    const value = ndvi.reduceRegion({
+  var ndviSeries = allImages.map(function (img) {
+    var ndvi = img.normalizedDifference(['B8', 'B4']).rename('NDVI');
+    var value = ndvi.reduceRegion({
       reducer: ee.Reducer.mean(),
       geometry: point,
       scale: 10,
@@ -381,7 +484,7 @@ function getNdviTimeSeriesAtPoint(lat, lng, callback) {
         callback([]);
         return;
       }
-      const data = result.features.map(function (f) {
+      var data = result.features.map(function (f) {
         return {
           date: f.properties.date,
           ndvi: f.properties.ndvi,
@@ -392,11 +495,11 @@ function getNdviTimeSeriesAtPoint(lat, lng, callback) {
 }
 
 function renderChart(data) {
-  const ctx = document.getElementById('trend-chart').getContext('2d');
+  var ctx = document.getElementById('trend-chart').getContext('2d');
   if (trendChart) trendChart.destroy();
 
-  const labels = data.map(function (d) { return d.date; });
-  const values = data.map(function (d) { return d.ndvi; });
+  var labels = data.map(function (d) { return d.date; });
+  var values = data.map(function (d) { return d.ndvi; });
 
   trendChart = new Chart(ctx, {
     type: 'line',
@@ -449,27 +552,27 @@ function renderChart(data) {
 }
 
 function checkStress(data) {
-  const alertEl = document.getElementById('stress-alert');
+  var alertEl = document.getElementById('stress-alert');
   if (data.length < 2) {
     alertEl.style.display = 'none';
     return;
   }
 
-  const sorted = data.slice().sort(function (a, b) {
+  var sorted = data.slice().sort(function (a, b) {
     return a.date.localeCompare(b.date);
   });
 
-  const recent = sorted[sorted.length - 1];
+  var recent = sorted[sorted.length - 1];
   if (!recent || recent.ndvi === null) {
     alertEl.style.display = 'none';
     return;
   }
 
-  let earlier = null;
-  for (let i = sorted.length - 2; i >= 0; i--) {
-    const d = sorted[i];
+  var earlier = null;
+  for (var i = sorted.length - 2; i >= 0; i--) {
+    var d = sorted[i];
     if (d.ndvi !== null) {
-      const daysDiff = (new Date(recent.date) - new Date(d.date)) / 86400000;
+      var daysDiff = (new Date(recent.date) - new Date(d.date)) / 86400000;
       if (daysDiff >= 14) {
         earlier = d;
         break;
@@ -482,9 +585,9 @@ function checkStress(data) {
     return;
   }
 
-  const drop = ((earlier.ndvi - recent.ndvi) / earlier.ndvi) * 100;
+  var drop = ((earlier.ndvi - recent.ndvi) / earlier.ndvi) * 100;
   if (drop > 15) {
-    alertEl.textContent = '⚠ Possible stress detected — NDVI dropped ' + drop.toFixed(0) + '% (' + earlier.date + ' → ' + recent.date + ')';
+    alertEl.textContent = '\u26a0 Possible stress detected \u2014 NDVI dropped ' + drop.toFixed(0) + '% (' + earlier.date + ' \u2192 ' + recent.date + ')';
     alertEl.style.display = 'block';
   } else {
     alertEl.style.display = 'none';
@@ -493,21 +596,21 @@ function checkStress(data) {
 
 function exportChart() {
   if (!trendChart) return;
-  const canvas = document.getElementById('trend-chart');
-  const link = document.createElement('a');
+  var canvas = document.getElementById('trend-chart');
+  var link = document.createElement('a');
   link.download = 'NDVI_trend_report.png';
   link.href = canvas.toDataURL('image/png');
   link.click();
 }
 
 function escapeHtml(str) {
-  const div = document.createElement('div');
+  var div = document.createElement('div');
   div.appendChild(document.createTextNode(str));
   return div.innerHTML;
 }
 
 function setStatus(state, text) {
-  const bar = document.getElementById('status-bar');
+  var bar = document.getElementById('status-bar');
   bar.textContent = text;
   bar.className = 'status-bar ' + state;
 }

@@ -9,9 +9,21 @@ html, body {
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, sans-serif;
 }
 
+.map-container {
+  height: 100%;
+  width: 100%;
+  display: flex;
+}
+
 #map {
   height: 100%;
   width: 100%;
+}
+
+.map-right {
+  height: 100%;
+  width: 50%;
+  border-left: 3px solid #666;
 }
 
 .auth-overlay {
@@ -112,21 +124,50 @@ html, body {
   z-index: 998;
   background: rgba(255, 255, 255, 0.95);
   border-radius: 10px;
-  padding: 0.75rem 1.5rem;
+  padding: 0.6rem 1.25rem;
   box-shadow: 0 2px 12px rgba(0, 0, 0, 0.25);
   text-align: center;
-  min-width: 280px;
+  min-width: 320px;
+  max-width: 90vw;
 }
 
-.slider-panel label {
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: #333;
-  display: block;
+.compare-row {
   margin-bottom: 0.4rem;
 }
 
-#month-slider {
+.compare-btn {
+  background: #e5e7eb;
+  border: none;
+  border-radius: 4px;
+  padding: 0.25rem 0.6rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  color: #555;
+}
+
+.compare-btn.active {
+  background: #1a73e8;
+  color: #fff;
+}
+
+.slider-group {
+  margin-bottom: 0.3rem;
+}
+
+.slider-group:last-child {
+  margin-bottom: 0;
+}
+
+.slider-label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #333;
+  display: block;
+  margin-bottom: 0.15rem;
+}
+
+#month-slider, #month-slider-right {
   width: 100%;
   cursor: pointer;
 }
@@ -134,9 +175,9 @@ html, body {
 .slider-labels {
   display: flex;
   justify-content: space-between;
-  font-size: 0.7rem;
+  font-size: 0.65rem;
   color: #888;
-  margin-top: 0.2rem;
+  margin-top: 0.15rem;
 }
 
 .event-markers {
