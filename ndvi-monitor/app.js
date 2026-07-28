@@ -519,13 +519,19 @@ function renderFieldList() {
   }
 
   container.innerHTML = fields.map(function (f) {
+    var plantInfo = f.plantingDate ? 'Planted ' + f.plantingDate : '';
     return (
       '<div class="field-card" data-id="' + f.id + '">' +
-        '<div class="field-name">' + escapeHtml(f.name) + '</div>' +
-        '<div class="field-area">' + formatHectares(getOrComputeArea(f)) +
-          ' <button class="plant-date-btn" data-id="' + f.id + '" title="Set planting date">\ud83d\udcc5</button></div>' +
+        '<div class="field-top">' +
+          '<div class="field-name">' + escapeHtml(f.name) + '</div>' +
+          '<button class="delete-btn" data-id="' + f.id + '">\u2715</button>' +
+        '</div>' +
+        '<div class="field-meta">' +
+          '<span class="field-area">\ud83d\udccd ' + formatHectares(getOrComputeArea(f)) + '</span>' +
+          (plantInfo ? '<span>' + plantInfo + '</span>' : '') +
+          '<button class="plant-date-btn" data-id="' + f.id + '" title="Set planting date">\u270f\ufe0f date</button>' +
+        '</div>' +
         '<div class="field-status" id="status-' + f.id + '">Loading\u2026</div>' +
-        '<button class="delete-btn" data-id="' + f.id + '">\u2715</button>' +
       '</div>'
     );
   }).join('');
@@ -568,31 +574,41 @@ function renderFieldList() {
   });
 }
 
+function badgeHtml(cssClass, text) {
+  return '<span class="badge ' + cssClass + '">' + text + '</span>';
+}
+
 function buildStatusText(field, value, index) {
   index = index || 'ndvi';
   if (index !== 'ndvi') {
     if (index === 'ndwi') {
-      return (value > 0.3 ? '\ud83d\udca7 Water' : value > 0 ? '\ud83d\udfe7 Moist' : '\ud83c\udf3e Dry') + ' (' + value.toFixed(2) + ')';
+      var wlabel = value > 0.3 ? 'Water' : value > 0 ? 'Moist' : 'Dry';
+      var wclass = value > 0.3 ? 'blue' : value > 0 ? 'orange' : 'yellow';
+      return badgeHtml(wclass, wlabel) + ' (' + value.toFixed(2) + ')';
     }
     return '';
   }
   if (!field.plantingDate) {
-    var lbl = value > 0.6 ? '\ud83d\udfe2 Healthy' : value > 0.3 ? '\ud83d\udfe1 Moderate' : '\ud83d\udd34 Stressed';
-    return lbl + ' (NDVI ' + value.toFixed(2) + ')';
+    var cls, lbl;
+    if (value > 0.6) { cls = 'green'; lbl = 'Healthy'; }
+    else if (value > 0.3) { cls = 'yellow'; lbl = 'Moderate'; }
+    else { cls = 'red'; lbl = 'Stressed'; }
+    return badgeHtml(cls, lbl) + ' NDVI ' + value.toFixed(2);
   }
   var daysSincePlanting = Math.floor((Date.now() - new Date(field.plantingDate).getTime()) / 86400000);
-  if (daysSincePlanting < 0) return 'Planting date is in the future';
+  if (daysSincePlanting < 0) return badgeHtml('yellow', 'Check date') + ' Planting date is in the future';
   var stage = getGrowthStage(daysSincePlanting);
-  var label;
+  var cls2, lbl2;
   if (value >= stage.min && value <= stage.max) {
-    label = '\ud83d\udfe2 Healthy';
+    cls2 = 'green'; lbl2 = 'Healthy';
   } else if (value < stage.min) {
     var deficit = stage.min - value;
-    label = deficit > 0.15 ? '\ud83d\udd34 Stressed' : '\ud83d\udfe1 Below expected';
+    if (deficit > 0.15) { cls2 = 'red'; lbl2 = 'Stressed'; }
+    else { cls2 = 'yellow'; lbl2 = 'Below expected'; }
   } else {
-    label = '\ud83d\udfe2 Healthy';
+    cls2 = 'green'; lbl2 = 'Healthy';
   }
-  return label + ' \u2014 ' + stage.stage + ', Day ' + daysSincePlanting + ' (NDVI ' + value.toFixed(2) + ')';
+  return badgeHtml(cls2, lbl2) + ' ' + stage.stage + ' \u00b7 Day ' + daysSincePlanting + ' \u00b7 NDVI ' + value.toFixed(2);
 }
 
 function updateFieldStatus(field) {
@@ -625,7 +641,7 @@ function updateFieldStatus(field) {
       el.textContent = 'No recent data';
       return;
     }
-    el.textContent = buildStatusText(field, value, currentIndex);
+    el.innerHTML = buildStatusText(field, value, currentIndex);
   });
 }
 

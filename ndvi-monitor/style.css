@@ -337,13 +337,19 @@ html, body {
   cursor: pointer;
   transition: background 0.15s;
   display: flex;
-  align-items: center;
-  gap: 0.5rem;
+  flex-direction: column;
+  gap: 3px;
 }
 
 .field-card:hover {
   background: #eef2ff;
   border-color: #c7d2fe;
+}
+
+.field-top {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
 }
 
 .field-card .field-name {
@@ -356,34 +362,54 @@ html, body {
   white-space: nowrap;
 }
 
-.field-area {
+.field-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
   font-size: 0.7rem;
   color: #999;
-  margin-top: -2px;
-  flex-basis: 100%;
+}
+
+.field-area {
+  white-space: nowrap;
 }
 
 .plant-date-btn {
   background: none;
   border: none;
   cursor: pointer;
-  font-size: 0.72rem;
-  padding: 0 2px;
+  font-size: 0.7rem;
+  padding: 0;
   vertical-align: middle;
   line-height: 1;
-  opacity: 0.5;
-  transition: opacity 0.15s;
+  color: #999;
+  transition: color 0.15s;
 }
 
 .plant-date-btn:hover {
-  opacity: 1;
+  color: #1a56db;
 }
 
 .field-card .field-status {
   font-size: 0.75rem;
-  color: #666;
-  flex-shrink: 0;
+  color: #444;
+  line-height: 1.4;
 }
+
+.field-card .field-status .badge {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 10px;
+  font-weight: 600;
+  font-size: 0.7rem;
+  margin-right: 4px;
+}
+
+.field-card .field-status .badge.green { background: #dcfce7; color: #166534; }
+.field-card .field-status .badge.yellow { background: #fef9c3; color: #854d0e; }
+.field-card .field-status .badge.red { background: #fee2e2; color: #991b1b; }
+.field-card .field-status .badge.blue { background: #dbeafe; color: #1e40af; }
+.field-card .field-status .badge.orange { background: #ffedd5; color: #9a3412; }
 
 .delete-btn {
   background: none;
