@@ -6,11 +6,12 @@
   <title>NDVI Rice Crop Health Monitor — Battambang</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.30.0/dist/tabler-icons.min.css" />
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
   <div id="dashboard-toggle" class="dashboard-toggle">☰</div>
-  <div id="dashboard" class="dashboard" style="display:none">
+  <div id="dashboard" class="panel dashboard" style="display:none">
     <div class="dashboard-header">
       <h3>My Fields</h3>
       <button id="dashboard-close" class="close-btn">&times;</button>
@@ -31,32 +32,47 @@
     <div id="map"></div>
     <div id="map-right" class="map-right" style="display:none"></div>
   </div>
-  <div id="status-bar" class="status-bar"></div>
-  <div id="slider-panel" class="slider-panel" style="display:none">
-    <div class="compare-row">
-      <button id="compare-toggle" class="compare-btn">Compare OFF</button>
-      <span class="index-toggle"><button id="index-toggle-btn" class="index-btn">NDWI</button></span>
-      <span class="export-row">
-        <button id="export-png-slider" class="export-btn-sm">Export PNG</button>
-        <button id="export-pdf-slider" class="export-btn-sm">Export PDF</button>
-      </span>
+  <div id="status-bar" class="status-toast hidden"></div>
+  <div id="slider-panel" class="panel" style="display:none">
+    <div class="control-row">
+      <div class="segmented" role="group" aria-label="Index">
+        <button class="segmented-btn active" data-index="ndvi">NDVI</button>
+        <button class="segmented-btn" data-index="ndwi">NDWI</button>
+      </div>
+      <label class="switch-label">
+        <input type="checkbox" id="compare-toggle" />
+        <span>Compare</span>
+      </label>
+      <div class="export-dropdown">
+        <button id="export-btn-header" class="export-header-btn">
+          <i class="ti ti-download"></i> Export <i class="ti ti-chevron-down"></i>
+        </button>
+        <div id="export-menu" class="export-menu" hidden>
+          <button data-format="png">Export as PNG</button>
+          <button data-format="pdf">Export as PDF</button>
+        </div>
+      </div>
     </div>
-    <div class="slider-group">
-      <label class="slider-label">Left: <span id="month-label">June 2026</span> <span id="event-badge" class="event-badge" style="display:none"></span></label>
-      <input type="range" id="month-slider" min="0" max="13" value="12" step="1" />
-      <div id="event-markers" class="event-markers"></div>
-      <div class="slider-labels">
-        <span>Jun 2025</span>
-        <span>Jul 2026</span>
+    <div id="slider-group" class="slider-group">
+      <div class="slider-row">
+        <span class="slider-label">Jun 2025</span>
+        <div class="slider-track">
+          <input type="range" id="month-slider" min="0" max="13" value="12" step="1" />
+          <div id="event-markers" class="event-markers"></div>
+          <div class="slider-value"><span id="month-label">June 2026</span> <span id="event-badge" class="event-badge" style="display:none"></span></div>
+        </div>
+        <span class="slider-label">Jul 2026</span>
       </div>
     </div>
     <div id="slider-group-right" class="slider-group" style="display:none">
-      <label class="slider-label">Right: <span id="month-label-right">June 2026</span> <span id="event-badge-right" class="event-badge" style="display:none"></span></label>
-      <input type="range" id="month-slider-right" min="0" max="13" value="0" step="1" />
-      <div id="event-markers-right" class="event-markers"></div>
-      <div class="slider-labels">
-        <span>Jun 2025</span>
-        <span>Jul 2026</span>
+      <div class="slider-row">
+        <span class="slider-label">Jun 2025</span>
+        <div class="slider-track">
+          <input type="range" id="month-slider-right" min="0" max="13" value="0" step="1" />
+          <div id="event-markers-right" class="event-markers"></div>
+          <div class="slider-value"><span id="month-label-right">June 2026</span> <span id="event-badge-right" class="event-badge" style="display:none"></span></div>
+        </div>
+        <span class="slider-label">Jul 2026</span>
       </div>
     </div>
   </div>
@@ -68,17 +84,16 @@
     </div>
   </div>
 
-  <div id="info-panel" class="info-panel" style="display:none">
+  <div id="info-panel" class="panel info-panel" style="display:none">
     <div class="panel-header">
-      <button id="export-btn" class="export-btn">Export PNG</button>
-      <button id="export-pdf-btn" class="export-btn">Export PDF</button>
+      <div>
+        <p class="panel-title">NDVI Trend</p>
+        <p class="panel-subtitle" id="chart-subtitle">&mdash;</p>
+      </div>
       <button id="close-panel" class="close-btn">&times;</button>
     </div>
-    <div id="panel-content">
-      <p id="point-coords" class="coords"></p>
-      <div id="stress-alert" class="stress-alert" style="display:none"></div>
-      <canvas id="trend-chart"></canvas>
-    </div>
+    <div id="stress-alert" class="stress-alert" style="display:none"></div>
+    <canvas id="trend-chart"></canvas>
   </div>
 
   <button id="help-btn" class="help-btn" title="How this works">?</button>

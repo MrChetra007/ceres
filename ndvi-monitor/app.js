@@ -112,10 +112,25 @@ document.getElementById('close-panel').addEventListener('click', function () {
   document.getElementById('info-panel').style.display = 'none';
 });
 
-document.getElementById('export-btn').addEventListener('click', exportChart);
-document.getElementById('export-pdf-btn').addEventListener('click', exportPdf);
-document.getElementById('export-png-slider').addEventListener('click', exportChart);
-document.getElementById('export-pdf-slider').addEventListener('click', exportPdf);
+document.getElementById('export-btn-header').addEventListener('click', function () {
+  var menu = document.getElementById('export-menu');
+  menu.hidden = !menu.hidden;
+});
+
+document.querySelectorAll('#export-menu button').forEach(function (btn) {
+  btn.addEventListener('click', function () {
+    document.getElementById('export-menu').hidden = true;
+    if (btn.dataset.format === 'png') exportChart();
+    else exportPdf();
+  });
+});
+
+document.addEventListener('click', function (e) {
+  var container = document.getElementById('export-btn-header').parentElement;
+  if (!container.contains(e.target)) {
+    document.getElementById('export-menu').hidden = true;
+  }
+});
 
 document.getElementById('dashboard-toggle').addEventListener('click', function () {
   document.getElementById('dashboard').style.display = 'flex';
@@ -125,15 +140,12 @@ document.getElementById('dashboard-close').addEventListener('click', function ()
   document.getElementById('dashboard').style.display = 'none';
 });
 
-document.getElementById('compare-toggle').addEventListener('click', function () {
-  compareMode = !compareMode;
-  var btn = document.getElementById('compare-toggle');
+document.getElementById('compare-toggle').addEventListener('change', function () {
+  compareMode = this.checked;
   var rightMap = document.getElementById('map-right');
   var rightSlider = document.getElementById('slider-group-right');
 
   if (compareMode) {
-    btn.textContent = 'Compare ON';
-    btn.classList.add('active');
     rightMap.style.display = 'block';
     rightSlider.style.display = 'block';
 
@@ -154,27 +166,25 @@ document.getElementById('compare-toggle').addEventListener('click', function () 
     renderEventMarkersRight();
     loadNdviForMonthRight(parseInt(document.getElementById('month-slider-right').value));
   } else {
-    btn.textContent = 'Compare OFF';
-    btn.classList.remove('active');
     rightMap.style.display = 'none';
     rightSlider.style.display = 'none';
     map.invalidateSize();
   }
 });
 
-document.getElementById('index-toggle-btn').className = 'index-btn ndvi';
-document.getElementById('index-toggle-btn').addEventListener('click', function () {
-  currentIndex = currentIndex === 'ndvi' ? 'ndwi' : 'ndvi';
-  var btn = document.getElementById('index-toggle-btn');
-  btn.textContent = currentIndex === 'ndvi' ? 'NDWI' : 'NDVI';
-  btn.className = 'index-btn ' + currentIndex;
-  var idx = parseInt(document.getElementById('month-slider').value);
-  setSliderLoading(true);
-  loadNdviForMonth(idx, currentGeometry);
-  if (compareMode) {
-    loadNdviForMonthRight(parseInt(document.getElementById('month-slider-right').value));
-  }
-  renderFieldList();
+document.querySelectorAll('.segmented-btn').forEach(function (btn) {
+  btn.addEventListener('click', function () {
+    document.querySelectorAll('.segmented-btn').forEach(function (b) { b.classList.remove('active'); });
+    btn.classList.add('active');
+    currentIndex = btn.dataset.index;
+    var idx = parseInt(document.getElementById('month-slider').value);
+    setSliderLoading(true);
+    loadNdviForMonth(idx, currentGeometry);
+    if (compareMode) {
+      loadNdviForMonthRight(parseInt(document.getElementById('month-slider-right').value));
+    }
+    renderFieldList();
+  });
 });
 
 document.getElementById('preset-panel').addEventListener('click', function (e) {
@@ -204,8 +214,8 @@ map.on('click', function (e) {
   var lng = e.latlng.lng;
   currentFieldName = null;
   currentFieldId = null;
-  document.getElementById('point-coords').textContent =
-    'Lat: ' + lat.toFixed(4) + ', Lng: ' + lng.toFixed(4);
+  document.getElementById('chart-subtitle').textContent =
+    lat.toFixed(4) + ', ' + lng.toFixed(4);
   document.getElementById('info-panel').style.display = 'flex';
   setStatus('computing', 'Fetching NDVI trend...');
   getNdviTimeSeriesAtPoint(lat, lng, function (data) {
@@ -215,6 +225,7 @@ map.on('click', function (e) {
     }
     renderChart(data);
     checkStress(data);
+    document.getElementById('chart-subtitle').textContent += ' \u00b7 ' + data.length + ' observations';
     setStatus('ready', 'NDVI trend loaded \u2014 ' + data.length + ' observations');
   });
 });
@@ -467,14 +478,12 @@ function promptSaveField(geojson) {
     updateDrawEditVisibility();
     return;
   }
-  var plantingDateStr = prompt('Planting date (YYYY-MM-DD), or leave blank if unknown:');
-  var plantingDate = null;
-  if (plantingDateStr && !isNaN(Date.parse(plantingDateStr))) {
-    plantingDate = plantingDateStr;
-  }
-  saveField(name, geojson, plantingDate);
-  var fields = getSavedFields();
-  loadFieldById(fields[fields.length - 1].id);
+  showDatePicker(null, function (date) {
+    if (date === undefined) { date = null; }
+    saveField(name, geojson, date);
+    var fields = getSavedFields();
+    loadFieldById(fields[fields.length - 1].id);
+  });
 }
 
 function loadFieldById(id) {
@@ -519,19 +528,26 @@ function renderFieldList() {
   }
 
   container.innerHTML = fields.map(function (f) {
-    var plantInfo = f.plantingDate ? 'Planted ' + f.plantingDate : '';
+    var plantInfo = f.plantingDate ? f.plantingDate : 'No date';
+    var ha = formatHectares(getOrComputeArea(f));
+    var warn = getAreaWarning(getOrComputeArea(f));
     return (
-      '<div class="field-card" data-id="' + f.id + '">' +
-        '<div class="field-top">' +
-          '<div class="field-name">' + escapeHtml(f.name) + '</div>' +
-          '<button class="delete-btn" data-id="' + f.id + '">\u2715</button>' +
+      '<div class="field-card panel" data-id="' + f.id + '">' +
+        '<div class="field-card-header">' +
+          '<div>' +
+            '<p class="panel-title">' + escapeHtml(f.name) + '</p>' +
+            '<p class="panel-subtitle" id="stage-' + f.id + '">Loading\u2026</p>' +
+          '</div>' +
+          '<span class="status-badge" id="badge-' + f.id + '">\u2014</span>' +
         '</div>' +
-        '<div class="field-meta">' +
-          '<span class="field-area">\ud83d\udccd ' + formatHectares(getOrComputeArea(f)) + '</span>' +
-          (plantInfo ? '<span>' + plantInfo + '</span>' : '') +
-          '<button class="plant-date-btn" data-id="' + f.id + '" title="Set planting date">\u270f\ufe0f date</button>' +
+        '<div class="field-card-stats" id="stats-' + f.id + '">' +
+          '<span><i class="ti ti-ruler-2"></i> ' + ha + '</span>' +
+          '<span><i class="ti ti-calendar"></i> ' + plantInfo +
+            ' <button class="plant-date-btn" data-id="' + f.id + '" title="Set planting date"><i class="ti ti-edit"></i></button></span>' +
+          '<span><i class="ti ti-leaf"></i> <span id="ndvi-' + f.id + '">\u2014</span></span>' +
         '</div>' +
-        '<div class="field-status" id="status-' + f.id + '">Loading\u2026</div>' +
+        (warn ? '<div class="field-area-warning">' + warn + '</div>' : '') +
+        '<button class="delete-btn" data-id="' + f.id + '">\u2715</button>' +
       '</div>'
     );
   }).join('');
@@ -559,56 +575,56 @@ function renderFieldList() {
       var fields = getSavedFields();
       var field = fields.find(function (f) { return f.id === btn.dataset.id; });
       if (!field) return;
-      var hint = field.plantingDate ? 'Current: ' + field.plantingDate : 'No planting date set';
-      var str = prompt('Planting date (YYYY-MM-DD), or leave blank to clear:\n' + hint);
-      if (str && !isNaN(Date.parse(str))) {
-        field.plantingDate = str;
-      } else if (str === '' || str === null) {
-        field.plantingDate = null;
-      } else {
-        return;
-      }
-      localStorage.setItem('ndvi_fields', JSON.stringify(fields));
-      renderFieldList();
+      showDatePicker(field.plantingDate, function (newDate) {
+        if (newDate === undefined) return;
+        field.plantingDate = newDate;
+        localStorage.setItem('ndvi_fields', JSON.stringify(fields));
+        renderFieldList();
+      });
     });
   });
 }
 
-function badgeHtml(cssClass, text) {
-  return '<span class="badge ' + cssClass + '">' + text + '</span>';
+function getAreaWarning(hectares) {
+  if (hectares > 50) return 'Unusually large for one field \u2014 check the drawn shape?';
+  return null;
 }
 
-function buildStatusText(field, value, index) {
+function buildStatusObject(field, value, index) {
   index = index || 'ndvi';
   if (index !== 'ndvi') {
     if (index === 'ndwi') {
-      var wlabel = value > 0.3 ? 'Water' : value > 0 ? 'Moist' : 'Dry';
-      var wclass = value > 0.3 ? 'blue' : value > 0 ? 'orange' : 'yellow';
-      return badgeHtml(wclass, wlabel) + ' (' + value.toFixed(2) + ')';
+      var cls = value > 0.3 ? 'water' : value > 0 ? 'moist' : 'dry';
+      var lbl = value > 0.3 ? 'Water' : value > 0 ? 'Moist' : 'Dry';
+      return { badgeClass: cls, badgeText: lbl, stageLabel: 'NDWI ' + value.toFixed(2) };
     }
-    return '';
+    return { badgeClass: '', badgeText: '', stageLabel: '' };
   }
   if (!field.plantingDate) {
-    var cls, lbl;
-    if (value > 0.6) { cls = 'green'; lbl = 'Healthy'; }
-    else if (value > 0.3) { cls = 'yellow'; lbl = 'Moderate'; }
-    else { cls = 'red'; lbl = 'Stressed'; }
-    return badgeHtml(cls, lbl) + ' NDVI ' + value.toFixed(2);
+    var cls2, lbl2;
+    if (value > 0.6) { cls2 = 'healthy'; lbl2 = 'Healthy'; }
+    else if (value > 0.3) { cls2 = 'moderate'; lbl2 = 'Moderate'; }
+    else { cls2 = 'stressed'; lbl2 = 'Stressed'; }
+    return { badgeClass: cls2, badgeText: lbl2, stageLabel: 'NDVI ' + value.toFixed(2) };
   }
   var daysSincePlanting = Math.floor((Date.now() - new Date(field.plantingDate).getTime()) / 86400000);
-  if (daysSincePlanting < 0) return badgeHtml('yellow', 'Check date') + ' Planting date is in the future';
+  if (daysSincePlanting < 0) return { badgeClass: 'moderate', badgeText: 'Check date', stageLabel: 'Planting date is in the future' };
   var stage = getGrowthStage(daysSincePlanting);
-  var cls2, lbl2;
+  var cls3, lbl3;
   if (value >= stage.min && value <= stage.max) {
-    cls2 = 'green'; lbl2 = 'Healthy';
+    cls3 = 'healthy'; lbl3 = 'Healthy';
   } else if (value < stage.min) {
     var deficit = stage.min - value;
-    if (deficit > 0.15) { cls2 = 'red'; lbl2 = 'Stressed'; }
-    else { cls2 = 'yellow'; lbl2 = 'Below expected'; }
+    if (deficit > 0.15) { cls3 = 'stressed'; lbl3 = 'Stressed'; }
+    else { cls3 = 'moderate'; lbl3 = 'Below expected'; }
   } else {
-    cls2 = 'green'; lbl2 = 'Healthy';
+    cls3 = 'healthy'; lbl3 = 'Healthy';
   }
-  return badgeHtml(cls2, lbl2) + ' ' + stage.stage + ' \u00b7 Day ' + daysSincePlanting + ' \u00b7 NDVI ' + value.toFixed(2);
+  return {
+    badgeClass: cls3,
+    badgeText: lbl3,
+    stageLabel: stage.stage + ' \u00b7 Day ' + daysSincePlanting + ' \u00b7 NDVI ' + value.toFixed(2),
+  };
 }
 
 function updateFieldStatus(field) {
@@ -634,14 +650,23 @@ function updateFieldStatus(field) {
   });
 
   meanVal.evaluate(function (result) {
-    var el = document.getElementById('status-' + field.id);
-    if (!el) return;
+    var badge = document.getElementById('badge-' + field.id);
+    var stage = document.getElementById('stage-' + field.id);
+    var ndvi = document.getElementById('ndvi-' + field.id);
+    if (!badge) return;
     var value = result && result[cfg.name];
     if (value == null || value === undefined) {
-      el.textContent = 'No recent data';
+      badge.textContent = '\u2014';
+      badge.className = 'status-badge';
+      if (stage) stage.textContent = 'No recent data';
+      if (ndvi) ndvi.textContent = '\u2014';
       return;
     }
-    el.innerHTML = buildStatusText(field, value, currentIndex);
+    var s = buildStatusObject(field, value, currentIndex);
+    badge.textContent = s.badgeText;
+    badge.className = 'status-badge status-' + s.badgeClass;
+    if (stage) stage.textContent = s.stageLabel;
+    if (ndvi) ndvi.textContent = value.toFixed(2);
   });
 }
 
@@ -820,7 +845,7 @@ function exportPdf() {
 
   doc.setFontSize(12);
   doc.setTextColor(50, 50, 50);
-  var location = currentFieldName || document.getElementById('point-coords').textContent;
+  var location = currentFieldName || document.getElementById('chart-subtitle').textContent;
   doc.text('Location: ' + location, 14, y);
   y += 8;
 
@@ -866,6 +891,37 @@ function exportPdf() {
   doc.save('NDVI_Report_' + new Date().toISOString().slice(0, 10) + '.pdf');
 }
 
+function showDatePicker(currentDateStr, onResult) {
+  var overlay = document.createElement('div');
+  overlay.className = 'date-picker-overlay';
+  overlay.innerHTML =
+    '<div class="date-picker-modal">' +
+      '<label>Planting date:</label>' +
+      '<input type="date" value="' + (currentDateStr || '') + '">' +
+      '<div class="date-picker-actions">' +
+        '<button class="date-picker-cancel">Cancel</button>' +
+        '<button class="date-picker-save">Save</button>' +
+      '</div>' +
+    '</div>';
+  document.body.appendChild(overlay);
+  var input = overlay.querySelector('input');
+  input.focus();
+
+  function close() { document.body.removeChild(overlay); }
+
+  overlay.querySelector('.date-picker-save').addEventListener('click', function () {
+    onResult(input.value || null);
+    close();
+  });
+  overlay.querySelector('.date-picker-cancel').addEventListener('click', function () {
+    onResult(undefined);
+    close();
+  });
+  overlay.addEventListener('click', function (e) {
+    if (e.target === overlay) { onResult(undefined); close(); }
+  });
+}
+
 function getFieldAreaHectares(geojson) {
   return turf.area(geojson) / 10000;
 }
@@ -889,5 +945,9 @@ function escapeHtml(str) {
 function setStatus(state, text) {
   var bar = document.getElementById('status-bar');
   bar.textContent = text;
-  bar.className = 'status-bar ' + state;
+  bar.classList.remove('hidden');
+  clearTimeout(bar._fadeTimer);
+  if (state === 'ready') {
+    bar._fadeTimer = setTimeout(function () { bar.classList.add('hidden'); }, 2500);
+  }
 }
