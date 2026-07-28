@@ -63,6 +63,8 @@ let trendChart = null;
 let currentGeometry = null;
 let compareMode = false;
 let loadingCount = 0;
+let currentFieldName = null;
+let currentFieldId = null;
 
 document.getElementById('sign-in-btn').addEventListener('click', authenticate);
 
@@ -87,6 +89,7 @@ document.getElementById('close-panel').addEventListener('click', function () {
 });
 
 document.getElementById('export-btn').addEventListener('click', exportChart);
+document.getElementById('export-pdf-btn').addEventListener('click', exportPdf);
 
 document.getElementById('dashboard-toggle').addEventListener('click', function () {
   document.getElementById('dashboard').style.display = 'flex';
@@ -158,6 +161,8 @@ document.getElementById('help-overlay').addEventListener('click', function (e) {
 map.on('click', function (e) {
   var lat = e.latlng.lat;
   var lng = e.latlng.lng;
+  currentFieldName = null;
+  currentFieldId = null;
   document.getElementById('point-coords').textContent =
     'Lat: ' + lat.toFixed(4) + ', Lng: ' + lng.toFixed(4);
   document.getElementById('info-panel').style.display = 'flex';
@@ -181,15 +186,14 @@ map.on(L.Draw.Event.CREATED, function (e) {
 map.on(L.Draw.Event.EDITED, function () {
   var layers = [];
   drawnItems.eachLayer(function (l) { layers.push(l.toGeoJSON()); });
-  if (layers.length > 0) {
+  if (layers.length > 0 && currentFieldId) {
     var fields = getSavedFields();
-    var updated = fields.map(function (f) {
-      f.geojson = layers[0];
-      return f;
-    });
-    localStorage.setItem('ndvi_fields', JSON.stringify(updated));
-    renderFieldList();
-    loadFieldById(updated[updated.length - 1].id);
+    var field = fields.find(function (f) { return f.id === currentFieldId; });
+    if (field) {
+      field.geojson = layers[0];
+      localStorage.setItem('ndvi_fields', JSON.stringify(fields));
+      renderFieldList();
+    }
   }
 });
 
@@ -373,9 +377,11 @@ function saveField(name, geojson) {
 function deleteField(id) {
   var fields = getSavedFields().filter(function (f) { return f.id !== id; });
   localStorage.setItem('ndvi_fields', JSON.stringify(fields));
-  if (fields.length === 0) {
-    drawnItems.clearLayers();
+  if (id === currentFieldId) {
+    currentFieldId = null;
+    currentFieldName = null;
     currentGeometry = null;
+    drawnItems.clearLayers();
     loadNdviForMonth(parseInt(document.getElementById('month-slider').value), null);
     if (compareMode) {
       loadNdviForMonthRight(parseInt(document.getElementById('month-slider-right').value));
@@ -404,11 +410,18 @@ function loadFieldById(id) {
 }
 
 function loadField(field) {
+  currentFieldName = field.name;
+  currentFieldId = field.id;
   drawnItems.clearLayers();
   var layer = L.geoJSON(field.geojson).addTo(drawnItems);
   map.fitBounds(layer.getBounds());
 
-  var coords = field.geojson.geometry.coordinates;
+  var geom = field.geojson && (field.geojson.geometry || field.geojson);
+  if (!geom || !geom.coordinates) {
+    setStatus('error', 'Field has invalid geometry');
+    return;
+  }
+  var coords = geom.coordinates;
   var eeGeometry = ee.Geometry.Polygon(coords);
   currentGeometry = eeGeometry;
 
@@ -457,7 +470,9 @@ function renderFieldList() {
 }
 
 function updateFieldStatus(field) {
-  var coords = field.geojson.geometry.coordinates;
+  var geom = field.geojson && (field.geojson.geometry || field.geojson);
+  if (!geom || !geom.coordinates) return;
+  var coords = geom.coordinates;
   var geometry = ee.Geometry.Polygon(coords);
 
   var recent = ee.ImageCollection('COPERNICUS/S2_SR_HARMONIZED')
@@ -635,6 +650,70 @@ function exportChart() {
   link.download = 'NDVI_trend_report.png';
   link.href = canvas.toDataURL('image/png');
   link.click();
+}
+
+function exportPdf() {
+  if (!trendChart) return;
+  var doc = new window.jspdf.jsPDF('p', 'mm', 'a4');
+  var pw = doc.internal.pageSize.getWidth();
+  var y = 20;
+
+  doc.setFontSize(18);
+  doc.setTextColor(26, 26, 46);
+  doc.text('NDVI Crop Health Report', pw / 2, y, { align: 'center' });
+  y += 10;
+
+  doc.setFontSize(10);
+  doc.setTextColor(100, 100, 100);
+  doc.text('Generated: ' + new Date().toLocaleDateString(), pw / 2, y, { align: 'center' });
+  y += 10;
+
+  doc.setFontSize(12);
+  doc.setTextColor(50, 50, 50);
+  var location = currentFieldName || document.getElementById('point-coords').textContent;
+  doc.text('Location: ' + location, 14, y);
+  y += 8;
+
+  var lastIdx = trendChart.data.datasets[0].data.length - 1;
+  if (lastIdx >= 0) {
+    var lastVal = trendChart.data.datasets[0].data[lastIdx];
+    var lastDate = trendChart.data.labels[lastIdx];
+    var statusText = lastVal > 0.6 ? 'Healthy' : lastVal > 0.3 ? 'Moderate' : 'Stressed';
+    doc.setFontSize(12);
+    doc.setTextColor(50, 50, 50);
+    doc.text('Latest NDVI: ' + lastVal.toFixed(3) + ' (' + lastDate + ')', 14, y);
+    y += 7;
+    doc.setTextColor(lastVal > 0.6 ? 34 : lastVal > 0.3 ? 180 : 220, lastVal > 0.6 ? 197 : lastVal > 0.3 ? 160 : 38, lastVal > 0.3 ? 94 : 38);
+    doc.text('Crop Health: ' + statusText, 14, y);
+    y += 10;
+  }
+
+  var canvas = document.getElementById('trend-chart');
+  var chartImage = canvas.toDataURL('image/png');
+  doc.addImage(chartImage, 'PNG', 14, y, pw - 28, 65);
+  y += 72;
+
+  var alertEl = document.getElementById('stress-alert');
+  if (alertEl.style.display !== 'none' && alertEl.textContent) {
+    doc.setTextColor(133, 100, 4);
+    doc.setFontSize(10);
+    var lines = doc.splitTextToSize(alertEl.textContent, pw - 28);
+    doc.text(lines, 14, y);
+    y += lines.length * 5 + 6;
+  }
+
+  y = Math.max(y, 200);
+  doc.setFontSize(9);
+  doc.setTextColor(120, 120, 120);
+  doc.text('NDVI (Normalized Difference Vegetation Index) measures plant health', 14, y); y += 5;
+  doc.text('using satellite imagery. Values range from -1 to 1:', 14, y); y += 5;
+  doc.text('- Above 0.6: Dense, healthy vegetation', 14, y); y += 4;
+  doc.text('- 0.3 to 0.6: Moderate or sparse vegetation', 14, y); y += 4;
+  doc.text('- Below 0.3: Bare soil, water, or stressed crops', 14, y); y += 4;
+  doc.setFontSize(8);
+  doc.text('Data source: Sentinel-2 (ESA) via Google Earth Engine', 14, y + 4);
+
+  doc.save('NDVI_Report_' + new Date().toISOString().slice(0, 10) + '.pdf');
 }
 
 function escapeHtml(str) {
