@@ -3,10 +3,12 @@ const CLIENT_ID = '355514869488-q3v52vvkb7c3gikr0og89o26m51ev403.apps.googleuser
 const AOI_COORDS = [103.10, 12.95, 103.25, 13.05];
 const NDVI_VIS = { min: -0.2, max: 0.8, palette: ['red', 'yellow', 'green'] };
 const NDWI_VIS = { min: -1, max: 1, palette: ['brown', 'tan', '#e0f0ff', '#4a90d9', '#003366'] };
+const LSWI_VIS = { min: -0.3, max: 0.6, palette: ['tan', 'lightblue', 'darkblue'] };
 
 const INDICES = {
   ndvi: { name: 'NDVI', bands: ['B8', 'B4'], vis: NDVI_VIS, label: 'Vegetation' },
   ndwi: { name: 'NDWI', bands: ['B3', 'B8'], vis: NDWI_VIS, label: 'Water' },
+  lswi: { name: 'LSWI', bands: ['B8', 'B11'], vis: LSWI_VIS, label: 'Water/Moisture' },
 };
 
 const MONTHS = [
@@ -224,7 +226,7 @@ map.on('click', function (e) {
       return;
     }
     renderChart(data);
-    checkStress(data);
+    checkStress(data, lat, lng);
     document.getElementById('chart-subtitle').textContent += ' \u00b7 ' + data.length + ' observations';
     setStatus('ready', 'NDVI trend loaded \u2014 ' + data.length + ' observations');
   });
@@ -253,6 +255,7 @@ map.on(L.Draw.Event.EDITED, function () {
     var field = fields.find(function (f) { return f.id === currentFieldId; });
     if (field) {
       field.geojson = layers[0];
+      field.areaHectares = getFieldAreaHectares(layers[0]);
       localStorage.setItem('ndvi_fields', JSON.stringify(fields));
       renderFieldList();
     }
@@ -598,6 +601,9 @@ function buildStatusObject(field, value, index) {
       var lbl = value > 0.3 ? 'Water' : value > 0 ? 'Moist' : 'Dry';
       return { badgeClass: cls, badgeText: lbl, stageLabel: 'NDWI ' + value.toFixed(2) };
     }
+    if (index === 'lswi') {
+      return { badgeClass: 'lswi', badgeText: 'LSWI', stageLabel: 'LSWI ' + value.toFixed(2) };
+    }
     return { badgeClass: '', badgeText: '', stageLabel: '' };
   }
   if (!field.plantingDate) {
@@ -767,7 +773,23 @@ function renderChart(data) {
   });
 }
 
-function checkStress(data) {
+function getRainfallMm(geometry, daysBack) {
+  daysBack = daysBack || 21;
+  var end = ee.Date(Date.now());
+  var start = end.advance(-daysBack, 'day');
+  var rainfall = ee.ImageCollection('UCSB-CHG/CHIRPS/DAILY')
+    .filterDate(start, end)
+    .filterBounds(geometry)
+    .sum();
+  return rainfall.reduceRegion({
+    reducer: ee.Reducer.mean(),
+    geometry: geometry,
+    scale: 5000,
+    maxPixels: 1e9,
+  });
+}
+
+function checkStress(data, lat, lng) {
   var alertEl = document.getElementById('stress-alert');
   if (data.length < 2) {
     alertEl.style.display = 'none';
@@ -803,8 +825,21 @@ function checkStress(data) {
 
   var drop = ((earlier.ndvi - recent.ndvi) / earlier.ndvi) * 100;
   if (drop > 15) {
-    alertEl.textContent = '\u26a0 Possible stress detected \u2014 NDVI dropped ' + drop.toFixed(0) + '% (' + earlier.date + ' \u2192 ' + recent.date + ')';
+    var baseMsg = '\u26a0 Possible stress detected \u2014 NDVI dropped ' + drop.toFixed(0) + '% (' + earlier.date + ' \u2192 ' + recent.date + ')';
+    alertEl.textContent = baseMsg;
     alertEl.style.display = 'block';
+
+    if (lat != null && lng != null) {
+      var point = ee.Geometry.Point([lng, lat]);
+      getRainfallMm(point, 21).evaluate(function (result) {
+        var mm = result && result.precipitation;
+        if (mm == null) return;
+        var rainNote = mm < 10
+          ? ' \u2014 only ' + mm.toFixed(0) + 'mm rain in that period, drought stress is plausible'
+          : ' \u2014 ' + mm.toFixed(0) + 'mm rain in that period, so low rainfall likely isn\'t the cause';
+        alertEl.textContent = baseMsg + rainNote;
+      });
+    }
   } else {
     alertEl.style.display = 'none';
   }
