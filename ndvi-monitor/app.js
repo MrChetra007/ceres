@@ -43,6 +43,7 @@ const drawnItems = new L.FeatureGroup();
 map.addLayer(drawnItems);
 
 const drawControl = new L.Control.Draw({
+  position: 'topright',
   draw: {
     polygon: true,
     rectangle: true,
