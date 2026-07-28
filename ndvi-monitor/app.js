@@ -91,6 +91,8 @@ document.getElementById('close-panel').addEventListener('click', function () {
 
 document.getElementById('export-btn').addEventListener('click', exportChart);
 document.getElementById('export-pdf-btn').addEventListener('click', exportPdf);
+document.getElementById('export-png-slider').addEventListener('click', exportChart);
+document.getElementById('export-pdf-slider').addEventListener('click', exportPdf);
 
 document.getElementById('dashboard-toggle').addEventListener('click', function () {
   document.getElementById('dashboard').style.display = 'flex';

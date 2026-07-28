@@ -133,6 +133,30 @@ html, body {
 
 .compare-row {
   margin-bottom: 0.4rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.export-row {
+  display: flex;
+  gap: 4px;
+}
+
+.export-btn-sm {
+  background: #1a73e8;
+  color: #fff;
+  border: none;
+  border-radius: 4px;
+  padding: 3px 8px;
+  font-size: 0.7rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.export-btn-sm:hover {
+  background: #1557b0;
 }
 
 .compare-btn {
