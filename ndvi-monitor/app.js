@@ -646,8 +646,16 @@ function checkStress(data) {
   }
 }
 
+function showToast(msg) {
+  var el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(el._hide);
+  el._hide = setTimeout(function () { el.classList.remove('show'); }, 3000);
+}
+
 function exportChart() {
-  if (!trendChart) return;
+  if (!trendChart) { showToast('Click a location on the map first'); return; }
   var canvas = document.getElementById('trend-chart');
   var link = document.createElement('a');
   link.download = 'NDVI_trend_report.png';
@@ -656,7 +664,7 @@ function exportChart() {
 }
 
 function exportPdf() {
-  if (!trendChart) return;
+  if (!trendChart) { showToast('Click a location on the map first'); return; }
   var doc = new window.jspdf.jsPDF('p', 'mm', 'a4');
   var pw = doc.internal.pageSize.getWidth();
   var y = 20;
