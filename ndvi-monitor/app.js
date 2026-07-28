@@ -62,12 +62,13 @@ let debounceTimerRight = null;
 let trendChart = null;
 let currentGeometry = null;
 let compareMode = false;
+let loadingCount = 0;
 
 document.getElementById('sign-in-btn').addEventListener('click', authenticate);
 
 document.getElementById('month-slider').addEventListener('input', function () {
   clearTimeout(debounceTimer);
-  document.getElementById('slider-panel').classList.add('loading');
+  setSliderLoading(true);
   debounceTimer = setTimeout(function () {
     loadNdviForMonth(parseInt(document.getElementById('month-slider').value), currentGeometry);
   }, 300);
@@ -75,7 +76,7 @@ document.getElementById('month-slider').addEventListener('input', function () {
 
 document.getElementById('month-slider-right').addEventListener('input', function () {
   clearTimeout(debounceTimerRight);
-  document.getElementById('slider-panel').classList.add('loading');
+  setSliderLoading(true);
   debounceTimerRight = setTimeout(function () {
     loadNdviForMonthRight(parseInt(document.getElementById('month-slider-right').value));
   }, 300);
@@ -132,6 +133,28 @@ document.getElementById('compare-toggle').addEventListener('click', function () 
   }
 });
 
+document.getElementById('preset-panel').addEventListener('click', function (e) {
+  var btn = e.target.closest('.preset-btn');
+  if (!btn) return;
+  var lat = parseFloat(btn.dataset.lat);
+  var lng = parseFloat(btn.dataset.lng);
+  var zoom = parseInt(btn.dataset.zoom) || 14;
+  map.setView([lat, lng], zoom);
+  setStatus('ready', 'Flying to ' + btn.textContent);
+});
+
+document.getElementById('help-btn').addEventListener('click', function () {
+  document.getElementById('help-overlay').style.display = 'flex';
+});
+
+document.getElementById('help-close').addEventListener('click', function () {
+  document.getElementById('help-overlay').style.display = 'none';
+});
+
+document.getElementById('help-overlay').addEventListener('click', function (e) {
+  if (e.target === this) this.style.display = 'none';
+});
+
 map.on('click', function (e) {
   var lat = e.latlng.lat;
   var lng = e.latlng.lng;
@@ -182,6 +205,17 @@ function syncLeftFromRight() {
   syncing = true;
   map.setView(mapRight.getCenter(), mapRight.getZoom());
   syncing = false;
+}
+
+function setSliderLoading(active) {
+  var panel = document.getElementById('slider-panel');
+  if (active) {
+    loadingCount++;
+    panel.classList.add('loading');
+  } else {
+    loadingCount = Math.max(0, loadingCount - 1);
+    if (loadingCount === 0) panel.classList.remove('loading');
+  }
 }
 
 var savedCreds = localStorage.getItem('ee_auth_creds');
@@ -288,7 +322,7 @@ function loadNdviForMonth(idx, geometry) {
 
   var ndvi = getNdviForMonth(m.year, m.month, geometry);
   ndvi.getMap(NDVI_VIS, function (mapId, err) {
-    document.getElementById('slider-panel').classList.remove('loading');
+    setSliderLoading(false);
     if (err || !mapId?.urlFormat) {
       setStatus('error', 'No data for ' + m.label + ' \u2014 try a different month');
       return;
@@ -310,7 +344,7 @@ function loadNdviForMonthRight(idx) {
 
   var ndvi = getNdviForMonth(m.year, m.month, currentGeometry);
   ndvi.getMap(NDVI_VIS, function (mapId, err) {
-    document.getElementById('slider-panel').classList.remove('loading');
+    setSliderLoading(false);
     if (err || !mapId?.urlFormat) return;
     if (ndviLayerRight) mapRight.removeLayer(ndviLayerRight);
     ndviLayerRight = L.tileLayer(mapId.urlFormat, {
