@@ -5,9 +5,20 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>NDVI Rice Crop Health Monitor — Battambang</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css" />
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
+  <div id="dashboard-toggle" class="dashboard-toggle">☰</div>
+  <div id="dashboard" class="dashboard" style="display:none">
+    <div class="dashboard-header">
+      <h3>My Fields</h3>
+      <button id="dashboard-close" class="close-btn">&times;</button>
+    </div>
+    <div id="field-list"></div>
+    <p class="dashboard-hint">Draw a polygon or rectangle on the map, then name it to save.</p>
+  </div>
+
   <div id="map"></div>
   <div id="status-bar" class="status-bar"></div>
   <div id="slider-panel" class="slider-panel" style="display:none">
@@ -27,7 +38,10 @@
   </div>
 
   <div id="info-panel" class="info-panel" style="display:none">
-    <button id="close-panel" class="close-btn">&times;</button>
+    <div class="panel-header">
+      <button id="export-btn" class="export-btn">Export PNG</button>
+      <button id="close-panel" class="close-btn">&times;</button>
+    </div>
     <div id="panel-content">
       <p id="point-coords" class="coords"></p>
       <div id="stress-alert" class="stress-alert" style="display:none"></div>
@@ -36,6 +50,7 @@
   </div>
 
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
   <script src="https://ajax.googleapis.com/ajax/libs/earthengine/1.7.36/earthengine-api.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
   <script src="app.js"></script>
