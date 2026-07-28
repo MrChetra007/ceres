@@ -43,14 +43,15 @@ A single-page web app that shows a satellite map of rice-growing areas in Battam
 - Chart.js line chart (green fill, NDVI -0.5 to 1.0, date labels) in right-side info panel
 - **Stress detection:** compares most recent NDVI to value 14+ days earlier; >15% drop triggers yellow alert badge
 
-## Phase 6 — Polish 🟡 In progress
-- Dashboard sidebar ✅ (see Product Pivot below)
-- Remaining:
-  - Preset location buttons (fly to pre-marked spots)
-  - "How this works" explanation panel
-  - Loading states hardening
+## Phase 6 — Polish ✅ Complete
+- Preset location buttons (fly to pre-marked spots) ✅
+- "How this works" explanation panel (modal with NDVI explanation and feature guide) ✅
+- Loading states hardening (counter-based spinner prevents premature removal during rapid slider changes) ✅
+- Control layout cleanup: draw toolbar moved to top-right, dashboard toggle and preset panel repositioned with 8-10px spacing below zoom control ✅
+- Toast notification when export clicked without selecting a point ✅
+- EDITED handler bugfix: update only the actively loaded field instead of all saved fields ✅
 
-## Phase 7 — Stretch goals 🟡 In progress
+## Phase 7 — Stretch goals ✅ Complete
 ### 7.1 Event overlay ✅ Complete
 - Flood markers (Aug-Sep 2025) and Dry spell markers (Jan-Mar 2026) displayed as colored bands below the slider track + inline badge next to month label
 
@@ -61,11 +62,15 @@ A single-page web app that shows a satellite map of rice-growing areas in Battam
 - View-synced (pan/zoom one, the other follows via `syncing` flag)
 - Right map is display-only (no draw controls)
 
-### 7.3 Export report (C.2) ❌ Not started
-- Proper one-page PDF with field name, NDVI chart, status, explanation
+### 7.3 Export report ✅ Complete
+- One-page PDF with field name (or coordinates), NDVI trend chart, health status, stress alerts, and NDVI explanation
+- Uses jsPDF — chart captured from canvas, composed as A4 document
 
-### 7.4 NDWI water index ❌ Not started
-- Toggle between NDVI (vegetation) and NDWI (water index) layers
+### 7.4 NDWI water index ✅ Complete
+- Toggle button in slider panel switches between NDVI (vegetation) and NDWI (water index)
+- NDWI uses Sentinel-2 bands B3/B8 with blue/brown palette
+- Dashboard field statuses update per active index (Healthy/Moderate/Stressed for NDVI; Water/Moist/Dry for NDWI)
+- Works with all features: compare, export, preset locations, click-to-inspect
 
 ---
 
@@ -108,8 +113,6 @@ A single-page web app that shows a satellite map of rice-growing areas in Battam
 | Charts | Chart.js (v4.4.7) |
 | Storage | localStorage (fields, auth token) |
 
-## What's next
+## Status
 
-1. **Phase 6 polish** — preset locations, "How this works" panel
-2. **Phase 7.3** — PDF report export (C.2)
-3. **Phase 7.4** — NDWI water index toggle
+All phases complete. The app is feature-stable with NDVI/NDWI analysis, time slider, draw & save fields, dashboard, compare mode, PNG/PDF export, event overlays, preset locations, and a help panel.
