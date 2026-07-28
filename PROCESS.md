@@ -9,66 +9,107 @@ A single-page web app that shows a satellite map of rice-growing areas in Battam
 - Tested NDVI computation in the **Earth Engine Code Editor** (`code.earthengine.google.com`)
 - Defined AOI: `ee.Geometry.Rectangle([103.10, 12.95, 103.25, 13.05])`
 - Loaded Sentinel-2 imagery, computed NDVI, verified the green/red overlay over Battambang rice paddies
-- Cloud Project ID: **`ee-mengtong2025`**
+- Cloud Project ID: **`gen-lang-client-0978198347`** (migrated from `ee-mengtong2025`)
 
-## Phase 2 — App scaffold ✅ Complete
-- Created Vue 3 + Vite project with `npm create vite@latest ndvi-monitor -- --template vue`
-- Added Leaflet (`npm install leaflet`) for the map (free, no API key needed)
-- Set up full-screen Leaflet map centered on Battambang (13.05, 103.175, zoom 11)
-- OpenStreetMap base tiles as the background layer
-- App structure:
-  - `src/App.vue` — root, renders MapView
-  - `src/components/MapView.vue` — map + auth + NDVI logic
+## Phase 2 — App scaffold ✅ Complete (migrated)
+- **Original:** Vue 3 + Vite project
+- **Current:** Plain HTML/CSS/JS static site (`ndvi-monitor/`)
+  - `index.html` — HTML shell with Leaflet, Earth Engine, Chart.js, leaflet-draw script tags
+  - `style.css` — Full-screen map, auth overlay, slider panel, dashboard sidebar, info panel, split-screen
+  - `app.js` — All application logic
+- **Why migrated:** `@google/earthengine` npm package does dynamic function-binding that breaks under Vite's ESM interop (`Failed to locate function parameters`). Loading EE via plain `<script>` tag resolved this.
+- Full-screen Leaflet map centered on Battambang (13.05, 103.175, zoom 11)
+- OpenStreetMap base tiles (free, no API key)
 
-## Phase 3 — NDVI on the map 🟡 In progress (blocked)
-- NDVI computation code is written and ready in `computeAndShowNdvi()`:
-  - Filter Sentinel-2 images by AOI, date range, cloud cover
-  - Compute NDVI via `normalizedDifference(['B8', 'B4'])`
-  - Style with red → yellow → green palette
-  - Call `getMap()` to get a tile URL for Leaflet
-- **Blocker: OAuth authentication** — Earth Engine requires the user (developer) to authenticate via Google OAuth before it serves tiles
+## Phase 3 — NDVI on the map ✅ Complete
+- Auth flow: `ee.data.authenticateViaOauth(CLIENT_ID, success, error)` → `ee.initialize(null, null, callback, error, null, PROJECT_ID)`
+- **Auth persistence:** OAuth token saved to `localStorage` via `ee.data.getAuthToken()` / `ee.data.setAuthToken()`. On page reload, saved token is restored automatically — no re-auth popup unless token expires.
+- NDVI computation:
+  - Filter Sentinel-2 (`COPERNICUS/S2_SR_HARMONIZED`) by AOI, date range, cloud cover (<40%)
+  - `.median()` composite → `.normalizedDifference(['B8', 'B4'])` → `.rename('NDVI')`
+  - Style: `{ min: -0.2, max: 0.8, palette: ['red', 'yellow', 'green'] }`
+  - `getMap()` returns tile URL → `L.tileLayer` added to map
+- OAuth Client ID: `355514869488-q3v52vvkb7c3gikr0og89o26m51ev403.apps.googleusercontent.com`
+
+## Phase 4 — Time slider ✅ Complete
+- `<input type="range">` mapped to 14 months (Jun 2025 → Jul 2026)
+- Debounced 300ms — fires EE request only after user stops dragging
+- Loading spinner on slider panel during computation
+- Swaps NDVI tile layer on month change
+
+## Phase 5 — Click-to-inspect + trend chart ✅ Complete
+- `map.on('click')` captures lat/lng
+- `getNdviTimeSeriesAtPoint()` queries EE for all Sentinel-2 NDVI observations at the clicked point
+- Chart.js line chart (green fill, NDVI -0.5 to 1.0, date labels) in right-side info panel
+- **Stress detection:** compares most recent NDVI to value 14+ days earlier; >15% drop triggers yellow alert badge
+
+## Phase 6 — Polish 🟡 In progress
+- Dashboard sidebar ✅ (see Product Pivot below)
+- Remaining:
+  - Preset location buttons (fly to pre-marked spots)
+  - "How this works" explanation panel
+  - Loading states hardening
+
+## Phase 7 — Stretch goals 🟡 In progress
+### 7.1 Event overlay ✅ Complete
+- Flood markers (Aug-Sep 2025) and Dry spell markers (Jan-Mar 2026) displayed as colored bands below the slider track + inline badge next to month label
+
+### 7.2 Compare two dates ✅ Complete
+- "Compare OFF/ON" toggle button in slider panel
+- Split-screen: two Leaflet maps side-by-side (50% each)
+- Dual sliders — each map shows independent NDVI month
+- View-synced (pan/zoom one, the other follows via `syncing` flag)
+- Right map is display-only (no draw controls)
+
+### 7.3 Export report (C.2) ❌ Not started
+- Proper one-page PDF with field name, NDVI chart, status, explanation
+
+### 7.4 NDWI water index ❌ Not started
+- Toggle between NDVI (vegetation) and NDWI (water index) layers
+
+---
+
+## Product Pivot Features (added during development)
+
+### Feature A — Draw & save fields ✅ Complete
+- leaflet-draw integration (polygon + rectangle tools in map toolbar)
+- Fields saved to `localStorage` as GeoJSON via `crypto.randomUUID()` keys
+- `saveField()`, `deleteField()`, `getSavedFields()`, `loadField()` CRUD
+- Clicking a saved field: loads polygon, fits map bounds, recomputes NDVI for that geometry
+- NDVI functions refactored to accept optional `ee.Geometry` parameter
+
+### Feature B — Dashboard ✅ Complete
+- ☰ toggle button opens 280px left sidebar listing saved fields
+- Each field card: name + live NDVI health badge (🟢 Healthy >0.6 / 🟡 Moderate >0.3 / 🔴 Stressed)
+- Status computed via `reduceRegion` over the field polygon for the most recent month
+- Click card to load field; hover ✕ to delete
+
+### Feature C — PNG export ✅ Complete
+- "Export PNG" button in info panel header
+- Downloads `canvas.toDataURL('image/png')` from Chart.js chart
+
+---
 
 ## OAuth setup (Google Cloud Console)
-- **OAuth 2.0 Client ID created**: Web application type
-- **Authorized JavaScript origins**: `http://localhost:5173`
-- Client ID is used in `MapView.vue` for the OAuth popup flow
-
-## Earth Engine client library
-Two approaches tried:
-
-1. **CDN script tag** (first attempt) — `earthengine-api.min.js` from Google's CDN
-   - Problem: Old script uses deprecated `gapi.auth` flow that no longer works
-   - Required `gapi.load('client:auth2', ...)` which is being phased out
-
-2. **npm package** `@google/earthengine` (current approach) — imported as ES module
-   - Combined with `https://accounts.google.com/gsi/client` for Google Identity Services
-   - Auth flow: `ee.data.authenticateViaOauth(CLIENT_ID, success, error, null, null, true)`
-   - Currently hitting a **permissions/consent screen issue** on the OAuth flow
-
-## Current auth flow in MapView.vue
-
-```
-onMounted → initMap() + set status to 'auth' (show sign-in button)
-user clicks sign-in → authenticate()
-  → ee.data.authenticateViaOauth(CLIENT_ID, onSuccess, onError)
-    → onSuccess: ee.initialize(null, null, computeNdvi, onError, null, PROJECT_ID)
-      → computeNdvi(): get NDVI tile URL → L.tileLayer → add to map
-```
+- **OAuth 2.0 Client ID**: Web application type
+- **Client ID**: `355514869488-q3v52vvkb7c3gikr0og89o26m51ev403.apps.googleusercontent.com`
+- **Authorized JavaScript origins**: `http://localhost:5173` (Vite), `http://localhost:3000` (serve), `http://localhost:60822` (serve dynamic)
+- Token persisted via `localStorage` — single sign-in survives page reloads
 
 ## Tech stack (current)
 
 | Layer | Tool |
 |---|---|
-| Frontend | Vue 3 + Vite |
+| Frontend | Plain HTML/CSS/JS |
 | Map | Leaflet + OpenStreetMap tiles |
-| Satellite compute | Google Earth Engine (JS client via npm + CDN) |
-| Auth | Google Identity Services (GIS) |
-| Charts | Not yet added |
+| Satellite compute | Google Earth Engine (JS client via CDN `<script>` tag, v1.7.36) |
+| Auth | Earth Engine OAuth popup (`ee.data.authenticateViaOauth`) |
+| Drawing | leaflet-draw (v1.0.4) |
+| Charts | Chart.js (v4.4.7) |
+| Storage | localStorage (fields, auth token) |
 
 ## What's next
 
-1. **Fix OAuth** — resolve the Google consent screen/permissions issue so auth succeeds
-2. **Render NDVI layer** — once auth works, the `computeAndShowNdvi()` function will display the green/red overlay
-3. **Phase 4** — Month time slider to switch between months
-4. **Phase 5** — Click-to-inspect with NDVI trend chart (Chart.js)
-5. **Phase 6** — Polish: preset locations, loading states, explanation panel
+1. **Phase 6 polish** — preset locations, "How this works" panel
+2. **Phase 7.3** — PDF report export (C.2)
+3. **Phase 7.4** — NDWI water index toggle
