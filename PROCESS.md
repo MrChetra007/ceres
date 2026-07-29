@@ -156,6 +156,13 @@ A single-page web app that shows a satellite map of rice-growing areas in Battam
 - Swaps base layer on both main and compare (right) map simultaneously
 - NDVI/NDWI/LSWI overlay remains independent on top
 
+### Feature M — Field deselection ✅ Complete
+- Clicking an already-selected field card in the dashboard deselects it
+- `clearFieldSelection()` clears polygon overlay, resets `currentGeometry` to `null`, and recomputes NDVI over the full AOI
+- Map view (center/zoom) stays unchanged on deselection — no unwanted zoom-out
+- Active field card is highlighted with blue border via `.field-card.active` CSS class
+- Basemap (Street/Satellite) is re-asserted on deselection to prevent Leaflet tile rendering glitches
+
 ### Feature L — Place search / geocoder ✅ Complete
 - Search bar (text input + Go button) in slider panel `nav-row`
 - Uses Nominatim (OpenStreetMap free geocoding API)

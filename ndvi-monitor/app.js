@@ -686,7 +686,7 @@ function clearFieldSelection() {
   currentGeometry = null;
   drawnItems.clearLayers();
   updateDrawEditVisibility();
-  map.setView([(aoiCoords[1] + aoiCoords[3]) / 2, (aoiCoords[0] + aoiCoords[2]) / 2], 14);
+  setBaseLayer(currentBase);
   loadNdviForMonth(parseInt(document.getElementById('month-slider').value), null);
   if (compareMode) {
     loadNdviForMonthRight(parseInt(document.getElementById('month-slider-right').value));
@@ -704,6 +704,7 @@ function deleteField(id) {
     currentGeometry = null;
     drawnItems.clearLayers();
     updateDrawEditVisibility();
+    setBaseLayer(currentBase);
     loadNdviForMonth(parseInt(document.getElementById('month-slider').value), null);
     if (compareMode) {
       loadNdviForMonthRight(parseInt(document.getElementById('month-slider-right').value));
