@@ -1,7 +1,15 @@
 const EE_PROJECT_ID = 'gen-lang-client-0978198347';
 const CLIENT_ID = '355514869488-q3v52vvkb7c3gikr0og89o26m51ev403.apps.googleusercontent.com';
-//const AOI_COORDS = [103.10, 12.95, 103.25, 13.05];
-const AOI_COORDS = [102.985, 12.845, 103.048, 12.898];
+var aoiCoords = null;
+function defaultAoiCoords() { return [102.985, 12.845, 103.048, 12.898]; }
+function loadAoiCoords() {
+  var saved = localStorage.getItem('ndvi_aoi');
+  aoiCoords = saved ? JSON.parse(saved) : defaultAoiCoords();
+}
+function saveAoiCoords(coords) {
+  aoiCoords = coords;
+  localStorage.setItem('ndvi_aoi', JSON.stringify(aoiCoords));
+}
 const NDVI_VIS = { min: -0.2, max: 0.8, palette: ['red', 'yellow', 'green'] };
 const NDWI_VIS = { min: -1, max: 1, palette: ['brown', 'tan', '#e0f0ff', '#4a90d9', '#003366'] };
 const LSWI_VIS = { min: -0.3, max: 0.6, palette: ['tan', 'lightblue', 'darkblue'] };
@@ -117,6 +125,56 @@ function showPresetEditor() {
   });
 }
 
+function updateAoiRectangle() {
+  if (!aoiCoords) return;
+  if (aoiRectangle) map.removeLayer(aoiRectangle);
+  aoiRectangle = L.rectangle([[aoiCoords[1], aoiCoords[0]], [aoiCoords[3], aoiCoords[2]]], {
+    color: '#ff4444', weight: 2, fill: false, dashArray: '4 4',
+  }).addTo(map);
+}
+
+function showAoiEditor() {
+  var overlay = document.getElementById('aoi-editor');
+  if (!overlay) return;
+  overlay.style.display = 'flex';
+  document.getElementById('ae-west').value = aoiCoords[0];
+  document.getElementById('ae-south').value = aoiCoords[1];
+  document.getElementById('ae-east').value = aoiCoords[2];
+  document.getElementById('ae-north').value = aoiCoords[3];
+
+  document.getElementById('ae-apply').onclick = function () {
+    var w = parseFloat(document.getElementById('ae-west').value);
+    var s = parseFloat(document.getElementById('ae-south').value);
+    var e = parseFloat(document.getElementById('ae-east').value);
+    var n = parseFloat(document.getElementById('ae-north').value);
+    if (isNaN(w) || isNaN(s) || isNaN(e) || isNaN(n)) {
+      showToast('All four coordinates must be valid numbers');
+      return;
+    }
+    saveAoiCoords([w, s, e, n]);
+    overlay.style.display = 'none';
+    updateAoiRectangle();
+    map.setView([(s + n) / 2, (w + e) / 2], 14);
+    setStatus('computing', 'Reloading NDVI for new AOI...');
+    fetchDryMonths();
+    loadNdviForMonth(parseInt(document.getElementById('month-slider').value), currentGeometry);
+  };
+
+  document.getElementById('ae-cancel').onclick = function () {
+    overlay.style.display = 'none';
+  };
+
+  document.getElementById('ae-reset').onclick = function () {
+    saveAoiCoords(defaultAoiCoords());
+    overlay.style.display = 'none';
+    updateAoiRectangle();
+    map.setView([12.8715, 103.0165], 14);
+    setStatus('computing', 'Reloading NDVI for default AOI...');
+    fetchDryMonths();
+    loadNdviForMonth(parseInt(document.getElementById('month-slider').value), currentGeometry);
+  };
+}
+
 const EVENTS = [
   { monthIdx: 2, label: 'Flood', type: 'flood' },
   { monthIdx: 3, label: 'Flood', type: 'flood' },
@@ -130,7 +188,7 @@ const DRY_MONTH_THRESHOLD = 50;
 var dryMonthSet = new Set();
 
 function fetchDryMonths() {
-  var geom = ee.Geometry.Rectangle(AOI_COORDS);
+  var geom = ee.Geometry.Rectangle(aoiCoords);
   dryMonthSet.clear();
   var pending = MONTHS.length;
   MONTHS.forEach(function (m, i) {
@@ -169,6 +227,7 @@ function getGrowthStage(daysSincePlanting) {
   return RICE_GROWTH_STAGES[RICE_GROWTH_STAGES.length - 1];
 }
 
+loadAoiCoords();
 const map = L.map('map', { center: [12.8715, 103.0165], zoom: 14 });
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
   attribution: '&copy; OpenStreetMap contributors',
@@ -177,6 +236,7 @@ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
 
 let mapRight = null;
 let syncing = false;
+let aoiRectangle = null;
 
 const drawnItems = new L.FeatureGroup();
 map.addLayer(drawnItems);
@@ -194,6 +254,7 @@ const drawControl = new L.Control.Draw({
   edit: { featureGroup: drawnItems },
 });
 map.addControl(drawControl);
+updateAoiRectangle();
 
 let ndviLayer = null;
 let ndviLayerRight = null;
@@ -320,6 +381,10 @@ document.getElementById('preset-panel').addEventListener('click', function (e) {
   setStatus('ready', 'Flying to ' + btn.textContent);
 });
 
+document.getElementById('aoi-btn').addEventListener('click', function () {
+  showAoiEditor();
+});
+
 document.getElementById('help-btn').addEventListener('click', function () {
   document.getElementById('help-overlay').style.display = 'flex';
 });
@@ -329,6 +394,10 @@ document.getElementById('help-close').addEventListener('click', function () {
 });
 
 document.getElementById('help-overlay').addEventListener('click', function (e) {
+  if (e.target === this) this.style.display = 'none';
+});
+
+document.getElementById('aoi-editor').addEventListener('click', function (e) {
   if (e.target === this) this.style.display = 'none';
 });
 
@@ -477,7 +546,7 @@ function getIndexImage(year, month, geometry, index) {
   var cfg = INDICES[index];
   var start = ee.Date.fromYMD(year, month, 1);
   var end = start.advance(1, 'month');
-  var geom = geometry || ee.Geometry.Rectangle(AOI_COORDS);
+  var geom = geometry || ee.Geometry.Rectangle(aoiCoords);
   return ee.ImageCollection('COPERNICUS/S2_SR_HARMONIZED')
     .filterBounds(geom)
     .filterDate(start, end)
