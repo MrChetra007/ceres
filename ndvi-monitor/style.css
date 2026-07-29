@@ -305,6 +305,16 @@ html, body {
   gap: 2px;
 }
 
+.scene-count {
+  font-size: 10px;
+  color: #797979;
+  margin-left: 2px;
+}
+
+.scene-count.scene-count-low {
+  color: #c97a00;
+}
+
 .event-markers-row,
 .auto-markers-row {
   display: flex;
@@ -399,6 +409,21 @@ html, body {
 #basemap-toggle .segmented-btn {
   font-size: 11px;
   padding: 3px 8px;
+}
+
+.latest-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 15px;
+  color: #7a7972;
+  padding: 0 2px;
+  line-height: 1;
+  vertical-align: middle;
+  transition: color 0.15s;
+}
+.latest-btn:hover {
+  color: #1a56db;
 }
 
 #slider-panel.loading .segmented::after {
