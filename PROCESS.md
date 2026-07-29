@@ -32,10 +32,12 @@ A single-page web app that shows a satellite map of rice-growing areas in Battam
 - OAuth Client ID: `355514869488-q3v52vvkb7c3gikr0og89o26m51ev403.apps.googleusercontent.com`
 
 ## Phase 4 — Time slider ✅ Complete
-- `<input type="range">` mapped to 14 months (Jun 2025 → Jul 2026)
+- `<input type="range">` dynamically built from 14 months (`buildMonths()` — computes 14 months back from today)
 - Debounced 300ms — fires EE request only after user stops dragging
 - Loading spinner on slider panel during computation
 - Swaps NDVI tile layer on month change
+- **Latest button** (↻ icon) jumps to the most recent complete month (skips current in-progress month)
+- **Scene count indicator** — cloud-free Sentinel-2 scene count displayed next to month label; amber-colored with ● dot when only 1–2 scenes (lower confidence), gray text for 3+ scenes
 
 ## Phase 5 — Click-to-inspect + trend chart ✅ Complete
 - `map.on('click')` captures lat/lng
@@ -177,6 +179,13 @@ A single-page web app that shows a satellite map of rice-growing areas in Battam
 - `.clip(geom)` added after `.median()` in `getIndexImage()` to restrict computation to AOI
 - Legacy Vue component (`src/components/MapView.vue`) updated to match
 
+### Feature N — Scene count indicator ✅ Complete
+- Reuses `collection.size()` that was already being fetched for the 0-scene check — no extra EE calls
+- `updateSceneCount(count, isRight)` displays count next to month label in both main and compare sliders
+- Confidence tiers: 0 scenes (error), 1–2 scenes (amber color + ● dot = low confidence), 3+ scenes (normal gray)
+- CSS: `.scene-count` (gray) and `.scene-count-low` (amber `#c97a00`)
+- Scene count cleared on slider load to prevent stale values
+
 ### Feature I — CHIRPS auto dry-month markers ✅ Complete
 - `fetchDryMonths()` queries `UCSB-CHG/CHIRPS/DAILY` for each month individually, flags months below 50mm total precipitation
 - Dry months rendered as a second row of striped amber markers below the hand-placed event markers
@@ -207,4 +216,4 @@ A single-page web app that shows a satellite map of rice-growing areas in Battam
 
 ## Status
 
-All phases complete. The app is feature-stable with NDVI/NDWI/LSWI analysis, time slider, draw & save fields, dashboard with growth-stage-aware health badges, compare mode, PNG/PDF export, event overlays, CHIRPS rainfall context on stress alerts, preset locations, UI-managed preset/AOI editors, area recalculation on edit, satellite basemap toggle, place search, and a help panel.
+All phases complete. The app is feature-stable with NDVI/NDWI/LSWI analysis, time slider with Latest button and scene count indicator, draw & save fields, dashboard with growth-stage-aware health badges, compare mode, PNG/PDF export, event overlays, CHIRPS rainfall context on stress alerts, preset locations, UI-managed preset/AOI editors, area recalculation on edit, satellite basemap toggle, place search, field deselection, and a help panel.
