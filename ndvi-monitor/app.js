@@ -680,6 +680,21 @@ function saveField(name, geojson, plantingDate) {
   renderFieldList();
 }
 
+function clearFieldSelection() {
+  currentFieldId = null;
+  currentFieldName = null;
+  currentGeometry = null;
+  drawnItems.clearLayers();
+  updateDrawEditVisibility();
+  map.setView([(aoiCoords[1] + aoiCoords[3]) / 2, (aoiCoords[0] + aoiCoords[2]) / 2], 14);
+  loadNdviForMonth(parseInt(document.getElementById('month-slider').value), null);
+  if (compareMode) {
+    loadNdviForMonthRight(parseInt(document.getElementById('month-slider-right').value));
+  }
+  renderFieldList();
+  setStatus('ready', 'Field deselected — showing full AOI');
+}
+
 function deleteField(id) {
   var fields = getSavedFields().filter(function (f) { return f.id !== id; });
   localStorage.setItem('ndvi_fields', JSON.stringify(fields));
@@ -758,8 +773,9 @@ function renderFieldList() {
     var plantInfo = f.plantingDate ? f.plantingDate : 'No date';
     var ha = formatHectares(getOrComputeArea(f));
     var warn = getAreaWarning(getOrComputeArea(f));
+    var activeClass = f.id === currentFieldId ? ' active' : '';
     return (
-      '<div class="field-card panel" data-id="' + f.id + '">' +
+      '<div class="field-card panel' + activeClass + '" data-id="' + f.id + '">' +
         '<div class="field-card-header">' +
           '<div>' +
             '<p class="panel-title">' + escapeHtml(f.name) + '</p>' +
@@ -784,6 +800,10 @@ function renderFieldList() {
   container.querySelectorAll('.field-card').forEach(function (card) {
     card.addEventListener('click', function (e) {
       if (e.target.classList.contains('delete-btn')) return;
+      if (card.dataset.id === currentFieldId) {
+        clearFieldSelection();
+        return;
+      }
       var field = fields.find(function (f) { return f.id === card.dataset.id; });
       if (field) loadField(field);
     });
@@ -1212,10 +1232,12 @@ function setBaseLayer(type) {
 
   if (baseLayer) map.removeLayer(baseLayer);
   baseLayer = L.tileLayer(url, { attribution: attr, maxZoom: 19 }).addTo(map);
+  map.invalidateSize();
 
   if (mapRight && baseLayerRight) {
     mapRight.removeLayer(baseLayerRight);
     baseLayerRight = L.tileLayer(url, { attribution: attr, maxZoom: 19 }).addTo(mapRight);
+    mapRight.invalidateSize();
   }
 }
 

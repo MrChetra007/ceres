@@ -143,6 +143,33 @@ A single-page web app that shows a satellite map of rice-growing areas in Battam
 - "Reset defaults" restores the original four locations
 - All changes persisted to `localStorage` under `ndvi_presets`
 
+### Feature J — AOI editor (UI-managed bounding box) ✅ Complete
+- `const AOI_COORDS` replaced with `var aoiCoords` loaded from `localStorage` key `ndvi_aoi`
+- Map icon button in slider panel opens AOI editor modal with West/South/East/North inputs
+- Red dashed rectangle overlay on map shows current AOI boundary
+- Applied/reset triggers `fetchDryMonths()` and `loadNdviForMonth()` to recompute with new geometry
+- Reset defaults restores the cement-factory box `[102.985, 12.845, 103.048, 12.898]`
+
+### Feature K — Satellite basemap toggle ✅ Complete
+- Street / Satellite segmented toggle in slider panel `nav-row`
+- Esri World Imagery (free, no API key) as satellite option
+- Swaps base layer on both main and compare (right) map simultaneously
+- NDVI/NDWI/LSWI overlay remains independent on top
+
+### Feature L — Place search / geocoder ✅ Complete
+- Search bar (text input + Go button) in slider panel `nav-row`
+- Uses Nominatim (OpenStreetMap free geocoding API)
+- Enter key or button click triggers `searchPlace()` which calls `map.setView([lat, lon], 16)`
+- Toast on no results or network failure — does not crash the app
+
+### AOI refined to cement factory area ✅ Complete
+- AOI changed from wide Battambang box `[103.10, 12.95, 103.25, 13.05]` to cement factory `[102.985, 12.845, 103.048, 12.898]`
+- Leaflet map center/zoom updated to `[12.8715, 103.0165], zoom 14`
+- Right map center/zoom updated to match
+- Presets updated to cement factory area
+- `.clip(geom)` added after `.median()` in `getIndexImage()` to restrict computation to AOI
+- Legacy Vue component (`src/components/MapView.vue`) updated to match
+
 ### Feature I — CHIRPS auto dry-month markers ✅ Complete
 - `fetchDryMonths()` queries `UCSB-CHG/CHIRPS/DAILY` for each month individually, flags months below 50mm total precipitation
 - Dry months rendered as a second row of striped amber markers below the hand-placed event markers
@@ -160,16 +187,17 @@ A single-page web app that shows a satellite map of rice-growing areas in Battam
 ## Tech stack (current)
 
 | Layer | Tool |
-|---|---|
+|---|---|---|
 | Frontend | Plain HTML/CSS/JS |
-| Map | Leaflet + OpenStreetMap tiles |
+| Map | Leaflet + OpenStreetMap tiles / Esri World Imagery |
 | Satellite compute | Google Earth Engine (JS client via CDN `<script>` tag, v1.7.36) |
 | Auth | Earth Engine OAuth popup (`ee.data.authenticateViaOauth`) |
+| Geocoding | Nominatim (OpenStreetMap free API) |
 | Drawing | leaflet-draw (v1.0.4) |
 | Area calc | turf.js (v6) |
 | Charts | Chart.js (v4.4.7) |
-| Storage | localStorage (fields, auth token) |
+| Storage | localStorage (fields, auth token, AOI coords) |
 
 ## Status
 
-All phases complete. The app is feature-stable with NDVI/NDWI/LSWI analysis, time slider, draw & save fields, dashboard with growth-stage-aware health badges, compare mode, PNG/PDF export, event overlays, CHIRPS rainfall context on stress alerts, preset locations, area recalculation on edit, and a help panel.
+All phases complete. The app is feature-stable with NDVI/NDWI/LSWI analysis, time slider, draw & save fields, dashboard with growth-stage-aware health badges, compare mode, PNG/PDF export, event overlays, CHIRPS rainfall context on stress alerts, preset locations, UI-managed preset/AOI editors, area recalculation on edit, satellite basemap toggle, place search, and a help panel.
