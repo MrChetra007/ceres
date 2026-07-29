@@ -1,6 +1,7 @@
 const EE_PROJECT_ID = 'gen-lang-client-0978198347';
 const CLIENT_ID = '355514869488-q3v52vvkb7c3gikr0og89o26m51ev403.apps.googleusercontent.com';
-const AOI_COORDS = [103.10, 12.95, 103.25, 13.05];
+//const AOI_COORDS = [103.10, 12.95, 103.25, 13.05];
+const AOI_COORDS = [102.985, 12.845, 103.048, 12.898];
 const NDVI_VIS = { min: -0.2, max: 0.8, palette: ['red', 'yellow', 'green'] };
 const NDWI_VIS = { min: -1, max: 1, palette: ['brown', 'tan', '#e0f0ff', '#4a90d9', '#003366'] };
 const LSWI_VIS = { min: -0.3, max: 0.6, palette: ['tan', 'lightblue', 'darkblue'] };
@@ -29,10 +30,9 @@ const MONTHS = [
 ];
 
 var PRESETS = [
-  { label: 'Central', lat: 13.00, lng: 103.175, zoom: 14 },
-  { label: 'North', lat: 13.04, lng: 103.15, zoom: 14 },
-  { label: 'South', lat: 12.97, lng: 103.20, zoom: 14 },
-  { label: 'Svay Cheat', lat: 13.02, lng: 103.22, zoom: 14 },
+  { label: 'Cement Factory', lat: 12.8715, lng: 103.0165, zoom: 15 },
+  { label: 'Factory North', lat: 12.890, lng: 103.020, zoom: 14 },
+  { label: 'Factory South', lat: 12.855, lng: 103.010, zoom: 14 },
 ];
 
 function loadPresets() {
@@ -169,7 +169,7 @@ function getGrowthStage(daysSincePlanting) {
   return RICE_GROWTH_STAGES[RICE_GROWTH_STAGES.length - 1];
 }
 
-const map = L.map('map', { center: [13.05, 103.175], zoom: 11 });
+const map = L.map('map', { center: [12.8715, 103.0165], zoom: 14 });
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
   attribution: '&copy; OpenStreetMap contributors',
   maxZoom: 19,
@@ -267,7 +267,7 @@ document.getElementById('compare-toggle').addEventListener('change', function ()
     rightSlider.style.display = 'block';
 
     if (!mapRight) {
-      mapRight = L.map('map-right', { center: [13.05, 103.175], zoom: 11 });
+      mapRight = L.map('map-right', { center: [12.8715, 103.0165], zoom: 14 });
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '&copy; OpenStreetMap contributors',
         maxZoom: 19,
@@ -454,6 +454,8 @@ function initializeEE() {
     function () {
       document.getElementById('slider-panel').style.display = 'block';
       document.getElementById('auth-overlay').style.display = 'none';
+      map.invalidateSize();
+      map.setView([12.8715, 103.0165], 14);
       renderEventMarkers();
       fetchDryMonths();
       renderFieldList();
@@ -481,6 +483,7 @@ function getIndexImage(year, month, geometry, index) {
     .filterDate(start, end)
     .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', 40))
     .median()
+    .clip(geom)
     .normalizedDifference(cfg.bands)
     .rename(cfg.name);
 }

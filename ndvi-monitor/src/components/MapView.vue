@@ -27,8 +27,8 @@ onUnmounted(() => {
 
 function initMap() {
   map = L.map(mapContainer.value, {
-    center: [13.05, 103.175],
-    zoom: 11,
+    center: [12.8715, 103.0165],
+    zoom: 14,
     zoomControl: true,
   });
 
@@ -92,7 +92,7 @@ function authenticate() {
 }
 
 function computeAndShowNdvi() {
-  const battambang = ee.Geometry.Rectangle([103.1, 12.95, 103.25, 13.05]);
+  const battambang = ee.Geometry.Rectangle([102.985, 12.845, 103.048, 12.898]);
 
   const s2 = ee
     .ImageCollection("COPERNICUS/S2_SR_HARMONIZED")
