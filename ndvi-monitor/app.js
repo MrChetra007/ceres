@@ -229,7 +229,7 @@ function getGrowthStage(daysSincePlanting) {
 
 loadAoiCoords();
 const map = L.map('map', { center: [12.8715, 103.0165], zoom: 14 });
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+var baseLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
   attribution: '&copy; OpenStreetMap contributors',
   maxZoom: 19,
 }).addTo(map);
@@ -237,6 +237,8 @@ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
 let mapRight = null;
 let syncing = false;
 let aoiRectangle = null;
+let baseLayerRight = null;
+let currentBase = 'street';
 
 const drawnItems = new L.FeatureGroup();
 map.addLayer(drawnItems);
@@ -329,7 +331,7 @@ document.getElementById('compare-toggle').addEventListener('change', function ()
 
     if (!mapRight) {
       mapRight = L.map('map-right', { center: [12.8715, 103.0165], zoom: 14 });
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      baseLayerRight = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '&copy; OpenStreetMap contributors',
         maxZoom: 19,
       }).addTo(mapRight);
@@ -352,6 +354,7 @@ document.getElementById('compare-toggle').addEventListener('change', function ()
 
 document.querySelectorAll('.segmented-btn').forEach(function (btn) {
   btn.addEventListener('click', function () {
+    if (!btn.dataset.index) return;
     document.querySelectorAll('.segmented-btn').forEach(function (b) { b.classList.remove('active'); });
     btn.classList.add('active');
     currentIndex = btn.dataset.index;
@@ -383,6 +386,21 @@ document.getElementById('preset-panel').addEventListener('click', function (e) {
 
 document.getElementById('aoi-btn').addEventListener('click', function () {
   showAoiEditor();
+});
+
+document.querySelectorAll('.base-btn').forEach(function (btn) {
+  btn.addEventListener('click', function () {
+    document.querySelectorAll('.base-btn').forEach(function (b) { b.classList.remove('active'); });
+    btn.classList.add('active');
+    setBaseLayer(btn.dataset.base);
+  });
+});
+
+document.getElementById('search-input').addEventListener('keydown', function (e) {
+  if (e.key === 'Enter') searchPlace(this.value);
+});
+document.getElementById('search-btn').addEventListener('click', function () {
+  searchPlace(document.getElementById('search-input').value);
 });
 
 document.getElementById('help-btn').addEventListener('click', function () {
@@ -1181,6 +1199,43 @@ function escapeHtml(str) {
   var div = document.createElement('div');
   div.appendChild(document.createTextNode(str));
   return div.innerHTML;
+}
+
+function setBaseLayer(type) {
+  currentBase = type;
+  var url = type === 'satellite'
+    ? 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
+    : 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+  var attr = type === 'satellite'
+    ? 'Tiles &copy; Esri'
+    : '&copy; OpenStreetMap contributors';
+
+  if (baseLayer) map.removeLayer(baseLayer);
+  baseLayer = L.tileLayer(url, { attribution: attr, maxZoom: 19 }).addTo(map);
+
+  if (mapRight && baseLayerRight) {
+    mapRight.removeLayer(baseLayerRight);
+    baseLayerRight = L.tileLayer(url, { attribution: attr, maxZoom: 19 }).addTo(mapRight);
+  }
+}
+
+function searchPlace(query) {
+  if (!query || !query.trim()) return;
+  var q = encodeURIComponent(query.trim());
+  fetch('https://nominatim.openstreetmap.org/search?format=json&q=' + q)
+    .then(function (r) { return r.json(); })
+    .then(function (data) {
+      if (!data || data.length === 0) {
+        showToast('Location not found');
+        return;
+      }
+      var loc = data[0];
+      map.setView([parseFloat(loc.lat), parseFloat(loc.lon)], 16);
+      setStatus('ready', 'Flew to ' + loc.display_name.split(',')[0]);
+    })
+    .catch(function () {
+      showToast('Search failed — check your connection');
+    });
 }
 
 function setStatus(state, text) {
