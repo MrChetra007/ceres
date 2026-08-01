@@ -2,7 +2,7 @@ const EE_PROJECT_ID = 'gen-lang-client-0978198347';
 const CLIENT_ID = '355514869488-q3v52vvkb7c3gikr0og89o26m51ev403.apps.googleusercontent.com';
 const SUPABASE_URL = 'https://wopwwtnvqyomiwbsxiks.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndvcHd3dG52cXlvbWl3YnN4aWtzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk1NjAyMzcsImV4cCI6MjA5NTEzNjIzN30.2Wl7erPZYi5iuqrF-4UvMObDEYMmt6M86Pg3p89YGeU';
-const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+const sbClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
 });
 
@@ -339,7 +339,7 @@ document.getElementById('auth-email').addEventListener('keydown', function (e) {
   if (e.key === 'Enter') sendMagicLink();
 });
 document.getElementById('sign-out-btn').addEventListener('click', async function () {
-  await supabase.auth.signOut();
+  await sbClient.auth.signOut();
 });
 
 async function sendMagicLink() {
@@ -354,7 +354,7 @@ async function sendMagicLink() {
   btn.disabled = true;
   btn.textContent = 'Sending...';
   msg.textContent = '';
-  var { error } = await supabase.auth.signInWithOtp({
+  var { error } = await sbClient.auth.signInWithOtp({
     email: email,
     options: { emailRedirectTo: window.location.origin + window.location.pathname },
   });
@@ -371,7 +371,7 @@ async function sendMagicLink() {
 
 async function loadFieldsFromSupabase() {
   if (!supabaseUser) { fieldsCache = []; renderFieldList(); return; }
-  var { data, error } = await supabase
+  var { data, error } = await sbClient
     .from('fields')
     .select('*')
     .order('created_at');
@@ -407,7 +407,7 @@ async function importLocalFieldsIfAny() {
   localStorage.removeItem('ndvi_import_skipped');
   for (var i = 0; i < legacyFields.length; i++) {
     var f = legacyFields[i];
-    var { error } = await supabase.from('fields').insert({
+    var { error } = await sbClient.from('fields').insert({
       name: f.name,
       geojson: f.geojson,
       area_ha: f.areaHectares != null ? f.areaHectares : getFieldAreaHectares(f.geojson),
@@ -420,7 +420,7 @@ async function importLocalFieldsIfAny() {
   loadFieldsFromSupabase();
 }
 
-supabase.auth.onAuthStateChange(function (event, session) {
+sbClient.auth.onAuthStateChange(function (event, session) {
   supabaseUser = session ? session.user : null;
   updateUserMenu();
   if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
@@ -885,7 +885,7 @@ async function saveField(name, geojson, plantingDate) {
     area_ha: getFieldAreaHectares(geojson),
     planting_date: plantingDate || null,
   };
-  var { data, error } = await supabase.from('fields').insert(row).select().single();
+  var { data, error } = await sbClient.from('fields').insert(row).select().single();
   if (error) { showToast('Failed to save field: ' + error.message); return null; }
   var field = {
     id: data.id,
@@ -903,7 +903,7 @@ async function saveField(name, geojson, plantingDate) {
 
 async function updateField(id, patch) {
   if (!supabaseUser) { showToast('Sign in to update fields'); return; }
-  var { error } = await supabase.from('fields').update(patch).eq('id', id);
+  var { error } = await sbClient.from('fields').update(patch).eq('id', id);
   if (error) { showToast('Failed to update field: ' + error.message); return; }
   var idx = fieldsCache.findIndex(function (f) { return f.id === id; });
   if (idx >= 0) {
@@ -932,7 +932,7 @@ function clearFieldSelection() {
 
 async function deleteField(id) {
   if (!supabaseUser) { showToast('Sign in to manage fields'); return; }
-  var { error } = await supabase.from('fields').delete().eq('id', id);
+  var { error } = await sbClient.from('fields').delete().eq('id', id);
   if (error) { showToast('Failed to delete field: ' + error.message); return; }
   fieldsCache = fieldsCache.filter(function (f) { return f.id !== id; });
   if (id === currentFieldId) {
