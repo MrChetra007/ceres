@@ -1,20 +1,15 @@
 <template>
   <div class="map-container" ref="containerEl">
     <div id="map" ref="mapEl"></div>
-    <div
-      v-show="state.compareMode"
-      class="map-divider"
-      title="Drag to resize — double-click to reset"
-      @mousedown="startResize"
-      @dblclick="resetSplit"
-    ></div>
-    <div
-      id="map-right"
-      ref="mapRightEl"
-      class="map-right"
-      :style="{ width: rightWidth + '%' }"
-      v-show="state.compareMode"
-    ></div>
+    <template v-if="state.compareMode">
+      <div
+        class="map-divider"
+        title="Drag to resize — double-click to reset"
+        @mousedown="startResize"
+        @dblclick="resetSplit"
+      ></div>
+      <div id="map-right" ref="mapRightEl" class="map-right" :style="{ width: rightWidth + '%' }"></div>
+    </template>
   </div>
 </template>
 
@@ -88,6 +83,16 @@ function makeRightMap() {
   mapReg.baseLayerRight = baseLayerRight
 }
 
+function destroyRightMap() {
+  if (mapReg.mapRight) {
+    try { mapReg.mapRight.remove() } catch (e) {}
+  }
+  mapReg.mapRight = null
+  mapReg.baseLayerRight = null
+  mapReg.ndviLayerRight = null
+  state.sceneCount.right = 0
+}
+
 function startResize(e) {
   e.preventDefault()
   resizing.value = true
@@ -134,7 +139,10 @@ watch(() => state.compareMode, (on) => {
       loadIndexForMonthRight(state.rightMonth)
     })
   } else {
-    mapReg.map.invalidateSize()
+    destroyRightMap()
+    requestAnimationFrame(() => {
+      if (mapReg.map) mapReg.map.invalidateSize()
+    })
   }
 })
 

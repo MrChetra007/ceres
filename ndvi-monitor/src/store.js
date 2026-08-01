@@ -262,6 +262,7 @@ export function loadIndexForMonthRight(idx) {
   beginLoading()
   const geom = getGeometry()
   ee.loadIndexTile(m, state.currentIndex, geom, (res) => {
+    if (!mapReg.mapRight) { endLoading(); return }
     state.sceneCount.right = res.count
     if (!res.url) {
       endLoading()
