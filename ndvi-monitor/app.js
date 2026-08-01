@@ -1,5 +1,13 @@
 const EE_PROJECT_ID = 'gen-lang-client-0978198347';
 const CLIENT_ID = '355514869488-q3v52vvkb7c3gikr0og89o26m51ev403.apps.googleusercontent.com';
+const SUPABASE_URL = 'https://wopwwtnvqyomiwbsxiks.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndvcHd3dG52cXlvbWl3YnN4aWtzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk1NjAyMzcsImV4cCI6MjA5NTEzNjIzN30.2Wl7erPZYi5iuqrF-4UvMObDEYMmt6M86Pg3p89YGeU';
+const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+  auth: { persistSession: true, autoRefreshToken: true, detectSessionInUrl: true },
+});
+
+let supabaseUser = null;
+let fieldsCache = [];
 var aoiCoords = null;
 function defaultAoiCoords() { return [102.985, 12.845, 103.048, 12.898]; }
 function loadAoiCoords() {
@@ -300,6 +308,147 @@ let currentFieldId = null;
 
 document.getElementById('sign-in-btn').addEventListener('click', authenticate);
 
+// ---- Supabase auth (email magic link) ----
+let eeReady = false;
+
+function updateUserMenu() {
+  var menu = document.getElementById('user-menu');
+  var label = document.getElementById('user-email-label');
+  if (!menu) return;
+  if (supabaseUser) {
+    menu.style.display = 'flex';
+    label.textContent = supabaseUser.email || 'Signed in';
+    menu.title = '';
+  } else if (eeReady) {
+    menu.style.display = 'flex';
+    label.textContent = 'Sign in to sync fields';
+    menu.title = 'Sign in to save and sync fields';
+    menu.onclick = function () { showAuthOverlay(); };
+  } else {
+    menu.style.display = 'none';
+  }
+}
+
+document.getElementById('user-menu').addEventListener('click', function (e) {
+  if (e.target.id === 'sign-out-btn') return;
+  if (!supabaseUser) showAuthOverlay();
+});
+
+document.getElementById('send-magic-link-btn').addEventListener('click', sendMagicLink);
+document.getElementById('auth-email').addEventListener('keydown', function (e) {
+  if (e.key === 'Enter') sendMagicLink();
+});
+document.getElementById('sign-out-btn').addEventListener('click', async function () {
+  await supabase.auth.signOut();
+});
+
+async function sendMagicLink() {
+  var email = document.getElementById('auth-email').value.trim();
+  var msg = document.getElementById('auth-message');
+  if (!email) {
+    msg.textContent = 'Enter your email first.';
+    msg.className = 'auth-message error';
+    return;
+  }
+  var btn = document.getElementById('send-magic-link-btn');
+  btn.disabled = true;
+  btn.textContent = 'Sending...';
+  msg.textContent = '';
+  var { error } = await supabase.auth.signInWithOtp({
+    email: email,
+    options: { emailRedirectTo: window.location.origin + window.location.pathname },
+  });
+  btn.disabled = false;
+  btn.textContent = 'Send magic link';
+  if (error) {
+    msg.textContent = error.message;
+    msg.className = 'auth-message error';
+    return;
+  }
+  msg.textContent = 'Magic link sent — check your inbox.';
+  msg.className = 'auth-message';
+}
+
+async function loadFieldsFromSupabase() {
+  if (!supabaseUser) { fieldsCache = []; renderFieldList(); return; }
+  var { data, error } = await supabase
+    .from('fields')
+    .select('*')
+    .order('created_at');
+  if (error) {
+    showToast('Failed to load fields: ' + error.message);
+    return;
+  }
+  fieldsCache = (data || []).map(function (row) {
+    return {
+      id: row.id,
+      name: row.name,
+      geojson: row.geojson,
+      areaHectares: row.area_ha,
+      plantingDate: row.planting_date,
+      notes: row.notes,
+      createdAt: row.created_at,
+    };
+  });
+  renderFieldList();
+}
+
+async function importLocalFieldsIfAny() {
+  if (!supabaseUser) return;
+  var legacy = localStorage.getItem('ndvi_fields');
+  if (!legacy) return;
+  var legacyFields;
+  try { legacyFields = JSON.parse(legacy); } catch (e) { return; }
+  if (!legacyFields || legacyFields.length === 0) return;
+  var confirmed = confirm(
+    legacyFields.length + ' field(s) are still saved in this browser. Upload them to your account?'
+  );
+  if (!confirmed) { localStorage.setItem('ndvi_import_skipped', '1'); return; }
+  localStorage.removeItem('ndvi_import_skipped');
+  for (var i = 0; i < legacyFields.length; i++) {
+    var f = legacyFields[i];
+    var { error } = await supabase.from('fields').insert({
+      name: f.name,
+      geojson: f.geojson,
+      area_ha: f.areaHectares != null ? f.areaHectares : getFieldAreaHectares(f.geojson),
+      planting_date: f.plantingDate || null,
+    });
+    if (error) { showToast('Import failed for "' + f.name + '": ' + error.message); return; }
+  }
+  localStorage.removeItem('ndvi_fields');
+  showToast('Imported ' + legacyFields.length + ' field(s) to your account');
+  loadFieldsFromSupabase();
+}
+
+supabase.auth.onAuthStateChange(function (event, session) {
+  supabaseUser = session ? session.user : null;
+  updateUserMenu();
+  if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
+    if (session) {
+      loadFieldsFromSupabase();
+      if (localStorage.getItem('ndvi_fields') && !localStorage.getItem('ndvi_import_skipped')) {
+        importLocalFieldsIfAny();
+      }
+    }
+  } else if (event === 'SIGNED_OUT') {
+    fieldsCache = [];
+    renderFieldList();
+    showAuthOverlay();
+  }
+});
+
+function showAuthOverlay() {
+  var overlay = document.getElementById('auth-overlay');
+  var eeSection = document.getElementById('ee-auth-section');
+  var emailSection = document.getElementById('email-auth-section');
+  var divider = document.querySelector('.auth-divider');
+  var eeReadyState = typeof ee !== 'undefined' && eeReady;
+  if (eeSection) eeSection.style.display = eeReadyState ? 'none' : 'flex';
+  if (emailSection) emailSection.style.display = supabaseUser ? 'none' : 'flex';
+  if (divider) divider.style.display = (eeReadyState || supabaseUser) ? 'none' : 'flex';
+  overlay.style.display = 'flex';
+}
+
 document.getElementById('month-slider').addEventListener('input', function () {
   clearTimeout(debounceTimer);
   setSliderLoading(true);
@@ -498,13 +647,12 @@ map.on(L.Draw.Event.EDITED, function () {
   var layers = [];
   drawnItems.eachLayer(function (l) { layers.push(l.toGeoJSON()); });
   if (layers.length > 0 && currentFieldId) {
-    var fields = getSavedFields();
-    var field = fields.find(function (f) { return f.id === currentFieldId; });
+    var field = getSavedFields().find(function (f) { return f.id === currentFieldId; });
     if (field) {
-      field.geojson = layers[0];
-      field.areaHectares = getFieldAreaHectares(layers[0]);
-      localStorage.setItem('ndvi_fields', JSON.stringify(fields));
-      renderFieldList();
+      updateField(field.id, {
+        geojson: layers[0],
+        area_ha: getFieldAreaHectares(layers[0]),
+      });
     }
   }
 });
@@ -578,8 +726,10 @@ function initializeEE() {
   ee.initialize(
     null, null,
     function () {
+      eeReady = true;
       document.getElementById('slider-panel').style.display = 'block';
       document.getElementById('auth-overlay').style.display = 'none';
+      updateUserMenu();
       map.invalidateSize();
       map.setView([12.8715, 103.0165], 14);
       renderEventMarkers();
@@ -724,20 +874,44 @@ function loadNdviForMonthRight(idx) {
 }
 
 function getSavedFields() {
-  return JSON.parse(localStorage.getItem('ndvi_fields') || '[]');
+  return fieldsCache;
 }
 
-function saveField(name, geojson, plantingDate) {
-  var fields = getSavedFields();
-  fields.push({
-    id: crypto.randomUUID(),
+async function saveField(name, geojson, plantingDate) {
+  if (!supabaseUser) { showToast('Sign in to save fields'); return null; }
+  var row = {
     name: name,
     geojson: geojson,
-    areaHectares: getFieldAreaHectares(geojson),
-    plantingDate: plantingDate || null,
-    createdAt: new Date().toISOString(),
-  });
-  localStorage.setItem('ndvi_fields', JSON.stringify(fields));
+    area_ha: getFieldAreaHectares(geojson),
+    planting_date: plantingDate || null,
+  };
+  var { data, error } = await supabase.from('fields').insert(row).select().single();
+  if (error) { showToast('Failed to save field: ' + error.message); return null; }
+  var field = {
+    id: data.id,
+    name: data.name,
+    geojson: data.geojson,
+    areaHectares: data.area_ha,
+    plantingDate: data.planting_date,
+    notes: data.notes,
+    createdAt: data.created_at,
+  };
+  fieldsCache.push(field);
+  renderFieldList();
+  return field;
+}
+
+async function updateField(id, patch) {
+  if (!supabaseUser) { showToast('Sign in to update fields'); return; }
+  var { error } = await supabase.from('fields').update(patch).eq('id', id);
+  if (error) { showToast('Failed to update field: ' + error.message); return; }
+  var idx = fieldsCache.findIndex(function (f) { return f.id === id; });
+  if (idx >= 0) {
+    if ('geojson' in patch) fieldsCache[idx].geojson = patch.geojson;
+    if ('area_ha' in patch) fieldsCache[idx].areaHectares = patch.area_ha;
+    if ('planting_date' in patch) fieldsCache[idx].plantingDate = patch.planting_date;
+    if ('name' in patch) fieldsCache[idx].name = patch.name;
+  }
   renderFieldList();
 }
 
@@ -756,9 +930,11 @@ function clearFieldSelection() {
   setStatus('ready', 'Field deselected — showing full AOI');
 }
 
-function deleteField(id) {
-  var fields = getSavedFields().filter(function (f) { return f.id !== id; });
-  localStorage.setItem('ndvi_fields', JSON.stringify(fields));
+async function deleteField(id) {
+  if (!supabaseUser) { showToast('Sign in to manage fields'); return; }
+  var { error } = await supabase.from('fields').delete().eq('id', id);
+  if (error) { showToast('Failed to delete field: ' + error.message); return; }
+  fieldsCache = fieldsCache.filter(function (f) { return f.id !== id; });
   if (id === currentFieldId) {
     currentFieldId = null;
     currentFieldName = null;
@@ -784,9 +960,9 @@ function promptSaveField(geojson) {
   }
   showDatePicker(null, function (date) {
     if (date === undefined) { date = null; }
-    saveField(name, geojson, date);
-    var fields = getSavedFields();
-    loadFieldById(fields[fields.length - 1].id);
+    saveField(name, geojson, date).then(function (saved) {
+      if (saved) loadField(saved);
+    });
   });
 }
 
@@ -881,14 +1057,11 @@ function renderFieldList() {
   container.querySelectorAll('.plant-date-btn').forEach(function (btn) {
     btn.addEventListener('click', function (e) {
       e.stopPropagation();
-      var fields = getSavedFields();
-      var field = fields.find(function (f) { return f.id === btn.dataset.id; });
+      var field = getSavedFields().find(function (f) { return f.id === btn.dataset.id; });
       if (!field) return;
       showDatePicker(field.plantingDate, function (newDate) {
         if (newDate === undefined) return;
-        field.plantingDate = newDate;
-        localStorage.setItem('ndvi_fields', JSON.stringify(fields));
-        renderFieldList();
+        updateField(field.id, { planting_date: newDate });
       });
     });
   });
@@ -940,6 +1113,7 @@ function buildStatusObject(field, value, index) {
 }
 
 function updateFieldStatus(field) {
+  if (!eeReady) return;
   var geom = field.geojson && (field.geojson.geometry || field.geojson);
   if (!geom || !geom.coordinates) return;
   var coords = geom.coordinates;

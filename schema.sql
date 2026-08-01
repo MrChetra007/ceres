@@ -34,7 +34,7 @@ create trigger on_auth_user_created
 -- fields: replaces the localStorage field store
 create table fields (
   id uuid primary key default gen_random_uuid(),
-  owner_id uuid not null references profiles(id) on delete cascade,
+  owner_id uuid not null default auth.uid() references profiles(id) on delete cascade,
   name text not null,
   geojson jsonb not null,
   area_ha numeric,
@@ -53,6 +53,18 @@ create policy "Users can update own fields" on fields
   for update using (auth.uid() = owner_id);
 create policy "Users can delete own fields" on fields
   for delete using (auth.uid() = owner_id);
+
+-- keep updated_at current whenever a field row changes
+create function public.set_updated_at() returns trigger as $$
+begin
+  new.updated_at = now();
+  return new;
+end;
+$$ language plpgsql;
+
+create trigger fields_set_updated_at
+  before update on fields
+  for each row execute procedure public.set_updated_at();
 
 -- link_codes: short-lived one-time codes for the Telegram linking flow
 create table link_codes (

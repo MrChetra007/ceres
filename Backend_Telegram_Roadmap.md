@@ -41,22 +41,19 @@ that same problem in an even less-tested runtime.
 
 ---
 
-## Phase 8.1 — Supabase schema & auth ⬜
-- Create Supabase project (if not already), note project URL + anon key + service_role key
-- Auth: start with **email magic link** (free, built into Supabase Auth, no SMS provider needed).
-  Phone OTP is nicer for farmer-facing use but needs a paid SMS provider — defer that.
-- Run `schema.sql` in the Supabase SQL editor
-- **Checkpoint:** can sign up, log in, and see an empty `fields` list from Supabase in the Supabase
-  dashboard table view
+## Phase 8.1 — Supabase schema & auth ✅
+- Supabase project `https://wopwwtnvqyomiwbsxiks.supabase.co` (anon key in `.env` / `app.js`)
+- Auth: **email magic link** (free, built into Supabase Auth)
+- `schema.sql` updated: `fields.owner_id` now defaults to `auth.uid()`, added `set_updated_at()` trigger
+- App: supabase-js CDN added, auth overlay reworked (email magic link + EE sign-in side by side), user menu with sign-in/sign-out, `onAuthStateChange` auto-loads fields
+- **Checkpoint:** can sign up, log in, and see an empty `fields` list from Supabase in the Supabase dashboard table view
 
-## Phase 8.2 — Migrate the app off localStorage ⬜
-- Swap `saveField()` / `getSavedFields()` / `deleteField()` / `loadField()` to call Supabase instead
-  of `localStorage` (same function names, new implementation — minimal blast radius on the rest of
-  `app.js`)
-- One-time import: on first login, if `localStorage` still has saved fields, offer to upload them to
-  Supabase, then stop using localStorage for fields going forward
-- **Checkpoint:** draw a field, refresh the page (or open on a different device, same login) — field
-  persists via Supabase, not the browser
+## Phase 8.2 — Migrate the app off localStorage ✅
+- `saveField()` / `getSavedFields()` / `deleteField()` / `loadField()` / `loadFieldById()` now use Supabase (`fieldsCache` in-memory mirror + async CRUD); same function names, new implementation
+- New `updateField(id, patch)` handles area recalc (on `EDITED`) and planting-date edits
+- One-time import: `importLocalFieldsIfAny()` uploads existing `ndvi_fields` localStorage on first login, then clears it
+- `updateFieldStatus()` guarded by `eeReady` so dashboard renders before EE init
+- **Checkpoint:** draw a field, refresh the page (or open on a different device, same login) — field persists via Supabase, not the browser
 
 ## Phase 8.3 — Telegram bot + account linking ⬜
 - Create the bot via **@BotFather** in Telegram → get bot token → store as a secret (Supabase

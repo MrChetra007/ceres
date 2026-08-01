@@ -10,6 +10,10 @@
   <link rel="stylesheet" href="style.css" />
 </head>
 <body>
+  <div id="user-menu" class="user-menu" style="display:none">
+    <span id="user-email-label" class="user-email"></span>
+    <button id="sign-out-btn" class="sign-out-btn">Sign out</button>
+  </div>
   <div id="dashboard-toggle" class="dashboard-toggle">☰</div>
   <div id="dashboard" class="panel dashboard" style="display:none">
     <div class="dashboard-header">
@@ -124,7 +128,19 @@
     <div class="auth-card">
       <h2>NDVI Rice Crop Health Monitor</h2>
       <p class="subtitle">Battambang, Cambodia</p>
-      <button id="sign-in-btn">Sign in with Google</button>
+      <div id="auth-fields" class="auth-fields">
+        <div id="email-auth-section" class="auth-section">
+          <label class="auth-label" for="auth-email">Sign in to sync your fields</label>
+          <input type="email" id="auth-email" placeholder="you@email.com" autocomplete="email" />
+          <button id="send-magic-link-btn" class="auth-email-btn">Send magic link</button>
+          <p id="auth-message" class="auth-message"></p>
+        </div>
+        <div class="auth-divider"><span>or</span></div>
+        <div id="ee-auth-section" class="auth-section">
+          <label class="auth-label">Connect satellite data</label>
+          <button id="sign-in-btn">Sign in with Google</button>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -197,6 +213,7 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="app.js"></script>
 </body>
 </html>
