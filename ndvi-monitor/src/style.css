@@ -24,10 +24,25 @@ html, body {
 
 #map {
   height: 100%;
-  width: 100%;
+  flex: 1 1 0;
+  min-width: 0;
 }
 
+.map-divider {
+  flex: 0 0 6px;
+  height: 100%;
+  cursor: col-resize;
+  background: rgba(255, 255, 255, 0.15);
+  border-left: 0.5px solid rgba(255, 255, 255, 0.12);
+  border-right: 0.5px solid rgba(255, 255, 255, 0.12);
+  z-index: 1001;
+  touch-action: none;
+}
+
+.map-divider:hover { background: var(--accent); }
+
 .map-right {
+  flex: 0 0 auto;
   height: 100%;
   width: 50%;
   border-left: 3px solid #666;
@@ -1981,7 +1996,7 @@ body {
   filter: invert(0.92) hue-rotate(180deg);
 }
 
-.map-right { border-left: 3px solid rgba(255, 255, 255, 0.2); }
+.map-right { border-left: none; }
 
 /* Keep Leaflet top controls (zoom + draw) below the fixed header */
 #map .leaflet-top,

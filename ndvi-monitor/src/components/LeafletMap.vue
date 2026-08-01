@@ -1,12 +1,25 @@
 <template>
-  <div class="map-container">
+  <div class="map-container" ref="containerEl">
     <div id="map" ref="mapEl"></div>
-    <div id="map-right" ref="mapRightEl" class="map-right" v-show="state.compareMode"></div>
+    <div
+      v-show="state.compareMode"
+      class="map-divider"
+      title="Drag to resize — double-click to reset"
+      @mousedown="startResize"
+      @dblclick="resetSplit"
+    ></div>
+    <div
+      id="map-right"
+      ref="mapRightEl"
+      class="map-right"
+      :style="{ width: rightWidth + '%' }"
+      v-show="state.compareMode"
+    ></div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, onBeforeUnmount, watch } from 'vue'
+import { ref, onMounted, watch, nextTick } from 'vue'
 import {
   state, mapReg, onMapClick, onFieldCreated, onFieldEdited,
   loadIndexForMonthRight, setBaseLayer, updateAoiRectangle,
@@ -17,6 +30,9 @@ import { MAP_CENTER, MAP_ZOOM } from '../config'
 const L = window.L
 const mapEl = ref(null)
 const mapRightEl = ref(null)
+const containerEl = ref(null)
+const rightWidth = ref(50)
+const resizing = ref(false)
 
 function makeMainMap() {
   const map = L.map(mapEl.value, { center: MAP_CENTER, zoom: MAP_ZOOM })
@@ -68,33 +84,55 @@ function makeRightMap() {
     attribution: '&copy; OpenStreetMap contributors',
     maxZoom: 19,
   }).addTo(mapRight)
-  mapRight.on('move', syncLeftFromRight)
-  mapReg.map.on('move', syncRightFromLeft)
   mapReg.mapRight = mapRight
   mapReg.baseLayerRight = baseLayerRight
 }
 
-function syncRightFromLeft() {
-  if (mapReg.syncing || !mapReg.mapRight) return
-  mapReg.syncing = true
-  mapReg.mapRight.setView(mapReg.map.getCenter(), mapReg.map.getZoom())
-  mapReg.syncing = false
+function startResize(e) {
+  e.preventDefault()
+  resizing.value = true
+  const startX = e.clientX
+  const startW = rightWidth.value
+  const containerW = containerEl.value ? containerEl.value.getBoundingClientRect().width : 0
+  document.body.style.cursor = 'col-resize'
+  document.body.style.userSelect = 'none'
+
+  function onMove(ev) {
+    if (!containerW) return
+    const delta = ev.clientX - startX
+    let w = startW - (delta / containerW) * 100
+    rightWidth.value = Math.min(80, Math.max(20, w))
+    if (mapReg.map) mapReg.map.invalidateSize()
+    if (mapReg.mapRight) mapReg.mapRight.invalidateSize()
+  }
+
+  function onUp() {
+    resizing.value = false
+    document.body.style.cursor = ''
+    document.body.style.userSelect = ''
+    window.removeEventListener('mousemove', onMove)
+    window.removeEventListener('mouseup', onUp)
+  }
+
+  window.addEventListener('mousemove', onMove)
+  window.addEventListener('mouseup', onUp)
 }
 
-function syncLeftFromRight() {
-  if (mapReg.syncing || !mapReg.mapRight) return
-  mapReg.syncing = true
-  mapReg.map.setView(mapReg.mapRight.getCenter(), mapReg.mapRight.getZoom())
-  mapReg.syncing = false
+function resetSplit() {
+  rightWidth.value = 50
+  if (mapReg.map) mapReg.map.invalidateSize()
+  if (mapReg.mapRight) mapReg.mapRight.invalidateSize()
 }
 
 watch(() => state.compareMode, (on) => {
   if (on) {
-    makeRightMap()
-    mapReg.mapRight.setView(mapReg.map.getCenter(), mapReg.map.getZoom())
-    mapReg.map.invalidateSize()
-    mapReg.mapRight.invalidateSize()
-    loadIndexForMonthRight(state.rightMonth)
+    nextTick(() => {
+      makeRightMap()
+      mapReg.mapRight.setView(mapReg.map.getCenter(), mapReg.map.getZoom())
+      mapReg.mapRight.invalidateSize()
+      mapReg.map.invalidateSize()
+      loadIndexForMonthRight(state.rightMonth)
+    })
   } else {
     mapReg.map.invalidateSize()
   }
