@@ -23,9 +23,24 @@ const NDWI_VIS = { min: -1, max: 1, palette: ['brown', 'tan', '#e0f0ff', '#4a90d
 const LSWI_VIS = { min: -0.3, max: 0.6, palette: ['tan', 'lightblue', 'darkblue'] };
 
 const INDICES = {
-  ndvi: { name: 'NDVI', bands: ['B8', 'B4'], vis: NDVI_VIS, label: 'Vegetation' },
-  ndwi: { name: 'NDWI', bands: ['B3', 'B8'], vis: NDWI_VIS, label: 'Water' },
-  lswi: { name: 'LSWI', bands: ['B8', 'B11'], vis: LSWI_VIS, label: 'Water/Moisture' },
+  ndvi: {
+    name: 'NDVI', bands: ['B8', 'B4'], vis: NDVI_VIS, label: 'Vegetation',
+    color: '#22c55e',
+    full: 'Vegetation Health Index',
+    explain: 'High values (green) mean dense, healthy vegetation. Low values (red) mean bare soil, water, or stressed crops.',
+  },
+  ndwi: {
+    name: 'NDWI', bands: ['B3', 'B8'], vis: NDWI_VIS, label: 'Water',
+    color: '#3b82f6',
+    full: 'Water Index',
+    explain: 'High values (blue) mean standing surface water, such as flooded paddies. Low values (brown) mean dry land with little or no water.',
+  },
+  lswi: {
+    name: 'LSWI', bands: ['B8', 'B11'], vis: LSWI_VIS, label: 'Water/Moisture',
+    color: '#0ea5e9',
+    full: 'Land Surface Water Index',
+    explain: 'High values (dark blue) mean moist soil and water-saturated plant canopies. Low values (tan) mean dry soil and dry vegetation.',
+  },
 };
 
 function buildMonths() {
@@ -187,6 +202,20 @@ function updateSceneCount(count, isRight) {
   el.className = 'scene-count' + (count <= 2 ? ' scene-count-low' : '');
 }
 
+function updateIndexLabels() {
+  var cfg = INDICES[currentIndex] || INDICES.ndvi;
+  var explainer = document.getElementById('index-explainer');
+  if (explainer) explainer.textContent = cfg.name + ' \u00b7 ' + cfg.full;
+  var title = document.getElementById('panel-title');
+  if (title) title.textContent = cfg.name + ' Trend';
+  var cardTitle = document.getElementById('chart-card-title');
+  if (cardTitle) cardTitle.textContent = cfg.name + ' Trend';
+  var modalTitle = document.getElementById('chart-modal-title');
+  if (modalTitle) modalTitle.textContent = cfg.name + ' Trend \u2014 ' + (currentFieldName || 'Point');
+  var expEl = document.getElementById('chart-explanation');
+  if (expEl) expEl.textContent = cfg.name + ' values \u2014 ' + cfg.explain;
+}
+
 function setupSliders() {
   var last = MONTHS.length - 1;
   var latest = Math.max(0, MONTHS.length - 2);
@@ -299,8 +328,12 @@ let ndviLayerRight = null;
 let debounceTimer = null;
 let debounceTimerRight = null;
 let trendChart = null;
+let trendChartLarge = null;
+let currentChartData = null;
+let currentChartIndex = 'ndvi';
 let currentGeometry = null;
 let currentIndex = 'ndvi';
+let lastClickPoint = null;
 let compareMode = false;
 let loadingCount = 0;
 let currentFieldName = null;
@@ -451,6 +484,7 @@ function showAuthOverlay() {
 
 document.getElementById('month-slider').addEventListener('input', function () {
   clearTimeout(debounceTimer);
+  updateTrendMarker();
   setSliderLoading(true);
   debounceTimer = setTimeout(function () {
     loadNdviForMonth(parseInt(document.getElementById('month-slider').value), currentGeometry);
@@ -467,6 +501,32 @@ document.getElementById('month-slider-right').addEventListener('input', function
 
 document.getElementById('close-panel').addEventListener('click', function () {
   document.getElementById('info-panel').style.display = 'none';
+});
+
+document.getElementById('collapse-panel').addEventListener('click', function () {
+  var panel = document.getElementById('info-panel');
+  var icon = this.querySelector('.ti');
+  var collapsed = panel.classList.toggle('collapsed');
+  this.title = collapsed ? 'Expand panel' : 'Collapse panel';
+  icon.className = collapsed ? 'ti ti-chevrons-left' : 'ti ti-chevrons-right';
+  if (!collapsed && trendChart) trendChart.resize();
+});
+
+document.getElementById('expand-chart').addEventListener('click', function () {
+  if (!trendChart) { showToast('Click a location on the map first'); return; }
+  openChartModal();
+});
+
+document.getElementById('chart-modal-close').addEventListener('click', closeChartModal);
+
+document.getElementById('chart-modal').addEventListener('click', function (e) {
+  if (e.target === this) closeChartModal();
+});
+
+document.addEventListener('keydown', function (e) {
+  if (e.key === 'Escape' && document.getElementById('chart-modal').style.display !== 'none') {
+    closeChartModal();
+  }
 });
 
 document.getElementById('export-btn-header').addEventListener('click', function () {
@@ -542,6 +602,20 @@ document.querySelectorAll('.segmented-btn').forEach(function (btn) {
       loadNdviForMonthRight(parseInt(document.getElementById('month-slider-right').value));
     }
     renderFieldList();
+    updateIndexLabels();
+    if (lastClickPoint && document.getElementById('info-panel').style.display !== 'none') {
+      setStatus('computing', 'Fetching ' + INDICES[currentIndex].name + ' trend...');
+      getIndexTimeSeriesAtPoint(lastClickPoint.lat, lastClickPoint.lng, currentIndex, function (data) {
+        if (data.length === 0) {
+          setStatus('error', 'No ' + INDICES[currentIndex].name + ' data for this point');
+          return;
+        }
+        renderChart(data, currentIndex);
+        checkStress(data, lastClickPoint.lat, lastClickPoint.lng, currentIndex);
+        document.getElementById('chart-subtitle').textContent += ' \u00b7 ' + data.length + ' observations';
+        setStatus('ready', INDICES[currentIndex].name + ' trend loaded \u2014 ' + data.length + ' observations');
+      });
+    }
   });
 });
 
@@ -576,6 +650,7 @@ document.querySelectorAll('.base-btn').forEach(function (btn) {
 document.getElementById('latest-btn').addEventListener('click', function () {
   var latest = Math.max(0, MONTHS.length - 2);
   document.getElementById('month-slider').value = latest;
+  updateTrendMarker();
   setSliderLoading(true);
   loadNdviForMonth(latest, currentGeometry);
   if (compareMode) {
@@ -612,19 +687,27 @@ map.on('click', function (e) {
   var lng = e.latlng.lng;
   currentFieldName = null;
   currentFieldId = null;
+  lastClickPoint = { lat: lat, lng: lng };
   document.getElementById('chart-subtitle').textContent =
     lat.toFixed(4) + ', ' + lng.toFixed(4);
   document.getElementById('info-panel').style.display = 'flex';
-  setStatus('computing', 'Fetching NDVI trend...');
-  getNdviTimeSeriesAtPoint(lat, lng, function (data) {
+  var collapsed = document.getElementById('info-panel').classList.contains('collapsed');
+  if (collapsed) {
+    document.getElementById('info-panel').classList.remove('collapsed');
+    var btn = document.getElementById('collapse-panel');
+    btn.title = 'Collapse panel';
+    btn.querySelector('.ti').className = 'ti ti-chevrons-right';
+  }
+  setStatus('computing', 'Fetching ' + INDICES[currentIndex].name + ' trend...');
+  getIndexTimeSeriesAtPoint(lat, lng, currentIndex, function (data) {
     if (data.length === 0) {
-      setStatus('error', 'No NDVI data for this point');
+      setStatus('error', 'No ' + INDICES[currentIndex].name + ' data for this point');
       return;
     }
-    renderChart(data);
-    checkStress(data, lat, lng);
+    renderChart(data, currentIndex);
+    checkStress(data, lat, lng, currentIndex);
     document.getElementById('chart-subtitle').textContent += ' \u00b7 ' + data.length + ' observations';
-    setStatus('ready', 'NDVI trend loaded \u2014 ' + data.length + ' observations');
+    setStatus('ready', INDICES[currentIndex].name + ' trend loaded \u2014 ' + data.length + ' observations');
   });
 });
 
@@ -730,6 +813,7 @@ function initializeEE() {
       document.getElementById('slider-panel').style.display = 'block';
       document.getElementById('auth-overlay').style.display = 'none';
       updateUserMenu();
+      updateIndexLabels();
       map.invalidateSize();
       map.setView([12.8715, 103.0165], 14);
       renderEventMarkers();
@@ -1166,7 +1250,8 @@ function updateFieldStatus(field) {
   });
 }
 
-function getNdviTimeSeriesAtPoint(lat, lng, callback) {
+function getIndexTimeSeriesAtPoint(lat, lng, index, callback) {
+  var cfg = INDICES[index] || INDICES.ndvi;
   var point = ee.Geometry.Point([lng, lat]);
   var startDate = ee.Date.fromYMD(MONTHS[0].year, MONTHS[0].month, 1);
   var last = MONTHS[MONTHS.length - 1];
@@ -1177,21 +1262,21 @@ function getNdviTimeSeriesAtPoint(lat, lng, callback) {
     .filterDate(startDate, endDate)
     .filter(ee.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', 40));
 
-  var ndviSeries = allImages.map(function (img) {
-    var ndvi = img.normalizedDifference(['B8', 'B4']).rename('NDVI');
-    var value = ndvi.reduceRegion({
+  var indexSeries = allImages.map(function (img) {
+    var idxImg = img.normalizedDifference(cfg.bands).rename(cfg.name);
+    var value = idxImg.reduceRegion({
       reducer: ee.Reducer.mean(),
       geometry: point,
       scale: 10,
     });
     return ee.Feature(null, {
       date: img.date().format('YYYY-MM-dd'),
-      ndvi: value.get('NDVI'),
+      value: value.get(cfg.name),
     });
   });
 
-  ndviSeries
-    .filter(ee.Filter.notNull(['ndvi']))
+  indexSeries
+    .filter(ee.Filter.notNull(['value']))
     .evaluate(function (result) {
       if (!result || !result.features) {
         callback([]);
@@ -1200,32 +1285,51 @@ function getNdviTimeSeriesAtPoint(lat, lng, callback) {
       var data = result.features.map(function (f) {
         return {
           date: f.properties.date,
-          ndvi: f.properties.ndvi,
+          value: f.properties.value,
         };
       });
       callback(data);
     });
 }
 
-function renderChart(data) {
+function renderChart(data, index) {
+  currentChartData = data;
+  currentChartIndex = index || currentIndex;
+  if (trendChart) { trendChart.destroy(); trendChart = null; }
   var ctx = document.getElementById('trend-chart').getContext('2d');
-  if (trendChart) trendChart.destroy();
+  trendChart = new Chart(ctx, buildChartConfig(ctx, data, currentChartIndex, false));
+  if (document.getElementById('chart-modal').style.display !== 'none') {
+    openChartModal();
+  }
+  updateTrendMarker();
+}
 
-  var labels = data.map(function (d) { return d.date; });
-  var values = data.map(function (d) { return d.ndvi; });
+function buildChartConfig(ctx, data, index, large) {
+  var cfg = INDICES[index] || INDICES.ndvi;
+  var monthTicks = buildMonthTicks(data);
+  var gradient = ctx.createLinearGradient(0, 0, 0, ctx.canvas.height || 220);
+  gradient.addColorStop(0, '#22c55e');
+  gradient.addColorStop(0.4, '#a3e635');
+  gradient.addColorStop(0.55, '#facc15');
+  gradient.addColorStop(0.78, '#fb923c');
+  gradient.addColorStop(1, '#ef4444');
+  var tickFont = large ? 12 : 11;
+  var titleFont = large ? 13 : 12;
 
-  trendChart = new Chart(ctx, {
+  return {
     type: 'line',
     data: {
-      labels: labels,
       datasets: [{
-        label: 'NDVI',
-        data: values,
-        borderColor: '#22c55e',
-        backgroundColor: 'rgba(34, 197, 94, 0.15)',
+        label: cfg.name,
+        data: data.map(function (d) {
+          return { x: new Date(d.date).getTime(), y: d.value };
+        }),
+        borderColor: cfg.color,
+        backgroundColor: gradient,
         borderWidth: 2,
-        pointRadius: 3,
-        pointBackgroundColor: '#22c55e',
+        pointRadius: large ? 4 : 3,
+        pointBackgroundColor: cfg.color,
+        pointHoverRadius: 5,
         fill: true,
         tension: 0.3,
       }],
@@ -1233,35 +1337,148 @@ function renderChart(data) {
     options: {
       responsive: true,
       maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
       plugins: {
         legend: { display: false },
         tooltip: {
+          backgroundColor: 'rgba(20, 25, 40, 0.92)',
+          titleFont: { size: 12 },
+          bodyFont: { size: 12 },
+          padding: 10,
           callbacks: {
-            label: function (ctx) {
-              return 'NDVI: ' + ctx.parsed.y.toFixed(3);
+            title: function (items) {
+              if (!items || !items.length) return '';
+              return new Date(items[0].parsed.x).toLocaleDateString('en-US', {
+                weekday: 'short', year: 'numeric', month: 'short', day: 'numeric',
+              });
+            },
+            label: function (item) {
+              var parts = [cfg.name + ': ' + item.parsed.y.toFixed(2)];
+              var stage = getStageAtDate(new Date(item.parsed.x));
+              if (stage) parts.push(stage);
+              return parts;
             },
           },
         },
+        currentDateMarker: { xValue: null, label: '' },
       },
       scales: {
         x: {
-          ticks: { font: { size: 10 }, maxTicksLimit: 8 },
+          type: 'linear',
+          ticks: {
+            font: { size: tickFont },
+            color: '#555',
+            maxRotation: 0,
+            autoSkip: false,
+            callback: function (value) {
+              var names = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+              var d = new Date(value);
+              return names[d.getMonth()] + ' ' + d.getFullYear();
+            },
+          },
           grid: { display: false },
+          afterBuildTicks: function (axis) {
+            axis.ticks = monthTicks.map(function (v) { return { value: v }; });
+          },
         },
         y: {
-          min: -0.5,
+          min: 0,
           max: 1,
-          ticks: { font: { size: 10 } },
-          grid: { color: '#f0f0f0' },
+          ticks: { stepSize: 0.2, font: { size: tickFont }, color: '#555' },
+          grid: { color: '#eeeeee' },
           title: {
             display: true,
-            text: 'NDVI',
-            font: { size: 11 },
+            text: cfg.name,
+            font: { size: titleFont },
+            color: '#333',
           },
         },
       },
     },
+    plugins: [currentDateMarkerPlugin()],
+  };
+}
+
+function buildMonthTicks(data) {
+  var map = {};
+  data.forEach(function (d) {
+    var dt = new Date(d.date);
+    map[dt.getFullYear() + '-' + (dt.getMonth() + 1)] = new Date(dt.getFullYear(), dt.getMonth(), 1).getTime();
   });
+  var values = Object.keys(map).map(function (k) { return map[k]; }).sort(function (a, b) { return a - b; });
+  if (values.length <= 7) return values;
+  var step = Math.ceil(values.length / 7);
+  var thinned = values.filter(function (_, i) { return i % step === 0; });
+  if (thinned[thinned.length - 1] !== values[values.length - 1]) thinned.push(values[values.length - 1]);
+  return thinned;
+}
+
+function getStageAtDate(date) {
+  if (!currentFieldId || currentIndex !== 'ndvi') return null;
+  var field = getSavedFields().find(function (f) { return f.id === currentFieldId; });
+  if (!field || !field.plantingDate) return null;
+  var days = Math.floor((new Date(date) - new Date(field.plantingDate)) / 86400000);
+  if (days < 0) return null;
+  var stage = getGrowthStage(days);
+  return stage.stage + ' (Day ' + days + ')';
+}
+
+function updateTrendMarker() {
+  var slider = document.getElementById('month-slider');
+  var m = MONTHS[parseInt(slider.value)];
+  if (!m) return;
+  var xValue = new Date(m.year, m.month - 1, 1).getTime();
+  var names = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  var label = names[m.month - 1] + ' ' + m.year;
+  [trendChart, trendChartLarge].forEach(function (ch) {
+    if (!ch) return;
+    ch.options.plugins.currentDateMarker = { xValue: xValue, label: label };
+    ch.update('none');
+  });
+}
+
+function currentDateMarkerPlugin() {
+  return {
+    id: 'currentDateMarker',
+    afterDraw: function (chart) {
+      var opts = chart.options.plugins.currentDateMarker;
+      if (!opts || !opts.xValue) return;
+      var xScale = chart.scales.x;
+      if (!xScale) return;
+      var area = chart.chartArea;
+      var x = xScale.getPixelForValue(opts.xValue);
+      if (x < area.left || x > area.right) return;
+      var ctx = chart.ctx;
+      ctx.save();
+      ctx.strokeStyle = '#1a56db';
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([4, 4]);
+      ctx.beginPath();
+      ctx.moveTo(x, area.top);
+      ctx.lineTo(x, area.bottom);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.fillStyle = '#1a56db';
+      ctx.font = 'bold 10px sans-serif';
+      ctx.fillText(opts.label || '', Math.min(x + 4, area.right - 50), area.top + 12);
+      ctx.restore();
+    },
+  };
+}
+
+function openChartModal() {
+  if (!currentChartData) { showToast('Click a location on the map first'); return; }
+  document.getElementById('chart-modal').style.display = 'flex';
+  if (trendChartLarge) { trendChartLarge.destroy(); trendChartLarge = null; }
+  var ctx = document.getElementById('trend-chart-large').getContext('2d');
+  trendChartLarge = new Chart(ctx, buildChartConfig(ctx, currentChartData, currentChartIndex, true));
+  requestAnimationFrame(function () { if (trendChartLarge) trendChartLarge.resize(); });
+  updateTrendMarker();
+}
+
+function closeChartModal() {
+  document.getElementById('chart-modal').style.display = 'none';
+  if (trendChartLarge) { trendChartLarge.destroy(); trendChartLarge = null; }
 }
 
 function getRainfallMm(geometry, daysBack) {
@@ -1280,8 +1497,13 @@ function getRainfallMm(geometry, daysBack) {
   });
 }
 
-function checkStress(data, lat, lng) {
+function checkStress(data, lat, lng, index) {
   var alertEl = document.getElementById('stress-alert');
+  index = index || 'ndvi';
+  if (index !== 'ndvi') {
+    alertEl.style.display = 'none';
+    return;
+  }
   if (data.length < 2) {
     alertEl.style.display = 'none';
     return;
@@ -1292,7 +1514,7 @@ function checkStress(data, lat, lng) {
   });
 
   var recent = sorted[sorted.length - 1];
-  if (!recent || recent.ndvi === null) {
+  if (!recent || recent.value === null) {
     alertEl.style.display = 'none';
     return;
   }
@@ -1300,7 +1522,7 @@ function checkStress(data, lat, lng) {
   var earlier = null;
   for (var i = sorted.length - 2; i >= 0; i--) {
     var d = sorted[i];
-    if (d.ndvi !== null) {
+    if (d.value !== null) {
       var daysDiff = (new Date(recent.date) - new Date(d.date)) / 86400000;
       if (daysDiff >= 14) {
         earlier = d;
@@ -1309,12 +1531,12 @@ function checkStress(data, lat, lng) {
     }
   }
 
-  if (!earlier || !earlier.ndvi) {
+  if (!earlier || !earlier.value) {
     alertEl.style.display = 'none';
     return;
   }
 
-  var drop = ((earlier.ndvi - recent.ndvi) / earlier.ndvi) * 100;
+  var drop = ((earlier.value - recent.value) / earlier.value) * 100;
   if (drop > 15) {
     var baseMsg = '\u26a0 Possible stress detected \u2014 NDVI dropped ' + drop.toFixed(0) + '% (' + earlier.date + ' \u2192 ' + recent.date + ')';
     alertEl.textContent = baseMsg;
@@ -1348,7 +1570,7 @@ function exportChart() {
   if (!trendChart) { showToast('Click a location on the map first'); return; }
   var canvas = document.getElementById('trend-chart');
   var link = document.createElement('a');
-  link.download = 'NDVI_trend_report.png';
+  link.download = INDICES[currentIndex].name + '_trend_report.png';
   link.href = canvas.toDataURL('image/png');
   link.click();
 }
@@ -1361,7 +1583,7 @@ function exportPdf() {
 
   doc.setFontSize(18);
   doc.setTextColor(26, 26, 46);
-  doc.text('NDVI Crop Health Report', pw / 2, y, { align: 'center' });
+  doc.text(INDICES[currentIndex].name + ' Crop Health Report', pw / 2, y, { align: 'center' });
   y += 10;
 
   doc.setFontSize(10);
@@ -1375,14 +1597,19 @@ function exportPdf() {
   doc.text('Location: ' + location, 14, y);
   y += 8;
 
-  var lastIdx = trendChart.data.datasets[0].data.length - 1;
+  var pts = trendChart.data.datasets[0].data;
+  var lastIdx = pts.length - 1;
   if (lastIdx >= 0) {
-    var lastVal = trendChart.data.datasets[0].data[lastIdx];
-    var lastDate = trendChart.data.labels[lastIdx];
-    var statusText = lastVal > 0.6 ? 'Healthy' : lastVal > 0.3 ? 'Moderate' : 'Stressed';
+    var lastPoint = pts[lastIdx];
+    var lastVal = lastPoint.y;
+    var lastDate = new Date(lastPoint.x).toISOString().slice(0, 10);
+    var cfg = INDICES[currentIndex] || INDICES.ndvi;
+    var statusText = cfg.name === 'NDVI'
+      ? (lastVal > 0.6 ? 'Healthy' : lastVal > 0.3 ? 'Moderate' : 'Stressed')
+      : 'See chart';
     doc.setFontSize(12);
     doc.setTextColor(50, 50, 50);
-    doc.text('Latest NDVI: ' + lastVal.toFixed(3) + ' (' + lastDate + ')', 14, y);
+    doc.text('Latest ' + cfg.name + ': ' + lastVal.toFixed(3) + ' (' + lastDate + ')', 14, y);
     y += 7;
     doc.setTextColor(lastVal > 0.6 ? 34 : lastVal > 0.3 ? 180 : 220, lastVal > 0.6 ? 197 : lastVal > 0.3 ? 160 : 38, lastVal > 0.3 ? 94 : 38);
     doc.text('Crop Health: ' + statusText, 14, y);
@@ -1406,15 +1633,14 @@ function exportPdf() {
   y = Math.max(y, 200);
   doc.setFontSize(9);
   doc.setTextColor(120, 120, 120);
-  doc.text('NDVI (Normalized Difference Vegetation Index) measures plant health', 14, y); y += 5;
-  doc.text('using satellite imagery. Values range from -1 to 1:', 14, y); y += 5;
-  doc.text('- Above 0.6: Dense, healthy vegetation', 14, y); y += 4;
-  doc.text('- 0.3 to 0.6: Moderate or sparse vegetation', 14, y); y += 4;
-  doc.text('- Below 0.3: Bare soil, water, or stressed crops', 14, y); y += 4;
+  var expCfg = INDICES[currentIndex] || INDICES.ndvi;
+  doc.text(expCfg.name + ' (' + expCfg.full + ') \u2014 what the values mean:', 14, y); y += 5;
+  var expLines = doc.splitTextToSize(expCfg.explain, pw - 28);
+  doc.text(expLines, 14, y); y += expLines.length * 4 + 4;
   doc.setFontSize(8);
   doc.text('Data source: Sentinel-2 (ESA) via Google Earth Engine', 14, y + 4);
 
-  doc.save('NDVI_Report_' + new Date().toISOString().slice(0, 10) + '.pdf');
+  doc.save(INDICES[currentIndex].name + '_Report_' + new Date().toISOString().slice(0, 10) + '.pdf');
 }
 
 function showDatePicker(currentDateStr, onResult) {
