@@ -1,0 +1,281 @@
+# NDVI Rice Crop Health Monitor — Master Roadmap
+
+### Consolidated single-source roadmap: the full journey from tech-show demo to production-ready field tool
+
+Covers everything from `NDVI_Crop_Monitor_Roadmap.md`, `NDVI_Stack_Migration_Roadmap.md`,
+`NDVI_Product_Pivot_Roadmap.md`, `NDVI_Field_Area_Patch.md`, `NDVI_Growth_Stage_Thresholds_Patch.md`,
+`NDVI_LSWI_CHIRPS_Patch.md`, and `Ndvi_ui_redesign_patch.md` — one place to see it all.
+
+---
+
+## 0. What we're building (recap)
+
+A single-page web app, **no login/accounts**, that shows a live satellite map of rice-growing
+areas in Battambang, Cambodia. The map is colored by **NDVI** (vegetation health computed from
+satellite imagery). A visitor can:
+
+1. See the map with a green→red health overlay
+2. Drag a time slider to watch vegetation health change over a season
+3. Click any spot to see a mini trend chart + a plain-language stress alert
+
+**Backend = Google Earth Engine.** No Supabase, no database, no server you host. Earth Engine
+does the satellite math on Google's machines; your app just asks for images and displays them.
+
+**Vision evolution:** started as a tech-show demo → became a simple, real single-user tool
+(save fields, dashboard, export) → grew into a polished product (growth-stage-aware health,
+water indices, rainfall context, UI redesign). All of it still runs entirely in the browser.
+
+---
+
+## Part 1 — Core build (Phases 1–7)
+
+## Phase 1 — Foundations (prove NDVI works) ✅
+- Explore in the **Earth Engine Code Editor** (`code.earthengine.google.com`) before touching the app
+- Original AOI test box: `ee.Geometry.Rectangle([103.10, 12.95, 103.25, 13.05])`
+- Load Sentinel-2 (`COPERNICUS/S2_SR_HARMONIZED`), filter date/cloud, `.median()` → `.normalizedDifference(['B8', 'B4'])`
+- Palette: `{ min: -0.2, max: 0.8, palette: ['red', 'yellow', 'green'] }`
+- Register a **Cloud Project ID** for app use: `gen-lang-client-0978198347` (migrated from `ee-mengtong2025`)
+- **Checkpoint:** real NDVI colors over real Battambang rice fields inside the Code Editor
+
+## Phase 2 — Scaffold ✅ (migrated)
+- **Original:** Vue 3 + Vite project
+- **Current:** plain HTML/CSS/JS static site (`ndvi-monitor/`: `index.html`, `style.css`, `app.js`)
+- **Why migrated:** `@google/earthengine` npm package breaks under Vite's ESM interop
+  (`Failed to locate function parameters`). Loading EE via plain `<script>` tag resolved it.
+- Full-screen Leaflet map, OpenStreetMap base tiles (free, no API key)
+- **Checkpoint:** `typeof L` and `typeof ee` both `"object"`; blank Battambang map renders
+
+## Phase 3 — NDVI on the map ✅
+- Auth flow: `ee.data.authenticateViaOauth(CLIENT_ID, success, error)` → `ee.initialize(null, null, cb, err, null, PROJECT_ID)`
+- **Auth persistence:** OAuth token saved to `localStorage` — page reload restores it automatically
+- `getMap()` returns tile URL → `L.tileLayer(...)` added to map
+- OAuth Client ID: `355514869488-q3v52vvkb7c3gikr0og89o26m51ev403.apps.googleusercontent.com`
+- **Checkpoint:** OAuth popup completes and the green/red NDVI overlay appears (the point that was blocked under Vite)
+
+## Phase 4 — Time slider ✅
+- `<input type="range">` dynamically built from 14 months back (`buildMonths()`)
+- Debounced 300ms — fires EE request only after user stops dragging
+- Loading spinner on slider panel during computation; swaps NDVI tile layer on month change
+- **Latest button** (↻) jumps to the most recent complete month
+- **Scene count indicator** — cloud-free scene count next to month label; amber + ● dot when only 1–2 scenes (low confidence), gray for 3+
+- **Checkpoint:** dragging the slider visibly changes map colors month to month
+
+## Phase 5 — Click-to-inspect + trend chart ✅
+- `map.on('click')` captures lat/lng → `getNdviTimeSeriesAtPoint()` queries EE
+- Chart.js line chart (green fill, NDVI −0.5 to 1.0) in right-side info panel
+- **Stress detection:** recent NDVI vs. value 14+ days earlier; >15% drop → yellow alert badge
+- **Checkpoint:** clicking a field shows its own mini health history, not just a static color
+
+## Phase 6 — Polish ✅
+- Preset "interesting" location buttons (fly-to) for live demos
+- "How this works" explanation modal (non-technical-friendly)
+- Loading states hardening (counter-based spinner for rapid slider changes)
+- Control layout cleanup; toast notification when export clicked without a selected point
+- **Checkpoint:** demo-ready; loading states everywhere, presets, explanation panel
+
+## Phase 7 — Stretch goals ✅
+### 7.1 Event overlay
+- Flood markers (Aug–Sep 2025) and Dry spell markers (Jan–Mar 2026) as colored bands below the slider + inline badge
+
+### 7.2 Compare two dates
+- Split-screen: two Leaflet maps side-by-side (50% each), dual sliders, view-synced via `syncing` flag
+- Right map is display-only (no draw controls)
+
+### 7.3 Export report
+- One-page PDF: field name/coords, NDVI trend chart, health status, stress alerts, NDVI explanation (jsPDF + chart canvas)
+
+### 7.4 NDWI water index
+- Toggle adds NDWI (`B3`/`B8`, blue/brown palette); dashboard statuses adapt per active index
+- Works with compare, export, presets, click-to-inspect
+
+---
+
+## Part 2 — Product pivot (single-user, no accounts)
+
+Scope: draw & save fields → dashboard → export. **Explicitly not doing:** multi-user accounts,
+Telegram/scheduled alerts, any server-side component. Everything runs in the browser —
+saved fields live in `localStorage`, keyed to device/browser. A real backend only becomes
+worthwhile when you need multi-device sync or multiple users.
+
+### Feature A — Draw & save fields ✅
+- leaflet-draw (v1.0.4) polygon + rectangle tools; live area tooltip while drawing (`showArea: true`, hectares)
+- `promptSaveField()` → saved to `localStorage` as GeoJSON with `crypto.randomUUID()` keys
+- Optional planting date captured at save time
+- `saveField()` / `deleteField()` / `getSavedFields()` / `loadField()` CRUD
+- Clicking a saved field loads polygon, fits bounds, recomputes NDVI for that geometry
+- NDVI functions refactored to accept an optional `ee.Geometry` parameter
+- Edit/delete buttons only visible when `drawnItems` has layers
+
+### Feature B — Dashboard ✅
+- ☰ toggle opens 280px left sidebar listing saved fields
+- Each card: name + area (ha) + live health badge (🟢 Healthy / 🟡 Below expected / 🔴 Stressed)
+- 📅 button to set/change planting date after save
+- Status computed via `reduceRegion` over the field polygon for the most recent month
+- Click card to load; hover ✕ to delete; backward-compatible with pre-patch fields
+
+### Feature C — PNG/PDF export ✅
+- "Export PNG" button downloads `canvas.toDataURL('image/png')` from the Chart.js chart
+- PDF export via jsPDF (see 7.3)
+
+---
+
+## Part 3 — Feature patches
+
+### Patch: Field area (hectares) ✅
+- turf.js (v6) `turf.area()` (square meters → hectares) computed in-browser, cached at save time
+- `getFieldAreaHectares()` + `formatHectares()` (sub-0.1 ha shows 3 decimals) + `getOrComputeArea()` fallback
+- `map.on(L.Draw.Event.EDITED)` recalculates area after shape edits — card updates immediately
+- Geodesic (spherical Earth) calculation — already accurate, no extra correction needed
+- Optional `showArea: true, metric: ['ha']` for a live preview while drawing
+
+### Patch: Growth-stage-aware thresholds ✅
+- Problem: flat thresholds cry wolf early in the season and miss real stress later
+  (freshly transplanted rice has low NDVI that's *normal*, not stress)
+- `RICE_GROWTH_STAGES` table — 6-stage rice phenology (Transplanting → Harvest/Senescence)
+  with expected NDVI ranges; days-since-planting → stage lookup
+- `buildStatusText()` compares actual NDVI against stage-expected range; deficit >0.15 → 🔴
+- Flat-threshold fallback when `plantingDate` is unknown (backward-compatible)
+- Output example: `🟡 Below expected — Tillering, Day 24 (NDVI 0.31)`
+- **Honesty note:** stage-NDVI curve is a published-phenology approximation, not field-validated for Battambang — say so if asked
+- Optional: shaded expected-range band on the trend chart
+- Sets up later: harvest reminders, more meaningful rainfall cross-referencing
+
+### Patch: LSWI + CHIRPS rainfall ✅
+- **LSWI** = `normalizedDifference(['B8', 'B11'])` (NIR/SWIR) — water/moisture-sensitive, good for catching transplanting/flood events; palette tan→lightblue→darkblue
+- Slotted into a 3-way segmented control (NDVI / NDWI / LSWI) via an `INDEX_CONFIG` map
+- **CHIRPS rainfall** (`UCSB-CHG/CHIRPS/DAILY`, ~5km resolution): `getRainfallMm()` sums precipitation over a trailing 21-day window
+- Wired into `checkStress()`: on >15% NDVI drop, appends context — "only Xmm rain — drought stress is plausible" or "Xmm rain — low rainfall likely isn't the cause"
+- Phrased as context, not diagnosis (correlation, not causation)
+- **Optional:** auto-generate dry-month bands on the slider from CHIRPS (months < 50mm) instead of hand-placed markers — done later in Feature I
+
+### Patch: UI redesign ✅
+- `.panel` base class — one shared visual language across slider panel, info panel, dashboard
+- Segmented 3-way index toggle; Compare checkbox switch; Export dropdown (PNG/PDF) with outside-click-to-close
+- Field cards: header row (name + status badge) + stat row (area / planted date / NDVI) below a divider; area warning for implausibly large fields (>50 ha)
+- `.status-toast` fading pill replaces the permanent top status bar
+- Tabler Icons (`@tabler/icons-webfont`) for iconography
+- `buildStatusObject()` returns `{ badgeClass, badgeText, stageLabel }` instead of an HTML string
+- Pure CSS/markup — nothing computational changed
+
+---
+
+## Part 4 — Product features (built during development)
+
+### Feature D — UI-managed preset locations ✅
+- `PRESETS` array rendered dynamically by `renderPresets()`
+- Pencil icon opens editor overlay: editable name/lat/lng/zoom + delete
+- "Add current view" captures live map center + zoom; "Reset defaults" restores originals
+- Persisted to `localStorage` under `ndvi_presets`
+
+### Feature E — AOI editor (UI-managed bounding box) ✅
+- `var aoiCoords` loaded from `localStorage` key `ndvi_aoi` (replaces hardcoded `AOI_COORDS`)
+- Map icon button opens AOI editor modal (West/South/East/North inputs); red dashed rectangle overlay
+- Applied/reset triggers recompute of dry months + NDVI with the new geometry
+- Default: cement-factory box `[102.985, 12.845, 103.048, 12.898]`
+
+### Feature F — Satellite basemap toggle ✅
+- Street / Satellite segmented toggle in the slider panel `nav-row`
+- Esri World Imagery (free, no API key); swaps base layer on both main and compare maps simultaneously
+
+### Feature G — Field deselection ✅
+- Clicking an already-selected field card deselects it
+- `clearFieldSelection()` clears overlay, resets `currentGeometry`, recomputes over full AOI
+- Map view stays unchanged; basemap re-asserted to prevent Leaflet tile glitches; `.field-card.active` blue border
+
+### Feature H — Place search / geocoder ✅
+- Search bar + Go button in `nav-row`; uses Nominatim (OpenStreetMap free geocoding)
+- Enter key or button triggers `searchPlace()` → `map.setView([lat, lon], 16)`
+- Toast on no results or network failure — never crashes the app
+
+### Feature I — CHIRPS auto dry-month markers ✅
+- `fetchDryMonths()` queries CHIRPS per month, flags months below 50mm total precipitation
+- Striped amber markers in a second row below hand-placed event markers; re-renders both sliders
+
+### AOI refinement ✅
+- AOI changed from wide Battambang box to cement factory `[102.985, 12.845, 103.048, 12.898]`
+- Map center/zoom updated to `[12.8715, 103.0165], zoom 14` (both maps)
+- `.clip(geom)` added after `.median()` to restrict computation to AOI
+- Presets updated to cement factory area
+
+---
+
+## Stack notes (migration + current state)
+
+### Why no Vite
+The EE JS client does dynamic function-binding and injects its own OAuth/gapi loader
+internally. Under Vite's dev-server module graph and pre-bundling cache this produces
+`Failed to locate function parameters` — not an app bug, a client/bundler interop issue.
+Fix: load EE via a plain `<script>` tag (Google's own documented approach).
+
+### What changes vs. Vue
+- No component reactivity — state lives in plain JS variables at the top of `app.js`;
+  manually update the DOM via small `update...()` functions
+- No build step — edits take effect on browser refresh
+- Simpler deployment — any static host (Vercel, Netlify, Cloudflare Pages, GitHub Pages)
+  serves the three files as-is, no build command
+
+### Current tech stack
+
+| Layer | Tool |
+|---|---|
+| Frontend | Plain HTML/CSS/JS |
+| Map | Leaflet + OpenStreetMap tiles / Esri World Imagery |
+| Satellite compute | Google Earth Engine (JS client via CDN `<script>` tag, v1.7.36) |
+| Auth | Earth Engine OAuth popup (`ee.data.authenticateViaOauth`) |
+| Geocoding | Nominatim (OpenStreetMap free API) |
+| Drawing | leaflet-draw (v1.0.4) |
+| Area calc | turf.js (v6) |
+| Charts | Chart.js (v4.4.7) |
+| PDF | jsPDF |
+| Icons | Tabler Icons (`@tabler/icons-webfont`) |
+| Storage | localStorage (fields, auth token, AOI coords, presets) |
+
+### OAuth setup (Google Cloud Console)
+- OAuth 2.0 Client ID (Web application type): `355514869488-q3v52vvkb7c3gikr0og89o26m51ev403.apps.googleusercontent.com`
+- Authorized JS origins: `http://localhost:5173` (Vite), `http://localhost:3000` (serve), `http://localhost:60822` (serve dynamic)
+- Token persisted via `localStorage` — single sign-in survives reloads
+- OAuth popup flows generally need `http://`, not `file://` — use a local server
+
+---
+
+## Known risks to plan around
+
+1. **Cloud cover** — Cambodia's rainy season clouds many Sentinel-2 images. `.median()`
+   composites help; some months may still look patchy. Keep a verified fallback date range.
+2. **Quota** — Community tier gives 150 EECU-hours/month. A live demo is unlikely to hit it,
+   but don't leave the app auto-refreshing overnight.
+3. **Booth wifi** — the single biggest real-world risk to a live demo; consider pre-fetching
+   and caching a few months of tiles as an offline fallback.
+4. **NDVI ≠ diagnosis** — a stress signal tells you *something* changed, not *what* caused it
+   (drought vs. disease vs. pest vs. soil all lower NDVI similarly). Same honesty applies to
+   the growth-stage curve (approximation, not field-calibrated) and rainfall correlation (context, not causation).
+
+---
+
+## What this sets up for later (not now)
+
+- **Harvest reminders** — days-since-planting crossing into the "Harvest" stage is a natural on-screen trigger, no backend needed
+- **Auto-suggest planting date** — LSWI spike (flooding/transplanting) when a field is first drawn could auto-fill the planting date
+- **Drought/flood risk assessment** — rainfall + NDVI together is the natural first step, but that's a scoped feature of its own
+- **Backend path** — `localStorage` → Supabase table (`fields`: owner, geojson, name, notes) is a clean swap; Telegram alerts become straightforward once a scheduled job can iterate a database of fields
+
+---
+
+## Suggested build order (recap)
+
+1. Prove NDVI in the Earth Engine Code Editor over real Battambang coordinates (Phase 1)
+2. Scaffold static app + auth + blank map (Phase 2)
+3. Render one static NDVI tile layer (Phase 3)
+4. Add the month time slider (Phase 4)
+5. Add click-to-inspect + trend chart (Phase 5)
+6. Polish: presets, loading states, explanation panel (Phase 6)
+7. Stretch: events, compare, export, NDWI (Phase 7)
+8. Product pivot: draw/save fields, dashboard, export (Features A–C)
+9. Patches: field area → growth-stage thresholds → LSWI + CHIRPS → UI redesign
+10. Product features: presets/AOI editors, satellite toggle, deselection, geocoder, auto dry-month markers
+
+---
+
+## Status
+
+All phases and features complete. The app is feature-stable with NDVI/NDWI/LSWI analysis, time slider with Latest button and scene count indicator, draw & save fields, dashboard with growth-stage-aware health badges, compare mode, PNG/PDF export, event overlays, CHIRPS rainfall context on stress alerts, preset locations, UI-managed preset/AOI editors, area recalculation on edit, satellite basemap toggle, place search, field deselection, and a help panel.
