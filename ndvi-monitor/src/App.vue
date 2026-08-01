@@ -1,18 +1,18 @@
 <template>
-  <div id="user-menu" class="user-menu" :style="{ display: userMenuVisible ? 'flex' : 'none' }" @click="onUserMenuClick">
-    <span id="user-email-label" class="user-email">{{ userMenuLabel }}</span>
-    <button v-if="state.supabaseUser" id="sign-out-btn" class="sign-out-btn" @click.stop="store.signOut()">Sign out</button>
-  </div>
-
-  <div id="dashboard-toggle" class="dashboard-toggle" title="My fields" @click="openDashboard">&#9776;</div>
-  <Dashboard ref="dashboardRef" />
-  <PresetPanel />
+  <TopBar @menu="openDashboard" />
   <LeafletMap />
+  <div v-if="state.loading" class="map-loading"></div>
+
+  <TimeControl />
+  <BandPanel />
+  <MapLegend />
+  <PresetPanel />
+
+  <Dashboard ref="dashboardRef" />
+  <InfoPanel />
 
   <div id="status-bar" class="status-toast" :class="{ hidden: !state.statusText }">{{ state.statusText }}</div>
 
-  <SliderPanel />
-  <InfoPanel />
   <PresetEditor />
   <AoiEditor />
   <HelpModal />
@@ -20,18 +20,20 @@
   <AuthOverlay />
   <DatePickerModal />
 
-  <button id="help-btn" class="help-btn" title="How this works" @click="state.helpVisible = true">?</button>
   <div id="toast" class="toast" :class="{ show: !!state.toast }">{{ state.toast }}</div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import { state } from './store'
 import * as store from './store'
-import Dashboard from './components/Dashboard.vue'
-import PresetPanel from './components/PresetPanel.vue'
+import TopBar from './components/TopBar.vue'
 import LeafletMap from './components/LeafletMap.vue'
-import SliderPanel from './components/SliderPanel.vue'
+import TimeControl from './components/TimeControl.vue'
+import BandPanel from './components/BandPanel.vue'
+import MapLegend from './components/MapLegend.vue'
+import PresetPanel from './components/PresetPanel.vue'
+import Dashboard from './components/Dashboard.vue'
 import InfoPanel from './components/InfoPanel.vue'
 import PresetEditor from './components/PresetEditor.vue'
 import AoiEditor from './components/AoiEditor.vue'
@@ -45,16 +47,6 @@ let statusTimer = null
 
 function openDashboard() {
   if (dashboardRef.value) dashboardRef.value.open = true
-}
-
-const userMenuVisible = computed(() => !!state.supabaseUser || state.eeReady || !state.authOverlayVisible)
-const userMenuLabel = computed(() =>
-  state.supabaseUser ? (state.supabaseUser.email || 'Signed in') : 'Sign in'
-)
-
-function onUserMenuClick(e) {
-  if (e.target.id === 'sign-out-btn') return
-  if (!state.supabaseUser || !state.eeReady) store.showAuthOverlay()
 }
 
 watch(() => state.statusText, () => {

@@ -132,6 +132,49 @@ A single-page web app that shows a satellite map of rice-growing areas in Battam
 
 ---
 
+## Phase 10 — Design System Redesign 🚧 In progress (see `design.md`)
+
+**Goal:** Re-skin the Vue app into the dark glass "satellite dashboard" specified in `design.md`
+(tokens, layout, components, motion, responsive). Reference prototype: `ndvi-rice-monitor-prototype.html`.
+Leaflet/Earth Engine/logic stays untouched — this is presentation + interaction only.
+
+**Approach:** incremental. Stage 1 (foundation + chrome relocation) done; Stage 2 (sidebar + detail
+panel rework) next; then polish (motion/toasts/onboarding modal).
+
+### Stage 1 — Foundation ✅ Complete
+- **Design tokens** added in `:root` per spec §2: `--bg-map`, `--panel(-2)`, `--panel-border`, `--text(-dim/-faint)`,
+  `--accent` (emerald `#22c98e`), `--amber`, `--red`, `--blue`, radii, `--shadow`, `--ease`.
+- **Dark theme** applied across the app: body `#0b0f14`, glass `.panel` (blur 12px), dark modals, dark field cards,
+  dark Leaflet controls (zoom, attribution, leaflet-draw toolbar — sprite flipped light for visibility).
+- **Fonts:** Inter (UI) + JetBrains Mono (`.mono` data readouts) via Google Fonts in `index.html`.
+- **New components:**
+  - `TopBar.vue` — brand chip (icon + name + `BATTAMBANG · N monitored fields` mono badge), place search (Nominatim),
+    Street/Satellite toggle, Compare toggle, Export dropdown (PNG/PDF), Help, user chip (sign-in/email/sign-out), menu (☰).
+  - `TimeControl.vue` — floating top-center panel: play/pause (auto-advance ~900ms, loops), month label + season tag
+    (Wet Season (Rainfed) May–Oct / Dry Season (Irrigated) Nov–Apr), scene-count pill (amber-low variant), latest-complete-month
+    button, styled scrubber with filled track + event/dry markers + end ticks; second scrubber in Compare mode.
+  - `BandPanel.vue` — floating bottom-center: NDVI/NDWI/LSWI segmented · divider · Street/Satellite segmented · AOI edit button,
+    plus the index explainer caption line.
+  - `MapLegend.vue` — bottom-right gradient bar (red→amber→yellow→green) with mono min/mid/max labels.
+- **App.vue rewired:** TopBar/TimeControl/BandPanel/MapLegend added; `SliderPanel.vue` retired (its pieces redistributed);
+  floating ☰ toggle and "?" help button removed (now in TopBar); user-menu folded into TopBar; `.map-loading` blur overlay on
+  band/date switch (spec §4.7); status toast + transient toast repositioned below the top bar.
+- **Z-index per spec §3:** map 0 · legend 25 · top/time/band 30 · info panel 35 · sidebar 40 · toasts 80 · modals 90+.
+- **Responsive per spec §5:** ≤1024px legend hidden / panels 280px / brand-loc hidden; ≤780px icon-only pills, brand text hidden,
+  info panel becomes bottom sheet; ≤480px tighter; `prefers-reduced-motion` collapses transitions.
+- **Verified:** `npm run build` ✅; `npm run dev` serves all modules 200 ✅.
+
+### Stage 2 — Sidebar & Detail Panel (planned)
+- Left "Monitored Fields" sidebar: search + All/Healthy/Alerts filter tabs, sparkline field cards, "Draw / Add New Field Boundary"
+  footer (replaces current ☰ Dashboard).
+- Right detail panel: NDVI hero + benchmark, stress alert, phenology progress, trend vs benchmark (dashed blue), rainfall, metadata
+  cards (replaces current InfoPanel).
+
+### Stage 3 — Polish (planned)
+- Onboarding 4-slide modal (Help), toast stack top-right, remaining motion timing per spec §4.7, event-overlay annotation treatment.
+
+---
+
 ## Product Pivot Features (added during development)
 
 ### Feature A — Draw & save fields ✅ Complete
@@ -274,4 +317,4 @@ A single-page web app that shows a satellite map of rice-growing areas in Battam
 
 ## Status
 
-All phases complete except Phase 8.3+ (Telegram alerts) and the final end-to-end smoke test of Phase 9 (Vue migration). Phases 8.1 (schema + auth) and 8.2 (fields migrated off localStorage) are done. The static app from Phase 2–7 is preserved intact as `index_old.html` (fully working). The Vue rewrite (`index.html` + `src/`) is ported from that stable codebase: build ✅, dev server ✅, map + trend panel verified in-browser; remaining to verify by hand: draw/save field → Supabase, compare mode, PNG/PDF export. Remaining overall: Telegram bot linking, EE service account, Python scheduled worker, end-to-end test. The app is feature-stable with NDVI/NDWI/LSWI analysis, time slider with Latest button and scene count indicator, draw & save fields (now synced to Supabase), dashboard with growth-stage-aware health badges, compare mode, PNG/PDF export, event overlays, CHIRPS rainfall context on stress alerts, preset locations, UI-managed preset/AOI editors, area recalculation on edit, satellite basemap toggle, place search, field deselection, email magic-link login, and a help panel.
+All phases complete except Phase 8.3+ (Telegram alerts) and Phase 10 (design-system redesign — Stage 1 done, Stages 2–3 pending), plus the final end-to-end smoke test of Phase 9 (Vue migration). Phases 8.1 (schema + auth) and 8.2 (fields migrated off localStorage) are done. The static app from Phase 2–7 is preserved intact as `index_old.html` (fully working). The Vue rewrite (`index.html` + `src/`) is ported from that stable codebase: build ✅, dev server ✅, map + trend panel verified in-browser; remaining to verify by hand: draw/save field → Supabase, compare mode, PNG/PDF export. Phase 10 Stage 1 re-skinned the app to the dark design-system spec (`design.md`) — build ✅, all modules serve ✅. Remaining overall: Telegram bot linking, EE service account, Python scheduled worker, end-to-end test. The app is feature-stable with NDVI/NDWI/LSWI analysis, time slider with Latest button and scene count indicator, draw & save fields (now synced to Supabase), dashboard with growth-stage-aware health badges, compare mode, PNG/PDF export, event overlays, CHIRPS rainfall context on stress alerts, preset locations, UI-managed preset/AOI editors, area recalculation on edit, satellite basemap toggle, place search, field deselection, email magic-link login, and a help panel.
