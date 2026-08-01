@@ -56,5 +56,8 @@ watch(() => state.statusText, () => {
 
 onMounted(() => {
   store.restoreSavedSession()
+  window.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && state.isDrawing) store.cancelDraw()
+  })
 })
 </script>

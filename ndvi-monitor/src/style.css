@@ -2275,6 +2275,12 @@ body {
 
 .draw-btn:hover { background: rgba(34, 201, 142, 0.18); border-color: var(--accent); }
 
+.draw-btn.drawing {
+  background: var(--red-dim);
+  color: var(--red);
+  border-color: rgba(239, 91, 91, 0.5);
+}
+
 /* ---- Detail panel (field inspector) ---- */
 #field-detail {
   position: fixed;

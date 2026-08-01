@@ -60,8 +60,10 @@
     </div>
 
     <div class="sidebar-footer">
-      <button class="draw-btn" @click="store.startDraw()">
-        <i class="ti ti-plus"></i> Draw / Add New Field Boundary
+      <button class="draw-btn" :class="{ drawing: state.isDrawing }" @click="store.startDraw()">
+        <i class="ti ti-plus"></i>
+        <template v-if="state.isDrawing">Cancel drawing (Esc)</template>
+        <template v-else>Draw / Add New Field Boundary</template>
       </button>
     </div>
   </div>

@@ -55,6 +55,7 @@ export const state = reactive({
   sceneCount: { main: 0, right: 0 },
   rainfallMm: null,
   benchmarkValue: null,
+  isDrawing: false,
   loading: false,
   statusState: 'idle',
   statusText: '',
@@ -661,16 +662,31 @@ export function loadBenchmark(geometry) {
 
 export function startDraw() {
   if (!mapReg.map || !window.L.Draw) { showToast('Map not ready'); return }
+  if (mapReg.activeDraw) {
+    cancelDraw()
+    return
+  }
   try {
     const draw = new window.L.Draw.Rectangle(mapReg.map, {
       shapeOptions: { color: '#22c98e', weight: 2 },
       showArea: true,
       metric: ['ha'],
     })
+    mapReg.activeDraw = draw
+    state.isDrawing = true
     draw.enable()
+    showToast('Draw a rectangle on the map \u2014 press Esc to cancel')
   } catch (e) {
     showToast('Drawing unavailable')
   }
+}
+
+export function cancelDraw() {
+  if (mapReg.activeDraw) {
+    try { mapReg.activeDraw.disable() } catch (e) {}
+    mapReg.activeDraw = null
+  }
+  state.isDrawing = false
 }
 
 export function promptSaveField(geojson) {
@@ -802,6 +818,8 @@ export function updateDrawEditVisibility() {
 }
 
 export function onFieldCreated(layer) {
+  state.isDrawing = false
+  mapReg.activeDraw = null
   mapReg.drawnItems.addLayer(layer)
   updateDrawEditVisibility()
   promptSaveField(layer.toGeoJSON())
