@@ -1,7 +1,7 @@
 # NDVI Rice Crop Health Monitor — Build Process
 
 ## Project goal
-A single-page web app that shows a satellite map of rice-growing areas in Battambang, Cambodia, colored by NDVI (vegetation health). Visitors can drag a time slider to see health change over a season and click any spot for a mini trend chart + stress alert. No visitor login — developer authenticates once.
+A single-page web app that shows a satellite map of rice-growing areas in Battambang, Cambodia, colored by NDVI (vegetation health). Visitors can drag a time slider to see health change over a season and click any spot for a mini trend chart + stress alert. No visitor login — developer authenticates once. (Phase 8 adds Supabase-backed field sync with email magic-link login for saved fields, plus scheduled Telegram alerts.)
 
 ---
 
@@ -73,6 +73,31 @@ A single-page web app that shows a satellite map of rice-growing areas in Battam
 - NDWI uses Sentinel-2 bands B3/B8 with blue/brown palette
 - Dashboard field statuses update per active index (Healthy/Moderate/Stressed for NDVI; Water/Moist/Dry for NDWI)
 - Works with all features: compare, export, preset locations, click-to-inspect
+
+---
+
+## Phase 8 — Supabase Backend + Telegram Alerts 🚧 In progress (see `Backend_Telegram_Roadmap.md`)
+
+### 8.1 Supabase schema & auth ✅ Complete
+- Supabase project: `https://wopwwtnvqyomiwbsxiks.supabase.co`
+- Auth via **email magic link** (free, built into Supabase Auth)
+- `schema.sql` defines: `profiles` (extends auth.users), `fields`, `link_codes`, `alerts_log` with row-level security policies
+- `fields.owner_id` defaults to `auth.uid()` so client inserts pass RLS; `set_updated_at()` trigger keeps `updated_at` current
+- supabase-js (v2) loaded via CDN `<script>` tag; client created as `sbClient` (avoids the UMD global `supabase` collision)
+- Auth overlay reworked: email magic-link section + Earth Engine sign-in side by side
+- Top-right user menu shows signed-in email / sign-out; "Sign in to sync fields" affordance when EE is ready but Supabase is not
+
+### 8.2 Migrate app off localStorage ✅ Complete
+- Field CRUD now backed by Supabase `fields` table with an in-memory `fieldsCache` mirror
+- Same function names, new implementation — minimal blast radius: `saveField()`, `getSavedFields()`, `deleteField()`, `loadField()`, `loadFieldById()`
+- New `updateField(id, patch)` handles area recalculation (on shape `EDITED`) and planting-date edits
+- `sbClient.auth.onAuthStateChange` loads fields on sign-in and clears them on sign-out
+- `updateFieldStatus()` guarded by `eeReady` so dashboard renders before Earth Engine initializes
+- One-time import: `importLocalFieldsIfAny()` uploads legacy `ndvi_fields` localStorage to Supabase on first login, then clears it
+- Root `.gitignore` added so `.env` (and the future `service_role` key) stays out of git
+
+### 8.3+ Telegram bot & scheduled worker ⬜ Pending
+- Bot linking flow, EE service account, Python Cloud Function, end-to-end test — see `Backend_Telegram_Roadmap.md`
 
 ---
 
@@ -212,8 +237,9 @@ A single-page web app that shows a satellite map of rice-growing areas in Battam
 | Drawing | leaflet-draw (v1.0.4) |
 | Area calc | turf.js (v6) |
 | Charts | Chart.js (v4.4.7) |
-| Storage | localStorage (fields, auth token, AOI coords) |
+| Backend / DB | Supabase (Postgres + Auth, email magic link) |
+| Storage | Supabase `fields` table (primary), localStorage (EE token, AOI coords, presets) |
 
 ## Status
 
-All phases complete. The app is feature-stable with NDVI/NDWI/LSWI analysis, time slider with Latest button and scene count indicator, draw & save fields, dashboard with growth-stage-aware health badges, compare mode, PNG/PDF export, event overlays, CHIRPS rainfall context on stress alerts, preset locations, UI-managed preset/AOI editors, area recalculation on edit, satellite basemap toggle, place search, field deselection, and a help panel.
+All phases complete except Phase 8 (Supabase backend + Telegram alerts). Phases 8.1 (schema + auth) and 8.2 (fields migrated off localStorage) are done. Remaining: Telegram bot linking, Earth Engine service account, Python scheduled worker, end-to-end test. The app is feature-stable with NDVI/NDWI/LSWI analysis, time slider with Latest button and scene count indicator, draw & save fields (now synced to Supabase), dashboard with growth-stage-aware health badges, compare mode, PNG/PDF export, event overlays, CHIRPS rainfall context on stress alerts, preset locations, UI-managed preset/AOI editors, area recalculation on edit, satellite basemap toggle, place search, field deselection, email magic-link login, and a help panel.
