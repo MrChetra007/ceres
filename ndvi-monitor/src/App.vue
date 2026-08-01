@@ -6,7 +6,6 @@
   <TimeControl />
   <BandPanel />
   <MapLegend />
-  <PresetPanel />
 
   <Sidebar ref="sidebarRef" />
   <FieldDetailPanel />
@@ -32,7 +31,6 @@ import LeafletMap from './components/LeafletMap.vue'
 import TimeControl from './components/TimeControl.vue'
 import BandPanel from './components/BandPanel.vue'
 import MapLegend from './components/MapLegend.vue'
-import PresetPanel from './components/PresetPanel.vue'
 import Sidebar from './components/Sidebar.vue'
 import FieldDetailPanel from './components/FieldDetailPanel.vue'
 import PresetEditor from './components/PresetEditor.vue'
