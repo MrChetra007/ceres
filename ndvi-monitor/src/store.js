@@ -53,6 +53,8 @@ export const state = reactive({
   presets: [],
   dryMonthSet: new Set(),
   sceneCount: { main: 0, right: 0 },
+  rainfallMm: null,
+  benchmarkValue: null,
   loading: false,
   statusState: 'idle',
   statusText: '',
@@ -62,6 +64,7 @@ export const state = reactive({
 
 export const currentGeometry = shallowRef(null)
 export const fieldStatus = reactive({})
+export const fieldTrends = reactive({})
 export const datePicker = reactive({ visible: false, currentDate: null })
 let infoChart = null
 let loadingCount = 0
@@ -303,12 +306,31 @@ export function loadChartForPoint(lat, lng, index, onEmpty) {
   })
 }
 
+export function loadChartForGeometry(geometry, index, label) {
+  setStatus('computing', 'Fetching ' + INDICES[index].name + ' trend...')
+  ee.getIndexTimeSeriesForGeometry(geometry, index, MONTHS, (data) => {
+    if (!data || data.length === 0) {
+      setStatus('error', 'No ' + INDICES[index].name + ' data for this area')
+      return
+    }
+    state.chartData = data
+    state.chartIndex = index
+    state.chartSubtitle = label + ' \u00b7 ' + data.length + ' observations'
+    checkStress(data, null, null, index)
+    setStatus('ready', INDICES[index].name + ' trend loaded \u2014 ' + data.length + ' observations')
+  })
+}
+
 export function setIndex(index) {
   state.currentIndex = index
   loadIndexForMonth(state.mainMonth, currentGeometry.value)
   if (state.compareMode) loadIndexForMonthRight(state.rightMonth)
   refreshAllFieldStatuses()
-  reloadChartForIndex()
+  if (state.currentFieldId && currentGeometry.value) {
+    loadChartForGeometry(currentGeometry.value, index, state.currentFieldName)
+  } else {
+    reloadChartForIndex()
+  }
 }
 
 export function onMapClick(lat, lng) {
@@ -321,6 +343,8 @@ export function onMapClick(lat, lng) {
     setStatus('error', 'Sign in with Google to load ' + INDICES[state.currentIndex].name + ' trends')
     return
   }
+  loadRainfall(window.ee.Geometry.Point([lng, lat]))
+  loadBenchmark()
   loadChartForPoint(lat, lng, state.currentIndex)
 }
 
@@ -402,6 +426,7 @@ export function initializeEE() {
     mapReg.map.setView(MAP_CENTER, MAP_ZOOM)
     fetchDryMonths()
     refreshAllFieldStatuses()
+    refreshAllFieldTrends()
     updateDrawEditVisibility()
     setStatus('computing', 'Computing NDVI...')
     loadIndexForMonth(state.mainMonth, null)
@@ -473,6 +498,7 @@ export async function loadFieldsFromSupabase() {
   try {
     state.fields = await supabase.loadFields()
     refreshAllFieldStatuses()
+    refreshAllFieldTrends()
   } catch (err) {
     showToast('Failed to load fields: ' + err.message)
   }
@@ -519,6 +545,7 @@ export async function saveField(name, geojson, plantingDate) {
       planting_date: plantingDate || null,
     })
     state.fields.push(field)
+    loadFieldTrend(field)
     return field
   } catch (err) {
     showToast('Failed to save field: ' + err.message)
@@ -558,7 +585,14 @@ export function loadField(field) {
   state.currentFieldId = field.id
   mapReg.drawnItems.clearLayers()
   const geo = window.L.geoJSON(field.geojson)
-  geo.eachLayer((l) => mapReg.drawnItems.addLayer(l))
+  geo.eachLayer((l) => {
+    l.on('click', () => {
+      if (state.currentFieldId !== field.id) loadField(field)
+      else state.infoPanelVisible = true
+    })
+    mapReg.drawnItems.addLayer(l)
+  })
+  applyFieldStyle()
   updateDrawEditVisibility()
   mapReg.map.fitBounds(geo.getBounds())
 
@@ -568,9 +602,14 @@ export function loadField(field) {
     return
   }
   currentGeometry.value = window.ee.Geometry.Polygon(geom.coordinates)
-  state.infoPanelVisible = false
+  state.infoPanelVisible = true
+  state.chartSubtitle = field.name
   loadIndexForMonth(state.mainMonth, currentGeometry.value)
   if (state.compareMode) loadIndexForMonthRight(state.rightMonth)
+  loadFieldTrend(field)
+  loadRainfall(currentGeometry.value)
+  loadBenchmark()
+  loadChartForGeometry(currentGeometry.value, state.currentIndex, field.name)
 }
 
 export function loadFieldById(id) {
@@ -582,12 +621,56 @@ export function clearFieldSelection() {
   state.currentFieldId = null
   state.currentFieldName = null
   currentGeometry.value = null
+  state.rainfallMm = null
+  state.infoPanelVisible = false
   mapReg.drawnItems.clearLayers()
   updateDrawEditVisibility()
   setBaseLayer(state.currentBase)
   loadIndexForMonth(state.mainMonth, null)
   if (state.compareMode) loadIndexForMonthRight(state.rightMonth)
   setStatus('ready', 'Field deselected \u2014 showing full AOI')
+}
+
+export function loadFieldTrend(field) {
+  if (!state.eeReady || !field) return
+  if (fieldTrends[field.id]) return
+  const geom = field.geojson && (field.geojson.geometry || field.geojson)
+  if (!geom || !geom.coordinates) return
+  const geometry = window.ee.Geometry.Polygon(geom.coordinates)
+  ee.getIndexTimeSeriesForGeometry(geometry, 'ndvi', MONTHS, (data) => {
+    fieldTrends[field.id] = data
+  })
+}
+
+export function refreshAllFieldTrends() {
+  state.fields.forEach(loadFieldTrend)
+}
+
+export function loadRainfall(geometry) {
+  if (!state.eeReady || !geometry) { state.rainfallMm = null; return }
+  ee.getRainfallMm(geometry, 21, (mm) => { state.rainfallMm = mm })
+}
+
+export function loadBenchmark(geometry) {
+  if (!state.eeReady) { state.benchmarkValue = null; return }
+  const geom = geometry || window.ee.Geometry.Rectangle(state.aoiCoords)
+  ee.getRecentIndexValue(geom, 'ndvi', ({ count, value }) => {
+    state.benchmarkValue = value
+  })
+}
+
+export function startDraw() {
+  if (!mapReg.map || !window.L.Draw) { showToast('Map not ready'); return }
+  try {
+    const draw = new window.L.Draw.Rectangle(mapReg.map, {
+      shapeOptions: { color: '#22c98e', weight: 2 },
+      showArea: true,
+      metric: ['ha'],
+    })
+    draw.enable()
+  } catch (e) {
+    showToast('Drawing unavailable')
+  }
 }
 
 export function promptSaveField(geojson) {
@@ -667,6 +750,25 @@ export function buildStatusObject(field, value, index) {
   }
 }
 
+const STATUS_COLORS = {
+  healthy: '#22c98e',
+  moderate: '#f5a623',
+  stressed: '#ef5b5b',
+  water: '#4fa8ff',
+  moist: '#f5a623',
+  dry: '#9aa4b1',
+  lswi: '#4fa8ff',
+}
+
+function applyFieldStyle() {
+  if (!mapReg.drawnItems) return
+  const s = fieldStatus[state.currentFieldId]
+  const color = s ? (STATUS_COLORS[s.badgeClass] || '#22c98e') : '#22c98e'
+  mapReg.drawnItems.eachLayer((l) => {
+    l.setStyle({ color, weight: 2, fillColor: color, fillOpacity: 0.25 })
+  })
+}
+
 export function updateFieldStatus(field) {
   if (!state.eeReady) return
   const geom = field.geojson && (field.geojson.geometry || field.geojson)
@@ -675,9 +777,11 @@ export function updateFieldStatus(field) {
   ee.getRecentIndexValue(geometry, state.currentIndex, ({ count, value }) => {
     if (count === 0 || value == null) {
       fieldStatus[field.id] = { badgeText: '\u2014', badgeClass: '', stageLabel: 'No recent data', value: null }
+      if (field.id === state.currentFieldId) applyFieldStyle()
       return
     }
     fieldStatus[field.id] = { ...buildStatusObject(field, value, state.currentIndex), value }
+    if (field.id === state.currentFieldId) applyFieldStyle()
   })
 }
 

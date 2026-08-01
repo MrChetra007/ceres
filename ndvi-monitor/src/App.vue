@@ -8,8 +8,8 @@
   <MapLegend />
   <PresetPanel />
 
-  <Dashboard ref="dashboardRef" />
-  <InfoPanel />
+  <Sidebar ref="sidebarRef" />
+  <FieldDetailPanel />
 
   <div id="status-bar" class="status-toast" :class="{ hidden: !state.statusText }">{{ state.statusText }}</div>
 
@@ -33,8 +33,8 @@ import TimeControl from './components/TimeControl.vue'
 import BandPanel from './components/BandPanel.vue'
 import MapLegend from './components/MapLegend.vue'
 import PresetPanel from './components/PresetPanel.vue'
-import Dashboard from './components/Dashboard.vue'
-import InfoPanel from './components/InfoPanel.vue'
+import Sidebar from './components/Sidebar.vue'
+import FieldDetailPanel from './components/FieldDetailPanel.vue'
 import PresetEditor from './components/PresetEditor.vue'
 import AoiEditor from './components/AoiEditor.vue'
 import HelpModal from './components/HelpModal.vue'
@@ -42,11 +42,11 @@ import ChartModal from './components/ChartModal.vue'
 import AuthOverlay from './components/AuthOverlay.vue'
 import DatePickerModal from './components/DatePickerModal.vue'
 
-const dashboardRef = ref(null)
+const sidebarRef = ref(null)
 let statusTimer = null
 
 function openDashboard() {
-  if (dashboardRef.value) dashboardRef.value.open = true
+  if (sidebarRef.value) sidebarRef.value.open = true
 }
 
 watch(() => state.statusText, () => {

@@ -139,7 +139,7 @@ A single-page web app that shows a satellite map of rice-growing areas in Battam
 Leaflet/Earth Engine/logic stays untouched — this is presentation + interaction only.
 
 **Approach:** incremental. Stage 1 (foundation + chrome relocation) done; Stage 2 (sidebar + detail
-panel rework) next; then polish (motion/toasts/onboarding modal).
+panel rework) in progress; then polish (motion/toasts/onboarding modal).
 
 ### Stage 1 — Foundation ✅ Complete
 - **Design tokens** added in `:root` per spec §2: `--bg-map`, `--panel(-2)`, `--panel-border`, `--text(-dim/-faint)`,
@@ -164,11 +164,26 @@ panel rework) next; then polish (motion/toasts/onboarding modal).
   info panel becomes bottom sheet; ≤480px tighter; `prefers-reduced-motion` collapses transitions.
 - **Verified:** `npm run build` ✅; `npm run dev` serves all modules 200 ✅.
 
-### Stage 2 — Sidebar & Detail Panel (planned)
+### Stage 2 — Sidebar & Detail Panel 🚧 In progress
 - Left "Monitored Fields" sidebar: search + All/Healthy/Alerts filter tabs, sparkline field cards, "Draw / Add New Field Boundary"
   footer (replaces current ☰ Dashboard).
 - Right detail panel: NDVI hero + benchmark, stress alert, phenology progress, trend vs benchmark (dashed blue), rainfall, metadata
   cards (replaces current InfoPanel).
+- **Done so far:**
+  - `Sidebar.vue` (replaces `Dashboard.vue`): search input, All/Healthy/Alerts tabs, per-field SVG sparklines from
+    `fieldTrends`, status badges, area/NDVI meta, plant-date + delete buttons, area warning, "Draw / Add New Field Boundary"
+    footer → `store.startDraw()` (Leaflet `L.Draw.Rectangle`).
+  - `FieldDetailPanel.vue` (replaces `InfoPanel.vue`): field view (NDVI hero vs AOI benchmark, growth-stage bar + day count,
+    stress card, trend chart with dashed-blue benchmark line + index pills, 21-day rainfall, metadata) and map-click view
+    (trend + benchmark + rainfall + existing stress alert).
+  - Store additions: `fieldTrends` reactive cache, `rainfallMm` + `benchmarkValue` state, `loadFieldTrend(field)`,
+    `loadFieldRainfall` (→ `loadRainfall`), `loadBenchmark()`, `loadChartForGeometry(geometry, index, label)`,
+    `startDraw()`, health-coded polygon styling (`STATUS_COLORS` + `applyFieldStyle`), polygon click → reopen detail,
+    `setIndex`/`loadField` now load per-field series when a field is active; field trend cache primed on init/login/save.
+  - `chart.js`: `buildChartConfig` accepts optional `benchmarkValue` (dashed `#4fa8ff` line + legend toggle).
+  - `style.css`: full Stage 2 block for sidebar + detail panel (glass dark cards, tokens), bottom-sheet mobile behavior.
+- **Verified:** `npm run build` ✅; `npm run dev` serves all modules 200 ✅. Pending in-browser review: draw→save flow,
+  sparkline render, benchmark line, mobile bottom sheets.
 
 ### Stage 3 — Polish (planned)
 - Onboarding 4-slide modal (Help), toast stack top-right, remaining motion timing per spec §4.7, event-overlay annotation treatment.
@@ -317,4 +332,4 @@ panel rework) next; then polish (motion/toasts/onboarding modal).
 
 ## Status
 
-All phases complete except Phase 8.3+ (Telegram alerts) and Phase 10 (design-system redesign — Stage 1 done, Stages 2–3 pending), plus the final end-to-end smoke test of Phase 9 (Vue migration). Phases 8.1 (schema + auth) and 8.2 (fields migrated off localStorage) are done. The static app from Phase 2–7 is preserved intact as `index_old.html` (fully working). The Vue rewrite (`index.html` + `src/`) is ported from that stable codebase: build ✅, dev server ✅, map + trend panel verified in-browser; remaining to verify by hand: draw/save field → Supabase, compare mode, PNG/PDF export. Phase 10 Stage 1 re-skinned the app to the dark design-system spec (`design.md`) — build ✅, all modules serve ✅. Remaining overall: Telegram bot linking, EE service account, Python scheduled worker, end-to-end test. The app is feature-stable with NDVI/NDWI/LSWI analysis, time slider with Latest button and scene count indicator, draw & save fields (now synced to Supabase), dashboard with growth-stage-aware health badges, compare mode, PNG/PDF export, event overlays, CHIRPS rainfall context on stress alerts, preset locations, UI-managed preset/AOI editors, area recalculation on edit, satellite basemap toggle, place search, field deselection, email magic-link login, and a help panel.
+All phases complete except Phase 8.3+ (Telegram alerts) and Phase 10 (design-system redesign — Stage 1 done, Stage 2 in progress, Stage 3 pending), plus the final end-to-end smoke test of Phase 9 (Vue migration). Phases 8.1 (schema + auth) and 8.2 (fields migrated off localStorage) are done. The static app from Phase 2–7 is preserved intact as `index_old.html` (fully working). The Vue rewrite (`index.html` + `src/`) is ported from that stable codebase: build ✅, dev server ✅, map + trend panel verified in-browser; remaining to verify by hand: draw/save field → Supabase, compare mode, PNG/PDF export. Phase 10 Stage 1 re-skinned the app to the dark design-system spec (`design.md`) — build ✅, all modules serve ✅. Stage 2 swapped the ☰ dashboard + info panel for the spec's Monitored-Fields sidebar + field-inspector detail panel (sparklines, filters, draw footer, benchmark hero, phenology, rainfall, metadata) — build ✅, dev serves ✅, in-browser review pending. Remaining overall: Telegram bot linking, EE service account, Python scheduled worker, end-to-end test. The app is feature-stable with NDVI/NDWI/LSWI analysis, time slider with Latest button and scene count indicator, draw & save fields (now synced to Supabase), dashboard with growth-stage-aware health badges, compare mode, PNG/PDF export, event overlays, CHIRPS rainfall context on stress alerts, preset locations, UI-managed preset/AOI editors, area recalculation on edit, satellite basemap toggle, place search, field deselection, email magic-link login, and a help panel.

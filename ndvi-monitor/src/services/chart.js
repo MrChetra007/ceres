@@ -55,7 +55,7 @@ export function currentDateMarkerPlugin() {
   }
 }
 
-export function buildChartConfig(ctx, data, index, large, getStageLabel) {
+export function buildChartConfig(ctx, data, index, large, getStageLabel, benchmarkValue) {
   const cfg = INDICES[index] || INDICES.ndvi
   const monthTicks = buildMonthTicks(data)
   const gradient = ctx.createLinearGradient(0, 0, 0, ctx.canvas.height || 220)
@@ -66,29 +66,42 @@ export function buildChartConfig(ctx, data, index, large, getStageLabel) {
   gradient.addColorStop(1, '#ef4444')
   const tickFont = large ? 12 : 11
   const titleFont = large ? 13 : 12
+  const datasets = [{
+    label: cfg.name,
+    data: data.map((d) => ({ x: new Date(d.date).getTime(), y: d.value })),
+    borderColor: cfg.color,
+    backgroundColor: gradient,
+    borderWidth: 2,
+    pointRadius: large ? 4 : 3,
+    pointBackgroundColor: cfg.color,
+    pointHoverRadius: 5,
+    fill: true,
+    tension: 0.3,
+  }]
+  if (typeof benchmarkValue === 'number') {
+    datasets.push({
+      label: 'Benchmark',
+      data: data.map((d) => ({ x: new Date(d.date).getTime(), y: benchmarkValue })),
+      borderColor: '#4fa8ff',
+      borderDash: [6, 4],
+      borderWidth: 1.5,
+      pointRadius: 0,
+      fill: false,
+    })
+  }
 
   return {
     type: 'line',
-    data: {
-      datasets: [{
-        label: cfg.name,
-        data: data.map((d) => ({ x: new Date(d.date).getTime(), y: d.value })),
-        borderColor: cfg.color,
-        backgroundColor: gradient,
-        borderWidth: 2,
-        pointRadius: large ? 4 : 3,
-        pointBackgroundColor: cfg.color,
-        pointHoverRadius: 5,
-        fill: true,
-        tension: 0.3,
-      }],
-    },
+    data: { datasets },
     options: {
       responsive: true,
       maintainAspectRatio: false,
       interaction: { mode: 'index', intersect: false },
       plugins: {
-        legend: { display: false },
+        legend: {
+          display: typeof benchmarkValue === 'number',
+          labels: { color: '#9aa4b1', boxWidth: 14, font: { size: 10 } },
+        },
         tooltip: {
           backgroundColor: 'rgba(20, 25, 40, 0.92)',
           titleFont: { size: 12 },

@@ -66,6 +66,24 @@ export function getIndexTimeSeries(lat, lng, index, months, cb) {
   })
 }
 
+export function getIndexTimeSeriesForGeometry(geometry, index, months, cb) {
+  const e = ee()
+  const cfg = INDICES[index] || INDICES.ndvi
+  const startDate = e.Date.fromYMD(months[0].year, months[0].month, 1)
+  const last = months[months.length - 1]
+  const endDate = e.Date.fromYMD(last.year, last.month, 1).advance(1, 'month')
+  const all = s2Collection(geometry, startDate, endDate)
+  const series = all.map((img) => {
+    const idxImg = img.normalizedDifference(cfg.bands).rename(cfg.name)
+    const value = idxImg.reduceRegion({ reducer: e.Reducer.mean(), geometry, scale: 10, maxPixels: 1e9 })
+    return e.Feature(null, { date: img.date().format('YYYY-MM-dd'), value: value.get(cfg.name) })
+  })
+  series.filter(e.Filter.notNull(['value'])).evaluate((result) => {
+    if (!result || !result.features) { cb([]); return }
+    cb(result.features.map((f) => ({ date: f.properties.date, value: f.properties.value })))
+  })
+}
+
 export function getDryMonths(months, geometry, cb) {
   const e = ee()
   const drySet = new Set()
