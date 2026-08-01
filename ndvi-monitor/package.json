@@ -9,8 +9,10 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@google/earthengine": "^1.7.36",
-    "leaflet": "^1.9.4",
+    "@supabase/supabase-js": "^2.111.0",
+    "@turf/turf": "^7.3.5",
+    "chart.js": "^4.5.1",
+    "jspdf": "^4.2.1",
     "vue": "^3.5.39"
   },
   "devDependencies": {

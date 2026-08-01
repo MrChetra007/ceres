@@ -101,6 +101,30 @@ A single-page web app that shows a satellite map of rice-growing areas in Battam
 
 ---
 
+## Phase 9 — Vue Migration 🚧 In progress (attempt)
+
+**Goal:** Reorganize the monolithic static app into Vue 3 components for clearer, more maintainable code structure.
+
+**How it's set up (the working app is NOT broken):**
+- The stable static app is preserved as **`index_old.html` + `style_old.css` + `app_old.js`** — a fully working fallback. Nothing was deleted.
+- The active Vue app lives at root `index.html` + `src/` (Vite + Vue 3, `<script setup>` SFCs).
+- **Earth Engine, Leaflet, and leaflet-draw stay on CDN `<script>` tags** — these are UMD/global libs whose bundling breaks or risks breakage under Vite:
+  - `@google/earthengine` npm package breaks under Vite's bundler (`Failed to locate function parameters`).
+  - `leaflet-draw`'s UMD must extend the global `L`; bundling it with Vite risks it receiving a namespace object instead of the real Leaflet. So Leaflet + leaflet-draw load from `unpkg` like the `_old` app (see comment in `index.html`), and components use the global `L = window.L`.
+- Everything else (Vue, Chart.js, turf, jsPDF, supabase-js) is `npm`-imported and bundled normally by Vite.
+
+**Porting approach:**
+- Shared state + all app actions centralized in `src/store.js` (Vue `reactive`/`shallowRef`).
+- Earth Engine queries in `src/services/earthEngine.js`; Supabase client + field CRUD in `src/services/supabase.js`.
+- UI split into SFCs: `App.vue` (root: user menu, ☰ dashboard toggle, toast/status bar, help button), `LeafletMap.vue`, `SliderPanel.vue`, `InfoPanel.vue`, `Dashboard.vue`, `AuthOverlay.vue`, `PresetPanel.vue`, `HelpModal.vue`, `PresetEditor.vue`, `AoiEditor.vue`, `ChartModal.vue`, `DatePickerModal.vue`.
+- Styles ported from `style_old.css` → `src/style.css`.
+
+**Status:** `npm run build` passes ✅ and `npm run dev` serves all modules with no Vite errors ✅. Runtime smoke test (Google sign-in → map → slider → click → charts → draw/save field) still to be done in the browser.
+
+**Acceptance:** `npm run build` succeeds AND all existing features (NDVI/NDWI/LSWI, time slider + scene count + latest button, click-to-inspect trend chart with gradient fill + date marker + expand modal, draw & save fields synced to Supabase, dashboard with growth-stage badges, compare mode, PNG/PDF export, event overlays, CHIRPS rainfall context, presets/AOI editors, place search, satellite basemap, magic-link login, help panel) behave identically to `index_old.html`.
+
+---
+
 ## Product Pivot Features (added during development)
 
 ### Feature A — Draw & save fields ✅ Complete
@@ -228,8 +252,8 @@ A single-page web app that shows a satellite map of rice-growing areas in Battam
 ## Tech stack (current)
 
 | Layer | Tool |
-|---|---|---|
-| Frontend | Plain HTML/CSS/JS |
+|---|---|
+| Frontend | Vue 3 (SFC) + Vite (`index.html` + `src/`); legacy fallback in `index_old.html` (plain JS) |
 | Map | Leaflet + OpenStreetMap tiles / Esri World Imagery |
 | Satellite compute | Google Earth Engine (JS client via CDN `<script>` tag, v1.7.36) |
 | Auth | Earth Engine OAuth popup (`ee.data.authenticateViaOauth`) |
@@ -242,4 +266,4 @@ A single-page web app that shows a satellite map of rice-growing areas in Battam
 
 ## Status
 
-All phases complete except Phase 8 (Supabase backend + Telegram alerts). Phases 8.1 (schema + auth) and 8.2 (fields migrated off localStorage) are done. Remaining: Telegram bot linking, Earth Engine service account, Python scheduled worker, end-to-end test. The app is feature-stable with NDVI/NDWI/LSWI analysis, time slider with Latest button and scene count indicator, draw & save fields (now synced to Supabase), dashboard with growth-stage-aware health badges, compare mode, PNG/PDF export, event overlays, CHIRPS rainfall context on stress alerts, preset locations, UI-managed preset/AOI editors, area recalculation on edit, satellite basemap toggle, place search, field deselection, email magic-link login, and a help panel.
+All phases complete except Phase 8 (Telegram alerts) and Phase 9 (Vue migration, in progress). Phases 8.1 (schema + auth) and 8.2 (fields migrated off localStorage) are done. The static app from Phase 2–7 is preserved intact as `index_old.html` (fully working). The Vue rewrite (`index.html` + `src/`) is being ported from that stable codebase. Remaining overall: Telegram bot linking, EE service account, Python scheduled worker, end-to-end test. The app is feature-stable with NDVI/NDWI/LSWI analysis, time slider with Latest button and scene count indicator, draw & save fields (now synced to Supabase), dashboard with growth-stage-aware health badges, compare mode, PNG/PDF export, event overlays, CHIRPS rainfall context on stress alerts, preset locations, UI-managed preset/AOI editors, area recalculation on edit, satellite basemap toggle, place search, field deselection, email magic-link login, and a help panel.
