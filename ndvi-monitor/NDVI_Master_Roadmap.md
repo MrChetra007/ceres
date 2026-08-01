@@ -4,7 +4,8 @@
 
 Covers everything from `NDVI_Crop_Monitor_Roadmap.md`, `NDVI_Stack_Migration_Roadmap.md`,
 `NDVI_Product_Pivot_Roadmap.md`, `NDVI_Field_Area_Patch.md`, `NDVI_Growth_Stage_Thresholds_Patch.md`,
-`NDVI_LSWI_CHIRPS_Patch.md`, and `Ndvi_ui_redesign_patch.md` — one place to see it all.
+`NDVI_LSWI_CHIRPS_Patch.md`, `Ndvi_ui_redesign_patch.md`, and `Backend_Telegram_Roadmap.md`
+(now folded into **Part 5**) — one place to see it all.
 
 ---
 
@@ -21,9 +22,14 @@ satellite imagery). A visitor can:
 **Backend = Google Earth Engine.** No Supabase, no database, no server you host. Earth Engine
 does the satellite math on Google's machines; your app just asks for images and displays them.
 
+> **Update (Part 5):** this "no login/accounts, browser-only" story has since evolved. Saved fields
+> are synced through **Supabase** (email magic-link login), and a scheduled **Telegram alert** backend
+> is being added. Everything in Parts 1–4 is the browser-only journey; Part 5 is the server-side step.
+
 **Vision evolution:** started as a tech-show demo → became a simple, real single-user tool
 (save fields, dashboard, export) → grew into a polished product (growth-stage-aware health,
-water indices, rainfall context, UI redesign). All of it still runs entirely in the browser.
+water indices, rainfall context, UI redesign) → now adding multi-device sync (Supabase) and
+scheduled stress alerts over Telegram.
 
 ---
 
@@ -199,6 +205,150 @@ worthwhile when you need multi-device sync or multiple users.
 
 ---
 
+## Part 5 — Supabase Backend + Telegram Alerts (Phase 8) 🚧 In progress
+
+**Scope of this phase:** move saved fields from browser `localStorage` to Supabase, and add scheduled
+server-side stress checks that push Telegram alerts. The AI/LLM advisory layer is **explicitly not
+being built in this phase** — see "AI window" note at the end. Don't add it unless asked.
+
+Schema lives in the companion file `schema.sql` — run that in Supabase before starting Phase 8.2.
+
+### 5.0 What changes architecturally
+
+Today (per Parts 1–4): everything runs in the browser. A user opens the OAuth popup, Earth
+Engine computes NDVI live, saved fields sit in that browser's `localStorage`. No server, no always-on
+process.
+
+After this phase: fields live in Supabase (Postgres), so any device/staff member with login can see
+them. A **separate, small Python service** (Cloud Function or Cloud Run, not part of the web app) runs
+on a schedule, re-checks each saved field's stress status using a Google service account (no user has
+to be logged in), and messages Telegram when something's wrong.
+
+```
+Browser app (existing)  <──────>  Supabase (Postgres + Auth)
+                                         ▲
+                                         │  service_role key (read fields, write alerts)
+                                         │
+                        Cloud Scheduler ──> Python Cloud Function
+                                            (earthengine-api + service account)
+                                                 │
+                                                 ▼
+                                          Telegram Bot API
+```
+
+**Why Python for the scheduled worker, not a Supabase Edge Function:** Edge Functions run Deno, a
+different runtime than the browser or Node. The app already hit one EE/bundler interop bug switching
+off Vite (`Failed to locate function parameters`). Earth Engine's Python client with a service account
+is the most mature, most documented path for server-side use — no reason to risk a second version of
+that same problem in an even less-tested runtime.
+
+### 5.1 Phase 8.1 — Supabase schema & auth ✅
+- Supabase project `https://wopwwtnvqyomiwbsxiks.supabase.co` (anon key in `.env` / `app.js`)
+- Auth: **email magic link** (free, built into Supabase Auth)
+- `schema.sql` updated: `fields.owner_id` now defaults to `auth.uid()`, added `set_updated_at()` trigger
+- App: supabase-js CDN added, auth overlay reworked (email magic link + EE sign-in side by side), user menu with sign-in/sign-out, `onAuthStateChange` auto-loads fields
+- **Checkpoint:** can sign up, log in, and see an empty `fields` list from Supabase in the Supabase dashboard table view
+
+### 5.2 Phase 8.2 — Migrate the app off localStorage ✅
+- `saveField()` / `getSavedFields()` / `deleteField()` / `loadField()` / `loadFieldById()` now use Supabase (`fieldsCache` in-memory mirror + async CRUD); same function names, new implementation
+- New `updateField(id, patch)` handles area recalc (on `EDITED`) and planting-date edits
+- One-time import: `importLocalFieldsIfAny()` uploads existing `ndvi_fields` localStorage on first login, then clears it
+- `updateFieldStatus()` guarded by `eeReady` so dashboard renders before EE init
+- **Checkpoint:** draw a field, refresh the page (or open on a different device, same login) — field persists via Supabase, not the browser
+
+### 5.3 Phase 8.3 — Telegram bot + account linking ⬜
+- Create the bot via **@BotFather** in Telegram → get bot token → store as a secret (Supabase
+  Vault or Cloud Function env var, never in client code)
+- In-app: "Connect Telegram" button generates a short-lived code, shows a deep link
+  `t.me/<YourBot>?start=<code>`
+- Bot webhook (can be a tiny Supabase Edge Function just for this one piece — it's simple request/
+  response, no Earth Engine involved) receives `/start <code>`, matches it in `link_codes`, saves
+  `chat_id` onto the user's `profiles` row
+- **Checkpoint:** tapping "Connect Telegram" in the app → messaging the bot → `profiles.telegram_chat_id`
+  populates for that user
+
+### 5.4 Phase 8.4 — Earth Engine service account ⬜
+- In the same GCP project (`gen-lang-client-0978198347`), create a service account, grant it Earth
+  Engine access, download the JSON key
+- Store the key as a Cloud Function secret — never commit it, never send it to the browser
+- **Note:** still fine under the noncommercial/Community tier for a scheduled batch job at this scale.
+  Revisit Earth Engine's commercial licensing *before* any paid co-op subscription goes live — the
+  noncommercial tier explicitly excludes fee-for-service use.
+- **Checkpoint:** a local Python script using `earthengine-api` + the service account key can
+  authenticate and pull an NDVI value, no browser/OAuth popup involved
+
+### 5.5 Phase 8.5 — Scheduled worker (Python Cloud Function) ⬜
+- Cloud Scheduler triggers the function on a cadence (start with **once daily** — rice stress doesn't
+  move hour to hour, and it keeps Earth Engine usage low)
+- Function logic:
+  1. Query Supabase (via `service_role` key) for all fields where the owner has a `telegram_chat_id` set
+  2. For each field: recompute NDVI + growth-stage-aware status — **port the same logic already
+     working in `app.js`** (6-stage phenology thresholds, CHIRPS rainfall context), don't redesign it
+  3. Compare new status to the *last logged* status for that field (see dedup logic below) —
+     **only send a Telegram message on a status change**, not every single day. Daily "still stressed"
+     pings are how people mute a bot within a week.
+  4. Insert a row into `alerts_log`; call Telegram `sendMessage` if status changed for the worse
+- **Build the alert text as a template function, not an inline string** —
+  `buildAlertMessage(status, ndviValue, rainfallMm, growthStage)` returns the message. This is the
+  hook for the AI layer later — see "AI window" note below.
+- **Checkpoint:** manually trigger the function once, confirm a Telegram message arrives for a field
+  you've deliberately set to a stressed state
+
+### 5.6 Phase 8.6 — End-to-end test ⬜
+- Let the scheduled job run for a few real days on your own test field
+- Confirm: no duplicate alerts, no missed alerts, dedup logic holds up, Telegram message content is
+  legible in Khmer/English as needed
+- **Checkpoint:** a real stress event on your test field produces exactly one Telegram message, not
+  zero and not five
+
+### 5.7 Dedup logic (decides whether a status change actually sends a message)
+
+```
+last_status = most recent alerts_log.status for this field (or null if none yet)
+new_status  = freshly computed status from Earth Engine
+
+if new_status != last_status:
+    insert alerts_log row (field_id, new_status, ndvi_value, message, chat_id)
+    if new_status is worse than last_status (or last_status was null and new_status is not healthy):
+        send Telegram message
+else:
+    insert alerts_log row anyway (for the history/trend), but skip the Telegram send
+```
+
+This keeps a full history for later (useful for the dashboard, or for showing a co-op "here's the
+season's alert log" during a pitch) while only pinging Telegram on genuine changes.
+
+### 5.8 Suggested build order & rough time
+
+1. Supabase schema + auth — 2–3 days
+2. Migrate app CRUD off localStorage — 2–3 days
+3. Telegram bot + linking flow — 1–2 days
+4. Earth Engine service account + Python Cloud Function skeleton — 2–3 days
+5. Port stress-check logic to Python + wire up Telegram send — 3–4 days
+6. End-to-end test + dedup tuning — 1–2 days
+
+**Total: roughly 2–3 weeks of focused work.** Fits inside the AIM 2-month window alongside thesis/
+teaching load, with time left over for pitch prep.
+
+### 5.9 Known risks to plan around (backend)
+- **EE service-account auth** — mature in Python, but budget a day for first-time setup friction
+  (IAM permissions, enabling the right APIs on the service account)
+- **Alert fatigue** — the dedup logic above is a starting point; watch real usage and adjust the
+  "worse than" comparison if it's too chatty or too quiet
+- **EE noncommercial fee-for-service restriction** — fine for now, becomes a real line item the
+  moment a co-op actually pays for this
+- **Free tier limits** — Supabase free tier and a once-daily Cloud Function are both comfortably
+  within free quotas at this scale; recheck if usage grows past a handful of test fields
+
+### 5.10 AI window (not built in this phase)
+
+`buildAlertMessage()` in Phase 8.5 is deliberately a standalone function, not inline code, so that a
+future AI/LLM layer can replace what's *inside* it (plain-language generation from the same status/
+NDVI/rainfall/growth-stage inputs) without touching Supabase, the scheduler, or the Telegram send
+logic. Do not build this now — only implement it if explicitly asked to start the AI phase.
+
+---
+
 ## Stack notes (migration + current state)
 
 ### Why no Vite
@@ -216,19 +366,24 @@ Fix: load EE via a plain `<script>` tag (Google's own documented approach).
 
 ### Current tech stack
 
+> **Note:** the sections above describe the original plain-HTML/JS app. The frontend has since been
+> migrated to **Vue 3 + Vite** (`ndvi-monitor/` with `src/`, `index.html`, CDN-loaded EE/Leaflet), and
+> saved fields now persist to **Supabase** instead of localStorage (see Part 5). The stack table below
+> is the historical record; the working app is the Vue rewrite.
+
 | Layer | Tool |
 |---|---|
-| Frontend | Plain HTML/CSS/JS |
+| Frontend | Plain HTML/CSS/JS (historical) → **Vue 3 + Vite** (current, `src/`) |
 | Map | Leaflet + OpenStreetMap tiles / Esri World Imagery |
 | Satellite compute | Google Earth Engine (JS client via CDN `<script>` tag, v1.7.36) |
-| Auth | Earth Engine OAuth popup (`ee.data.authenticateViaOauth`) |
+| Auth | Earth Engine OAuth popup (`ee.data.authenticateViaOauth`) + **Supabase email magic link** |
 | Geocoding | Nominatim (OpenStreetMap free API) |
 | Drawing | leaflet-draw (v1.0.4) |
 | Area calc | turf.js (v6) |
 | Charts | Chart.js (v4.4.7) |
 | PDF | jsPDF |
 | Icons | Tabler Icons (`@tabler/icons-webfont`) |
-| Storage | localStorage (fields, auth token, AOI coords, presets) |
+| Storage | localStorage (auth token, AOI coords, presets) → **Supabase** (fields, alerts) |
 
 ### OAuth setup (Google Cloud Console)
 - OAuth 2.0 Client ID (Web application type): `355514869488-q3v52vvkb7c3gikr0og89o26m51ev403.apps.googleusercontent.com`
@@ -257,7 +412,7 @@ Fix: load EE via a plain `<script>` tag (Google's own documented approach).
 - **Harvest reminders** — days-since-planting crossing into the "Harvest" stage is a natural on-screen trigger, no backend needed
 - **Auto-suggest planting date** — LSWI spike (flooding/transplanting) when a field is first drawn could auto-fill the planting date
 - **Drought/flood risk assessment** — rainfall + NDVI together is the natural first step, but that's a scoped feature of its own
-- **Backend path** — `localStorage` → Supabase table (`fields`: owner, geojson, name, notes) is a clean swap; Telegram alerts become straightforward once a scheduled job can iterate a database of fields
+- **Backend path** — `localStorage` → Supabase table (`fields`: owner, geojson, name, notes) is a clean swap; Telegram alerts become straightforward once a scheduled job can iterate a database of fields. **This is now in progress — see Part 5 (Phase 8).**
 
 ---
 
@@ -273,9 +428,12 @@ Fix: load EE via a plain `<script>` tag (Google's own documented approach).
 8. Product pivot: draw/save fields, dashboard, export (Features A–C)
 9. Patches: field area → growth-stage thresholds → LSWI + CHIRPS → UI redesign
 10. Product features: presets/AOI editors, satellite toggle, deselection, geocoder, auto dry-month markers
+11. **Backend (Phase 8, in progress):** Supabase schema+auth → migrate CRUD off localStorage → Telegram bot + linking → EE service account → Python scheduled worker → end-to-end test (see Part 5)
 
 ---
 
 ## Status
 
-All phases and features complete. The app is feature-stable with NDVI/NDWI/LSWI analysis, time slider with Latest button and scene count indicator, draw & save fields, dashboard with growth-stage-aware health badges, compare mode, PNG/PDF export, event overlays, CHIRPS rainfall context on stress alerts, preset locations, UI-managed preset/AOI editors, area recalculation on edit, satellite basemap toggle, place search, field deselection, and a help panel.
+Parts 1–4 are complete and feature-stable: NDVI/NDWI/LSWI analysis, time slider with Latest button and scene count indicator, draw & save fields, dashboard with growth-stage-aware health badges, compare mode, PNG/PDF export, event overlays, CHIRPS rainfall context on stress alerts, preset locations, UI-managed preset/AOI editors, area recalculation on edit, satellite basemap toggle, place search, field deselection, and a help panel. The frontend runs as a Vue 3 + Vite app with CDN-loaded Earth Engine/Leaflet.
+
+**Phase 8 (Part 5) is in progress:** 8.1 (Supabase schema & auth) ✅ and 8.2 (migrate fields off localStorage) ✅ are done. Pending: 8.3 Telegram bot + account linking, 8.4 EE service account, 8.5 scheduled Python worker, 8.6 end-to-end test. Also pending separately: the Vue rewrite's final end-to-end smoke test and the design-system redesign (see `PROCESS.md`).

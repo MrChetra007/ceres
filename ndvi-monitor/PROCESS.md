@@ -76,7 +76,7 @@ A single-page web app that shows a satellite map of rice-growing areas in Battam
 
 ---
 
-## Phase 8 — Supabase Backend + Telegram Alerts 🚧 In progress (see `Backend_Telegram_Roadmap.md`)
+## Phase 8 — Supabase Backend + Telegram Alerts 🚧 In progress (see Part 5 of `NDVI_Master_Roadmap.md`; original doc folded in)
 
 ### 8.1 Supabase schema & auth ✅ Complete
 - Supabase project: `https://wopwwtnvqyomiwbsxiks.supabase.co`
@@ -97,7 +97,7 @@ A single-page web app that shows a satellite map of rice-growing areas in Battam
 - Root `.gitignore` added so `.env` (and the future `service_role` key) stays out of git
 
 ### 8.3+ Telegram bot & scheduled worker ⬜ Pending
-- Bot linking flow, EE service account, Python Cloud Function, end-to-end test — see `Backend_Telegram_Roadmap.md`
+- Bot linking flow, EE service account, Python Cloud Function, end-to-end test — see Part 5 of `NDVI_Master_Roadmap.md`
 
 ---
 
@@ -139,7 +139,7 @@ A single-page web app that shows a satellite map of rice-growing areas in Battam
 Leaflet/Earth Engine/logic stays untouched — this is presentation + interaction only.
 
 **Approach:** incremental. Stage 1 (foundation + chrome relocation) done; Stage 2 (sidebar + detail
-panel rework) in progress; then polish (motion/toasts/onboarding modal).
+panel rework) complete; polish (motion/toasts/onboarding modal) is Stage 3.
 
 ### Stage 1 — Foundation ✅ Complete
 - **Design tokens** added in `:root` per spec §2: `--bg-map`, `--panel(-2)`, `--panel-border`, `--text(-dim/-faint)`,
@@ -164,26 +164,47 @@ panel rework) in progress; then polish (motion/toasts/onboarding modal).
   info panel becomes bottom sheet; ≤480px tighter; `prefers-reduced-motion` collapses transitions.
 - **Verified:** `npm run build` ✅; `npm run dev` serves all modules 200 ✅.
 
-### Stage 2 — Sidebar & Detail Panel 🚧 In progress
+### Stage 2 — Sidebar & Detail Panel ✅ Complete
 - Left "Monitored Fields" sidebar: search + All/Healthy/Alerts filter tabs, sparkline field cards, "Draw / Add New Field Boundary"
   footer (replaces current ☰ Dashboard).
 - Right detail panel: NDVI hero + benchmark, stress alert, phenology progress, trend vs benchmark (dashed blue), rainfall, metadata
   cards (replaces current InfoPanel).
-- **Done so far:**
+- **Components & logic:**
   - `Sidebar.vue` (replaces `Dashboard.vue`): search input, All/Healthy/Alerts tabs, per-field SVG sparklines from
     `fieldTrends`, status badges, area/NDVI meta, plant-date + delete buttons, area warning, "Draw / Add New Field Boundary"
-    footer → `store.startDraw()` (Leaflet `L.Draw.Rectangle`).
+    footer → `store.startDraw()` (Leaflet `L.Draw.Polygon` — click points, double-click to finish; toggles to "Cancel drawing (Esc)").
   - `FieldDetailPanel.vue` (replaces `InfoPanel.vue`): field view (NDVI hero vs AOI benchmark, growth-stage bar + day count,
-    stress card, trend chart with dashed-blue benchmark line + index pills, 21-day rainfall, metadata) and map-click view
-    (trend + benchmark + rainfall + existing stress alert).
+    stress card, trend chart with dashed-blue benchmark line, 21-day rainfall, metadata) and map-click view
+    (trend + benchmark + rainfall + existing stress alert). Index switching stays in the BandPanel only (no pills in the chart card).
   - Store additions: `fieldTrends` reactive cache, `rainfallMm` + `benchmarkValue` state, `loadFieldTrend(field)`,
-    `loadFieldRainfall` (→ `loadRainfall`), `loadBenchmark()`, `loadChartForGeometry(geometry, index, label)`,
-    `startDraw()`, health-coded polygon styling (`STATUS_COLORS` + `applyFieldStyle`), polygon click → reopen detail,
+    `loadRainfall`, `loadBenchmark()`, `loadChartForGeometry(geometry, index, label)`, `startDraw()`/`cancelDraw()`,
+    `state.isDrawing`, health-coded polygon styling (`STATUS_COLORS` + `applyFieldStyle`), polygon click → reopen detail,
     `setIndex`/`loadField` now load per-field series when a field is active; field trend cache primed on init/login/save.
-  - `chart.js`: `buildChartConfig` accepts optional `benchmarkValue` (dashed `#4fa8ff` line + legend toggle).
+  - `chart.js`: `buildChartConfig` accepts optional `benchmarkValue` (dashed `#4fa8ff` line + legend toggle); x-axis ticks now
+    show month-only labels with the year range rendered as a top-of-chart title (`buildYearLabel`).
   - `style.css`: full Stage 2 block for sidebar + detail panel (glass dark cards, tokens), bottom-sheet mobile behavior.
-- **Verified:** `npm run build` ✅; `npm run dev` serves all modules 200 ✅. Pending in-browser review: draw→save flow,
-  sparkline render, benchmark line, mobile bottom sheets.
+- **Verified:** `npm run build` ✅; `npm run dev` serves all modules 200 ✅.
+
+### Stage 2 refinements (post-build, this session) ✅
+- **Map stacking over header fixed** — `.map-container` had no stacking context, so Leaflet's internal controls/panes
+  (z-index 400–1000) painted above the fixed UI. Added `position: relative; z-index: 0` to `.map-container`.
+- **Zoom/draw controls blocked by header** — `#map .leaflet-top, #map-right .leaflet-top { top: 64px }` pushes Leaflet's
+  top-right controls below the 56px fixed TopBar.
+- **Removed the "Jump to:" preset panel** — `PresetPanel.vue` deleted and unregistered from `App.vue`; the preset editor
+  (`PresetEditor.vue`), `state.presets`, and `flyToPreset()` stay intact.
+- **Toast looks/behaves like a proper toast** — restyled `.toast` to a rounded pill with slide-in animation; fixed it
+  stretching to ~full height (base rule's `bottom: 100px` conflicted with `top: 64px` → added `bottom: auto`).
+- **Draw UX** — polygon drawing replaces the drag-rectangle; Esc (or clicking the button again) cancels drawing; starting a
+  draw while signed out opens the auth overlay + toast instead of drawing.
+- **Compare (split-screen) hardened:**
+  - Right map was initialized while its `v-show` container was still hidden (watcher ran pre-render) → zero-size dark panel.
+    Now created inside `nextTick()` so the container has real dimensions.
+  - Maps are decoupled (removed the pan/zoom `syncing` handlers) — each map moves independently; aligned once on open.
+  - The center divider is now **draggable** to resize the split (20–80%, live `invalidateSize`); double-click resets to 50/50.
+  - **Closing Compare destroys the right map** — `destroyRightMap()` calls `mapRight.remove()`, clears `mapRight`/
+    `baseLayerRight`/`ndviLayerRight`, resets `sceneCount.right`; right panel + divider are `v-if` (fully removed from layout),
+    and the left map `invalidateSize()`s inside `requestAnimationFrame` after the layout settles. The async EE callback in
+    `loadIndexForMonthRight` is null-guarded so a stale response after close can't throw.
 
 ### Stage 3 — Polish (planned)
 - Onboarding 4-slide modal (Help), toast stack top-right, remaining motion timing per spec §4.7, event-overlay annotation treatment.
@@ -332,4 +353,4 @@ panel rework) in progress; then polish (motion/toasts/onboarding modal).
 
 ## Status
 
-All phases complete except Phase 8.3+ (Telegram alerts) and Phase 10 (design-system redesign — Stage 1 done, Stage 2 in progress, Stage 3 pending), plus the final end-to-end smoke test of Phase 9 (Vue migration). Phases 8.1 (schema + auth) and 8.2 (fields migrated off localStorage) are done. The static app from Phase 2–7 is preserved intact as `index_old.html` (fully working). The Vue rewrite (`index.html` + `src/`) is ported from that stable codebase: build ✅, dev server ✅, map + trend panel verified in-browser; remaining to verify by hand: draw/save field → Supabase, compare mode, PNG/PDF export. Phase 10 Stage 1 re-skinned the app to the dark design-system spec (`design.md`) — build ✅, all modules serve ✅. Stage 2 swapped the ☰ dashboard + info panel for the spec's Monitored-Fields sidebar + field-inspector detail panel (sparklines, filters, draw footer, benchmark hero, phenology, rainfall, metadata) — build ✅, dev serves ✅, in-browser review pending. Remaining overall: Telegram bot linking, EE service account, Python scheduled worker, end-to-end test. The app is feature-stable with NDVI/NDWI/LSWI analysis, time slider with Latest button and scene count indicator, draw & save fields (now synced to Supabase), dashboard with growth-stage-aware health badges, compare mode, PNG/PDF export, event overlays, CHIRPS rainfall context on stress alerts, preset locations, UI-managed preset/AOI editors, area recalculation on edit, satellite basemap toggle, place search, field deselection, email magic-link login, and a help panel.
+All phases complete except Phase 8.3+ (Telegram alerts) and Phase 10 (design-system redesign — Stages 1–2 done, Stage 3 polish pending), plus the final end-to-end smoke test of Phase 9 (Vue migration). Phases 8.1 (schema + auth) and 8.2 (fields migrated off localStorage) are done. The static app from Phase 2–7 is preserved intact as `index_old.html` (fully working). The Vue rewrite (`index.html` + `src/`) is ported from that stable codebase: build ✅, dev server ✅, map + trend panel verified in-browser; remaining to verify by hand: draw/save field → Supabase, compare mode, PNG/PDF export. Phase 10 Stage 1 re-skinned the app to the dark design-system spec (`design.md`) — build ✅, all modules serve ✅. Stage 2 swapped the ☰ dashboard + info panel for the spec's Monitored-Fields sidebar + field-inspector detail panel (sparklines, filters, draw footer, benchmark hero, phenology, rainfall, metadata) and hardened the app: map z-index stacking fixed, leaflet controls moved below the header, polygon draw with Esc-cancel + sign-in gate, proper toast styling, "Jump to:" preset panel removed, month-only chart ticks with year title, and Compare mode now fully decoupled with a draggable divider and proper teardown on close — build ✅, dev serves ✅. Remaining overall: Telegram bot linking, EE service account, Python scheduled worker, end-to-end test. The app is feature-stable with NDVI/NDWI/LSWI analysis, time slider with Latest button and scene count indicator, draw & save fields (now synced to Supabase), Monitored-Fields sidebar + field-inspector panel with growth-stage-aware health badges, resizable split-screen compare mode, PNG/PDF export, event overlays, CHIRPS rainfall context on stress alerts, UI-managed preset/AOI editors, area recalculation on edit, satellite basemap toggle, place search, field deselection, email magic-link login, and a help panel.
