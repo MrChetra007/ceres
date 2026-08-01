@@ -317,6 +317,10 @@ export function onMapClick(lat, lng) {
   state.lastClickPoint = { lat, lng }
   state.chartSubtitle = lat.toFixed(4) + ', ' + lng.toFixed(4)
   state.infoPanelVisible = true
+  if (!state.eeReady) {
+    setStatus('error', 'Sign in with Google to load ' + INDICES[state.currentIndex].name + ' trends')
+    return
+  }
   loadChartForPoint(lat, lng, state.currentIndex)
 }
 

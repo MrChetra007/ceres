@@ -1194,6 +1194,22 @@ html, body {
 
 .auth-message.error { color: #dc2626; }
 
+.auth-skip {
+  margin-top: 1.5rem;
+}
+
+.auth-skip-btn {
+  background: none;
+  border: none;
+  color: #888;
+  font-size: 0.85rem;
+  cursor: pointer;
+  text-decoration: underline;
+  padding: 0;
+}
+
+.auth-skip-btn:hover { color: #1a56db; }
+
 .user-menu {
   position: absolute;
   top: 10px;

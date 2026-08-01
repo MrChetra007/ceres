@@ -16,6 +16,9 @@
           <button id="sign-in-btn" @click="store.authenticate()">Sign in with Google</button>
         </div>
       </div>
+      <div class="auth-skip">
+        <button class="auth-skip-btn" @click="store.hideAuthOverlay()">Explore the map first</button>
+      </div>
     </div>
   </div>
 </template>

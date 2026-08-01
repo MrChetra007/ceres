@@ -1,14 +1,11 @@
 <template>
-  <div id="info-panel" class="panel info-panel" v-show="state.infoPanelVisible" :class="{ collapsed }">
+  <div id="info-panel" class="panel info-panel" v-show="state.infoPanelVisible">
     <div class="panel-header">
       <div>
         <p class="panel-title" id="panel-title">{{ title }}</p>
         <p class="panel-subtitle" id="chart-subtitle">{{ state.chartSubtitle }}</p>
       </div>
       <div class="panel-header-actions">
-        <button id="collapse-panel" class="icon-btn" :title="collapsed ? 'Expand panel' : 'Collapse panel'" @click="toggleCollapse">
-          <i class="ti" :class="collapsed ? 'ti-chevrons-left' : 'ti-chevrons-right'"></i>
-        </button>
         <button id="close-panel" class="close-btn" @click="state.infoPanelVisible = false">&times;</button>
       </div>
     </div>
@@ -32,7 +29,6 @@ import { buildChartConfig } from '../services/chart'
 import { INDICES, MONTHS } from '../config'
 
 const chartCanvas = ref(null)
-const collapsed = ref(false)
 let chart = null
 
 const title = computed(() => INDICES[state.chartIndex].name + ' Trend')
@@ -56,18 +52,9 @@ function updateMarker() {
   chart.update('none')
 }
 
-function toggleCollapse() {
-  collapsed.value = !collapsed.value
-  if (!collapsed.value && chart) chart.resize()
-}
-
 watch(() => state.chartData, (data) => {
   if (data && state.infoPanelVisible) render(data)
 })
 
 watch(() => state.mainMonth, () => updateMarker())
-
-watch(collapsed, (c) => {
-  if (!c && chart) chart.resize()
-})
 </script>

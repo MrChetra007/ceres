@@ -47,14 +47,14 @@ function openDashboard() {
   if (dashboardRef.value) dashboardRef.value.open = true
 }
 
-const userMenuVisible = computed(() => !!state.supabaseUser || state.eeReady)
+const userMenuVisible = computed(() => !!state.supabaseUser || state.eeReady || !state.authOverlayVisible)
 const userMenuLabel = computed(() =>
-  state.supabaseUser ? (state.supabaseUser.email || 'Signed in') : 'Sign in to sync fields'
+  state.supabaseUser ? (state.supabaseUser.email || 'Signed in') : 'Sign in'
 )
 
 function onUserMenuClick(e) {
   if (e.target.id === 'sign-out-btn') return
-  if (!state.supabaseUser) store.showAuthOverlay()
+  if (!state.supabaseUser || !state.eeReady) store.showAuthOverlay()
 }
 
 watch(() => state.statusText, () => {
