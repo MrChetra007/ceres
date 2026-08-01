@@ -101,7 +101,7 @@ A single-page web app that shows a satellite map of rice-growing areas in Battam
 
 ---
 
-## Phase 9 — Vue Migration 🚧 In progress (attempt)
+## Phase 9 — Vue Migration ✅ Mostly complete (runtime smoke test of a few flows pending)
 
 **Goal:** Reorganize the monolithic static app into Vue 3 components for clearer, more maintainable code structure.
 
@@ -119,7 +119,14 @@ A single-page web app that shows a satellite map of rice-growing areas in Battam
 - UI split into SFCs: `App.vue` (root: user menu, ☰ dashboard toggle, toast/status bar, help button), `LeafletMap.vue`, `SliderPanel.vue`, `InfoPanel.vue`, `Dashboard.vue`, `AuthOverlay.vue`, `PresetPanel.vue`, `HelpModal.vue`, `PresetEditor.vue`, `AoiEditor.vue`, `ChartModal.vue`, `DatePickerModal.vue`.
 - Styles ported from `style_old.css` → `src/style.css`.
 
-**Status:** `npm run build` passes ✅ and `npm run dev` serves all modules with no Vite errors ✅. Runtime smoke test (Google sign-in → map → slider → click → charts → draw/save field) still to be done in the browser.
+**Status:** ✅ `npm run build` passes, `npm run dev` serves every module with no Vite errors, and the map renders in-browser. Features verified working by the user: map renders, NDVI Trend panel opens on map click. Remaining: full end-to-end smoke test of draw/save field + Supabase sync, compare mode, and exports.
+
+**Recent fixes during migration (this session):**
+- **Blank map on load** — the Vue app mounts into `#app`, which had no height, so `.map-container`/`#map` (100%) collapsed to 0. Added `#app { height: 100%; width: 100% }` to `src/style.css`.
+- **401 Unauthorized on `…/algorithms`** — expired Earth Engine OAuth token. Tokens from the client-side flow last ~1h. `authenticate()` now stamps `issued_at`; `restoreSavedSession()` skips tokens older than `expires_in − 120s`; on init failure the stale token is cleared, the auth overlay is re-shown, and the status bar says "Satellite sign-in expired — please sign in again".
+- **Map clicks did nothing / panel never opened** — the full-screen auth overlay (`position: fixed; inset: 0`) was intercepting every click until EE auth completed. Added an **"Explore the map first"** dismiss button on the auth card, made the top-right user menu reopen the sign-in overlay whenever EE isn't ready, and hardened `onMapClick()` so the panel always opens (it shows "Sign in with Google to load … trends" if EE isn't ready).
+- **Info panel showed two header buttons** — removed the collapse `>>` button and its `collapsed` state/watcher, keeping only the `×` close button.
+- **Leaflet/leaflet-draw moved to CDN** — same UMD/global rationale as EE (see "How it's set up" above). Removed `leaflet` + `leaflet-draw` from npm deps, deleted the unused legacy `src/components/MapView.vue`, and components use the global `L = window.L`.
 
 **Acceptance:** `npm run build` succeeds AND all existing features (NDVI/NDWI/LSWI, time slider + scene count + latest button, click-to-inspect trend chart with gradient fill + date marker + expand modal, draw & save fields synced to Supabase, dashboard with growth-stage badges, compare mode, PNG/PDF export, event overlays, CHIRPS rainfall context, presets/AOI editors, place search, satellite basemap, magic-link login, help panel) behave identically to `index_old.html`.
 
@@ -248,6 +255,7 @@ A single-page web app that shows a satellite map of rice-growing areas in Battam
 - **Client ID**: `355514869488-q3v52vvkb7c3gikr0og89o26m51ev403.apps.googleusercontent.com`
 - **Authorized JavaScript origins**: `http://localhost:5173` (Vite), `http://localhost:3000` (serve), `http://localhost:60822` (serve dynamic)
 - Token persisted via `localStorage` — single sign-in survives page reloads
+- Access tokens expire after ~1 hour; the app stamps `issued_at`, skips stale tokens on reload, and re-prompts for sign-in when init fails (see Phase 9 notes)
 
 ## Tech stack (current)
 
@@ -266,4 +274,4 @@ A single-page web app that shows a satellite map of rice-growing areas in Battam
 
 ## Status
 
-All phases complete except Phase 8 (Telegram alerts) and Phase 9 (Vue migration, in progress). Phases 8.1 (schema + auth) and 8.2 (fields migrated off localStorage) are done. The static app from Phase 2–7 is preserved intact as `index_old.html` (fully working). The Vue rewrite (`index.html` + `src/`) is being ported from that stable codebase. Remaining overall: Telegram bot linking, EE service account, Python scheduled worker, end-to-end test. The app is feature-stable with NDVI/NDWI/LSWI analysis, time slider with Latest button and scene count indicator, draw & save fields (now synced to Supabase), dashboard with growth-stage-aware health badges, compare mode, PNG/PDF export, event overlays, CHIRPS rainfall context on stress alerts, preset locations, UI-managed preset/AOI editors, area recalculation on edit, satellite basemap toggle, place search, field deselection, email magic-link login, and a help panel.
+All phases complete except Phase 8.3+ (Telegram alerts) and the final end-to-end smoke test of Phase 9 (Vue migration). Phases 8.1 (schema + auth) and 8.2 (fields migrated off localStorage) are done. The static app from Phase 2–7 is preserved intact as `index_old.html` (fully working). The Vue rewrite (`index.html` + `src/`) is ported from that stable codebase: build ✅, dev server ✅, map + trend panel verified in-browser; remaining to verify by hand: draw/save field → Supabase, compare mode, PNG/PDF export. Remaining overall: Telegram bot linking, EE service account, Python scheduled worker, end-to-end test. The app is feature-stable with NDVI/NDWI/LSWI analysis, time slider with Latest button and scene count indicator, draw & save fields (now synced to Supabase), dashboard with growth-stage-aware health badges, compare mode, PNG/PDF export, event overlays, CHIRPS rainfall context on stress alerts, preset locations, UI-managed preset/AOI editors, area recalculation on edit, satellite basemap toggle, place search, field deselection, email magic-link login, and a help panel.
