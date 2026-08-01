@@ -9,7 +9,18 @@ export function hexToRgba(hex, alpha) {
 
 export function formatAxisMonth(ts) {
   const d = new Date(ts)
-  return MONTH_NAMES[d.getMonth()] + ' ' + d.getFullYear()
+  return MONTH_NAMES[d.getMonth()]
+}
+
+export function buildYearLabel(data) {
+  const years = []
+  data.forEach((d) => {
+    const y = new Date(d.date).getFullYear()
+    if (!years.includes(y)) years.push(y)
+  })
+  years.sort((a, b) => a - b)
+  if (years.length === 0) return ''
+  return years.length > 1 ? years[0] + '\u2013' + years[years.length - 1] : String(years[0])
 }
 
 export function buildMonthTicks(data) {
@@ -58,6 +69,7 @@ export function currentDateMarkerPlugin() {
 export function buildChartConfig(ctx, data, index, large, getStageLabel, benchmarkValue) {
   const cfg = INDICES[index] || INDICES.ndvi
   const monthTicks = buildMonthTicks(data)
+  const yearLabel = buildYearLabel(data)
   const gradient = ctx.createLinearGradient(0, 0, 0, ctx.canvas.height || 220)
   gradient.addColorStop(0, '#22c55e')
   gradient.addColorStop(0.4, '#a3e635')
@@ -98,6 +110,15 @@ export function buildChartConfig(ctx, data, index, large, getStageLabel, benchma
       maintainAspectRatio: false,
       interaction: { mode: 'index', intersect: false },
       plugins: {
+        title: {
+          display: !!yearLabel,
+          text: yearLabel,
+          position: 'top',
+          align: 'start',
+          color: '#626c79',
+          font: { size: 10, weight: '600' },
+          padding: { bottom: 4 },
+        },
         legend: {
           display: typeof benchmarkValue === 'number',
           labels: { color: '#9aa4b1', boxWidth: 14, font: { size: 10 } },

@@ -44,15 +44,6 @@
     <div class="detail-section chart-card">
       <div class="chart-card-header">
         <span class="chart-card-title">{{ title }}</span>
-        <div class="index-pills">
-          <button
-            v-for="i in indices"
-            :key="i"
-            class="index-pill"
-            :class="{ active: state.chartIndex === i }"
-            @click="store.setIndex(i)"
-          >{{ INDICES[i].name }}</button>
-        </div>
         <button class="icon-btn" title="Enlarge chart" @click="state.chartModalVisible = true"><i class="ti ti-arrows-maximize"></i></button>
       </div>
       <canvas id="trend-chart" ref="chartCanvas"></canvas>
@@ -86,7 +77,6 @@ import { INDICES, MONTHS } from '../config'
 const chartCanvas = ref(null)
 let chart = null
 
-const indices = Object.keys(INDICES)
 const currentField = computed(() => state.fields.find((f) => f.id === state.currentFieldId) || null)
 const isField = computed(() => !!currentField.value)
 const status = computed(() => fieldStatus[state.currentFieldId] || null)
