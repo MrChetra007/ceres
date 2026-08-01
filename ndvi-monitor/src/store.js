@@ -666,8 +666,13 @@ export function startDraw() {
     cancelDraw()
     return
   }
+  if (!state.supabaseUser) {
+    state.authOverlayVisible = true
+    showToast('Sign in to draw and save a field')
+    return
+  }
   try {
-    const draw = new window.L.Draw.Rectangle(mapReg.map, {
+    const draw = new window.L.Draw.Polygon(mapReg.map, {
       shapeOptions: { color: '#22c98e', weight: 2 },
       showArea: true,
       metric: ['ha'],
@@ -675,7 +680,7 @@ export function startDraw() {
     mapReg.activeDraw = draw
     state.isDrawing = true
     draw.enable()
-    showToast('Draw a rectangle on the map \u2014 press Esc to cancel')
+    showToast('Click to place points, then double-click to finish \u2014 Esc to cancel')
   } catch (e) {
     showToast('Drawing unavailable')
   }
