@@ -275,24 +275,28 @@ that same problem in an even less-tested runtime.
 ### 5.4 Phase 8.4 — Earth Engine service account ⬜
 - In the same GCP project (`gen-lang-client-0978198347`), create a service account, grant it Earth
   Engine access, download the JSON key
-- Store the key as a Cloud Function secret — never commit it, never send it to the browser
+- Store the key as a Supabase Edge Function secret (`supabase secrets set EE_SERVICE_ACCOUNT_JSON=...`)
+  — never commit it, never send it to the browser
 - **Note:** still fine under the noncommercial/Community tier for a scheduled batch job at this scale.
   Revisit Earth Engine's commercial licensing *before* any paid co-op subscription goes live — the
   noncommercial tier explicitly excludes fee-for-service use.
 - **Checkpoint:** a local Python script using `earthengine-api` + the service account key can
   authenticate and pull an NDVI value, no browser/OAuth popup involved
 
-### 5.5 Phase 8.5 — Scheduled worker (Python Cloud Function) ⬜
-- Cloud Scheduler triggers the function on a cadence (start with **once daily** — rice stress doesn't
-  move hour to hour, and it keeps Earth Engine usage low)
-- Function logic:
-  1. Query Supabase (via `service_role` key) for all fields where the owner has a `telegram_chat_id` set
-  2. For each field: recompute NDVI + growth-stage-aware status — **port the same logic already
+### 5.5 Phase 8.5 — Scheduled worker (Supabase pg_cron → Edge Function) ⬜
+- **Scheduling:** Supabase **pg_cron** job fires a SQL function each day (once daily — rice stress
+  doesn't move hour to hour, keeps EE usage low); the SQL function calls the worker Edge Function via
+  `net.http_post` (needs a `service_role`-signed JWT, or `verify_jwt = false` on the function)
+- Worker logic (Supabase Edge Function, Deno — see the backend roadmap for why this replaced Python):
+  1. Authenticate Earth Engine with the service-account key (`@google/earthengine` Node client —
+     verify it imports in Deno, the key risk)
+  2. Query Supabase (via `service_role` key) for all fields where the owner has a `telegram_chat_id` set
+  3. For each field: recompute NDVI + growth-stage-aware status — **port the same logic already
      working in `app.js`** (6-stage phenology thresholds, CHIRPS rainfall context), don't redesign it
-  3. Compare new status to the *last logged* status for that field (see dedup logic below) —
+  4. Compare new status to the *last logged* status for that field (see dedup logic below) —
      **only send a Telegram message on a status change**, not every single day. Daily "still stressed"
      pings are how people mute a bot within a week.
-  4. Insert a row into `alerts_log`; call Telegram `sendMessage` if status changed for the worse
+  5. Insert a row into `alerts_log`; call Telegram `sendMessage` if status changed for the worse
 - **Build the alert text as a template function, not an inline string** —
   `buildAlertMessage(status, ndviValue, rainfallMm, growthStage)` returns the message. This is the
   hook for the AI layer later — see "AI window" note below.
@@ -454,7 +458,7 @@ Fix: load EE via a plain `<script>` tag (Google's own documented approach).
 8. Product pivot: draw/save fields, dashboard, export (Features A–C)
 9. Patches: field area → growth-stage thresholds → LSWI + CHIRPS → UI redesign
 10. Product features: presets/AOI editors, satellite toggle, deselection, geocoder, auto dry-month markers
-11. **Backend (Phase 8, in progress):** Supabase schema+auth ✅ → migrate CRUD off localStorage ✅ → Telegram bot + linking ✅ (Edge Function + app UI, awaiting deployment) → EE service account ⬜ → Python scheduled worker ⬜ → end-to-end test ⬜ (see Part 5)
+11. **Backend (Phase 8, in progress):** Supabase schema+auth ✅ → migrate CRUD off localStorage ✅ → Telegram bot + linking ✅ (Edge Function + app UI, awaiting deployment) → EE service account ⬜ → scheduled worker (Supabase pg_cron → Edge Function) ⬜ → end-to-end test ⬜ (see Part 5)
 12. **Multi-area (Part 6, done):** per-user `aois` in Supabase → Areas dropdown + New Area modal (manual coords or Nominatim place search) → 5-area cap + default seed → Google-only auth + auth card redesign + mobile fixes
 
 ---
@@ -463,4 +467,4 @@ Fix: load EE via a plain `<script>` tag (Google's own documented approach).
 
 Parts 1–4 are complete and feature-stable: NDVI/NDWI/LSWI analysis, time slider with Latest button and scene count indicator, draw & save fields, dashboard with growth-stage-aware health badges, compare mode, PNG/PDF export, event overlays, CHIRPS rainfall context on stress alerts, preset locations, UI-managed preset/AOI editors, area recalculation on edit, satellite basemap toggle, place search, field deselection, and a help panel. **Part 6 adds per-user multi-area support** (Areas dropdown, New Area modal with coords/place search, 5-area cap, first-login default seed). The frontend runs as a Vue 3 + Vite app with CDN-loaded Earth Engine/Leaflet.
 
-**Phase 8 (Part 5) is in progress:** 8.1 (Supabase schema & auth) ✅, 8.2 (migrate fields off localStorage) ✅, and 8.3 (Telegram bot + account linking — Edge Function + app UI, implemented in the repo, awaiting deployment) ✅ are done. Pending: 8.4 EE service account, 8.5 Python scheduled worker, 8.6 end-to-end test. **Part 6 (multi-area support) ✅ is complete.** Also pending separately: the Vue rewrite's final end-to-end smoke test and the design-system redesign (see `PROCESS.md`).
+**Phase 8 (Part 5) is in progress:** 8.1 (Supabase schema & auth) ✅, 8.2 (migrate fields off localStorage) ✅, and 8.3 (Telegram bot + account linking — Edge Function + app UI, implemented in the repo, awaiting deployment) ✅ are done. Pending: 8.4 EE service account, 8.5 scheduled worker (Supabase pg_cron → Edge Function), 8.6 end-to-end test. **Part 6 (multi-area support) ✅ is complete.** Also pending separately: the Vue rewrite's final end-to-end smoke test and the design-system redesign (see `PROCESS.md`).

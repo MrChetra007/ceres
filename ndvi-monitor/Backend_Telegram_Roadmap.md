@@ -23,21 +23,24 @@ to be logged in), and messages Telegram when something's wrong.
 
 ```
 Browser app (existing)  <──────>  Supabase (Postgres + Auth)
-                                         ▲
-                                         │  service_role key (read fields, write alerts)
-                                         │
-                        Cloud Scheduler ──> Python Cloud Function
+                                          ▲
+                                          │  service_role key (read fields, write alerts)
+                                          │
+                    Supabase pg_cron ──> SQL fn ──> Edge Function
                                             (earthengine-api + service account)
-                                                 │
-                                                 ▼
-                                          Telegram Bot API
+                                                  │
+                                                  ▼
+                                           Telegram Bot API
 ```
 
-**Why Python for the scheduled worker, not a Supabase Edge Function:** Edge Functions run Deno, a
-different runtime than the browser or Node. The app already hit one EE/bundler interop bug switching
-off Vite (`Failed to locate function parameters`). Earth Engine's Python client with a service account
-is the most mature, most documented path for server-side use — no reason to risk a second version of
-that same problem in an even less-tested runtime.
+**Scheduling choice:** the scheduled worker runs as a **Supabase pg_cron job** that calls a
+**Supabase Edge Function** (Deno) via `net.http_post` — this avoids a separate Cloud Scheduler +
+Python service entirely and keeps everything inside Supabase. Note the deviation from the earlier
+Python plan: Edge Functions run Deno, a different runtime than the browser or Node. The app already
+hit one EE/bundler interop bug switching off Vite (`Failed to locate function parameters`). The
+Earth Engine **Node** client (`@google/earthengine`) supports service-account auth and is importable
+in Deno, but that import is the one real risk to verify before building Phase 8.5 — if it fails, fall
+back to Python (Cloud Function) with pg_cron still driving the trigger via `net.http_post`.
 
 ---
 
@@ -79,24 +82,31 @@ that same problem in an even less-tested runtime.
 ## Phase 8.4 — Earth Engine service account ⬜
 - In the same GCP project (`gen-lang-client-0978198347`), create a service account, grant it Earth
   Engine access, download the JSON key
-- Store the key as a Cloud Function secret — never commit it, never send it to the browser
+- Store the key as a Supabase Edge Function secret (`supabase secrets set EE_SERVICE_ACCOUNT_JSON=...`)
+  — never commit it, never send it to the browser
 - **Note:** still fine under the noncommercial/Community tier for a scheduled batch job at this scale.
   Revisit Earth Engine's commercial licensing *before* any paid co-op subscription goes live — the
   noncommercial tier explicitly excludes fee-for-service use.
-- **Checkpoint:** a local Python script using `earthengine-api` + the service account key can
+- **Checkpoint:** a script using `earthengine-api` (Node/Deno) + the service account key can
   authenticate and pull an NDVI value, no browser/OAuth popup involved
 
-## Phase 8.5 — Scheduled worker (Python Cloud Function) ⬜
-- Cloud Scheduler triggers the function on a cadence (start with **once daily** — rice stress doesn't
-  move hour to hour, and it keeps Earth Engine usage low)
-- Function logic:
-  1. Query Supabase (via `service_role` key) for all fields where the owner has a `telegram_chat_id` set
-  2. For each field: recompute NDVI + growth-stage-aware status — **port the same logic already
+## Phase 8.5 — Scheduled worker (Supabase pg_cron + Edge Function) ⬜
+- **Scheduling:** use a **Supabase pg_cron job** (Postgres scheduling, no separate Cloud Scheduler) —
+  `cron.schedule(...)` fires a SQL function each day; that function calls the worker via
+  `net.http_post` (the `supabase_http` extension), which needs a `service_role`-signed JWT for the
+  function (or `verify_jwt = false` on the function). Start with **once daily** — rice stress doesn't
+  move hour to hour, and it keeps Earth Engine usage low.
+- **Worker = a Supabase Edge Function** (Deno) instead of a Python Cloud Function:
+  1. Authenticate Earth Engine with the service-account key (`@google/earthengine` Node client
+     supports service-account auth and is importable in Deno — verify this first, it's the one real
+     risk vs. Python)
+  2. Query Supabase (via `service_role` key) for all fields where the owner has a `telegram_chat_id` set
+  3. For each field: recompute NDVI + growth-stage-aware status — **port the same logic already
      working in `app.js`** (6-stage phenology thresholds, CHIRPS rainfall context), don't redesign it
-  3. Compare new status to the *last logged* status for that field (see dedup logic below) —
+  4. Compare new status to the *last logged* status for that field (see dedup logic below) —
      **only send a Telegram message on a status change**, not every single day. Daily "still stressed"
      pings are how people mute a bot within a week.
-  4. Insert a row into `alerts_log`; call Telegram `sendMessage` if status changed for the worse
+  5. Insert a row into `alerts_log`; call Telegram `sendMessage` if status changed for the worse
 - **Build the alert text as a template function, not an inline string** —
   `buildAlertMessage(status, ndviValue, rainfallMm, growthStage)` returns the message. This is the
   hook for the AI layer later — see "AI window" note below.
@@ -133,24 +143,28 @@ season's alert log" during a pitch) while only pinging Telegram on genuine chang
 
 ## Suggested build order & rough time
 
-1. Supabase schema + auth — 2–3 days
-2. Migrate app CRUD off localStorage — 2–3 days
-3. Telegram bot + linking flow — 1–2 days
-4. Earth Engine service account + Python Cloud Function skeleton — 2–3 days
-5. Port stress-check logic to Python + wire up Telegram send — 3–4 days
-6. End-to-end test + dedup tuning — 1–2 days
+1. Supabase schema + auth — done ✅
+2. Migrate app CRUD off localStorage — done ✅
+3. Telegram bot + linking flow — implemented ✅ (needs deployment: `migration2.sql`, function deploy, token secret, webhook registration)
+4. Earth Engine service account — create in GCP, store JSON as Edge Function secret
+5. Verify `@google/earthengine` imports & authenticates in Deno (the key risk — see scheduling note above)
+6. Scheduled worker: pg_cron → `net.http_post` → Edge Function that ports the app's stress-check logic + sends Telegram — 3–4 days
+7. End-to-end test + dedup tuning — 1–2 days
 
-**Total: roughly 2–3 weeks of focused work.** Fits inside the AIM 2-month window alongside thesis/
+**Remaining roughly 1–1.5 weeks of focused work.** Fits inside the AIM 2-month window alongside thesis/
 teaching load, with time left over for pitch prep.
 
 ## Known risks to plan around
-- **EE service-account auth** — mature in Python, but budget a day for first-time setup friction
-  (IAM permissions, enabling the right APIs on the service account)
+- **EE service-account auth in Deno** — the `@google/earthengine` Node client is the key risk; budget a
+  day for first-time setup friction (IAM permissions, enabling the right APIs, Deno import). If it
+  fails, fall back to a Python Cloud Function with pg_cron still triggering via `net.http_post`
+- **pg_cron → function auth** — the SQL job must call the Edge Function with a `service_role`-signed
+  JWT (or the function runs `verify_jwt = false`); test the HTTP call before wiring the schedule
 - **Alert fatigue** — the dedup logic above is a starting point; watch real usage and adjust the
   "worse than" comparison if it's too chatty or too quiet
 - **EE noncommercial fee-for-service restriction** — fine for now, becomes a real line item the
   moment a co-op actually pays for this
-- **Free tier limits** — Supabase free tier and a once-daily Cloud Function are both comfortably
+- **Free tier limits** — Supabase free tier and a once-daily job are both comfortably
   within free quotas at this scale; recheck if usage grows past a handful of test fields
 
 ---
