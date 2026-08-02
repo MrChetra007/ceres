@@ -50,6 +50,13 @@
         </div>
       </div>
 
+      <button
+        class="glass-pill"
+        :class="{ active: state.telegramChatId }"
+        title="Telegram alerts"
+        @click="openTelegram"
+      ><i class="ti ti-brand-telegram"></i><span class="pill-text">Telegram</span><i class="tg-pill-dot" :class="{ on: state.telegramChatId }"></i></button>
+
       <button class="glass-pill" title="How this works" @click="state.helpVisible = true">
         <i class="ti ti-help"></i><span class="pill-text">Help</span>
       </button>
@@ -67,6 +74,11 @@
         <button v-if="state.supabaseUser" class="sign-out-btn" @click.stop="doSignOut">Sign out</button>
         <div class="topbar-user-menu" v-show="userMenuOpen" @click.stop>
           <span class="user-menu-email">{{ userLabel }}</span>
+          <button class="user-menu-item" @click="openTelegram">
+            <i class="ti ti-brand-telegram"></i>
+            Telegram alerts
+            <span class="tg-status-dot" :class="{ on: state.telegramChatId }"></span>
+          </button>
           <button v-if="state.supabaseUser" class="user-menu-item sign-out" @click="doSignOut">
             <i class="ti ti-logout"></i> Sign out
           </button>
@@ -109,6 +121,15 @@ function onUserClick(e) {
 function doSignOut() {
   userMenuOpen.value = false
   store.signOut()
+}
+
+function openTelegram() {
+  userMenuOpen.value = false
+  if (!state.supabaseUser) {
+    store.showAuthOverlay()
+    return
+  }
+  store.openTelegramModal()
 }
 
 function toggleExportMenu() {

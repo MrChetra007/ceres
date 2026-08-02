@@ -256,15 +256,20 @@ that same problem in an even less-tested runtime.
 - `updateFieldStatus()` guarded by `eeReady` so dashboard renders before EE init
 - **Checkpoint:** draw a field, refresh the page (or open on a different device, same login) — field persists via Supabase, not the browser
 
-### 5.3 Phase 8.3 — Telegram bot + account linking ⬜
-- Create the bot via **@BotFather** in Telegram → get bot token → store as a secret (Supabase
-  Vault or Cloud Function env var, never in client code)
-- In-app: "Connect Telegram" button generates a short-lived code, shows a deep link
-  `t.me/<YourBot>?start=<code>`
-- Bot webhook (can be a tiny Supabase Edge Function just for this one piece — it's simple request/
-  response, no Earth Engine involved) receives `/start <code>`, matches it in `link_codes`, saves
-  `chat_id` onto the user's `profiles` row
-- **Checkpoint:** tapping "Connect Telegram" in the app → messaging the bot → `profiles.telegram_chat_id`
+### 5.3 Phase 8.3 — Telegram bot + account linking ✅ (implemented in repo; needs deployment)
+- In-app: "Telegram alerts" entry in the top-right user menu → modal generates a short-lived code and
+  shows a deep link `t.me/<bot>?start=<code>` (bot username from `VITE_TELEGRAM_BOT_USERNAME` /
+  `TELEGRAM_BOT_USERNAME` in `src/config.js`); polls `profiles.telegram_chat_id` every 3s until linked
+- Bot webhook = **Supabase Edge Function** `supabase/functions/telegram-webhook/index.ts` (Deno,
+  `verify_jwt = false`): receives `/start <code>`, matches it in `link_codes` via `service_role`
+  (bypasses RLS — no public select-by-code policy exists), redeems through the `redeem_link_code()`
+  RPC (migration2.sql) that atomically sets `profiles.telegram_chat_id` and marks the code used
+- `migration2.sql` guard trigger: a logged-in user can only *clear* their `telegram_chat_id`
+  (disconnect); the chat id is set only by the bot
+- **Deploy:** run `migration2.sql` → `supabase functions deploy telegram-webhook` →
+  `supabase secrets set TELEGRAM_BOT_TOKEN=...` → Telegram `setWebhook` to
+  `https://wopwwtnvqyomiwbsxiks.functions.supabase.co/telegram-webhook`
+- **Checkpoint:** tapping "Telegram alerts" in the app → messaging the bot → `profiles.telegram_chat_id`
   populates for that user
 
 ### 5.4 Phase 8.4 — Earth Engine service account ⬜
@@ -449,7 +454,7 @@ Fix: load EE via a plain `<script>` tag (Google's own documented approach).
 8. Product pivot: draw/save fields, dashboard, export (Features A–C)
 9. Patches: field area → growth-stage thresholds → LSWI + CHIRPS → UI redesign
 10. Product features: presets/AOI editors, satellite toggle, deselection, geocoder, auto dry-month markers
-11. **Backend (Phase 8, in progress):** Supabase schema+auth → migrate CRUD off localStorage → Telegram bot + linking → EE service account → Python scheduled worker → end-to-end test (see Part 5)
+11. **Backend (Phase 8, in progress):** Supabase schema+auth ✅ → migrate CRUD off localStorage ✅ → Telegram bot + linking ✅ (Edge Function + app UI, awaiting deployment) → EE service account ⬜ → Python scheduled worker ⬜ → end-to-end test ⬜ (see Part 5)
 12. **Multi-area (Part 6, done):** per-user `aois` in Supabase → Areas dropdown + New Area modal (manual coords or Nominatim place search) → 5-area cap + default seed → Google-only auth + auth card redesign + mobile fixes
 
 ---
@@ -458,4 +463,4 @@ Fix: load EE via a plain `<script>` tag (Google's own documented approach).
 
 Parts 1–4 are complete and feature-stable: NDVI/NDWI/LSWI analysis, time slider with Latest button and scene count indicator, draw & save fields, dashboard with growth-stage-aware health badges, compare mode, PNG/PDF export, event overlays, CHIRPS rainfall context on stress alerts, preset locations, UI-managed preset/AOI editors, area recalculation on edit, satellite basemap toggle, place search, field deselection, and a help panel. **Part 6 adds per-user multi-area support** (Areas dropdown, New Area modal with coords/place search, 5-area cap, first-login default seed). The frontend runs as a Vue 3 + Vite app with CDN-loaded Earth Engine/Leaflet.
 
-**Phase 8 (Part 5) is in progress:** 8.1 (Supabase schema & auth) ✅ and 8.2 (migrate fields off localStorage) ✅ are done. Pending: 8.3 Telegram bot + account linking, 8.4 EE service account, 8.5 scheduled Python worker, 8.6 end-to-end test. **Part 6 (multi-area support) ✅ is complete.** Also pending separately: the Vue rewrite's final end-to-end smoke test and the design-system redesign (see `PROCESS.md`).
+**Phase 8 (Part 5) is in progress:** 8.1 (Supabase schema & auth) ✅, 8.2 (migrate fields off localStorage) ✅, and 8.3 (Telegram bot + account linking — Edge Function + app UI, implemented in the repo, awaiting deployment) ✅ are done. Pending: 8.4 EE service account, 8.5 Python scheduled worker, 8.6 end-to-end test. **Part 6 (multi-area support) ✅ is complete.** Also pending separately: the Vue rewrite's final end-to-end smoke test and the design-system redesign (see `PROCESS.md`).

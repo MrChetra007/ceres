@@ -43,10 +43,10 @@ that same problem in an even less-tested runtime.
 
 ## Phase 8.1 — Supabase schema & auth ✅
 - Supabase project `https://wopwwtnvqyomiwbsxiks.supabase.co` (anon key in `.env` / `app.js`)
-- Auth: **email magic link** (free, built into Supabase Auth)
+- Auth: **Google OAuth** (single provider — email magic-link/password forms removed; Earth Engine keeps its own separate Google OAuth popup)
 - `schema.sql` updated: `fields.owner_id` now defaults to `auth.uid()`, added `set_updated_at()` trigger
-- App: supabase-js CDN added, auth overlay reworked (email magic link + EE sign-in side by side), user menu with sign-in/sign-out, `onAuthStateChange` auto-loads fields
-- **Checkpoint:** can sign up, log in, and see an empty `fields` list from Supabase in the Supabase dashboard table view
+- App: supabase-js CDN added, auth overlay reworked into a dark-glass card with one "Sign in with Google" button for Supabase + one for Earth Engine, user menu with sign-in/sign-out, `onAuthStateChange` auto-loads fields and areas
+- **Checkpoint:** can sign in with Google and see an empty `fields` list from Supabase in the Supabase dashboard table view
 
 ## Phase 8.2 — Migrate the app off localStorage ✅
 - `saveField()` / `getSavedFields()` / `deleteField()` / `loadField()` / `loadFieldById()` now use Supabase (`fieldsCache` in-memory mirror + async CRUD); same function names, new implementation
@@ -55,15 +55,25 @@ that same problem in an even less-tested runtime.
 - `updateFieldStatus()` guarded by `eeReady` so dashboard renders before EE init
 - **Checkpoint:** draw a field, refresh the page (or open on a different device, same login) — field persists via Supabase, not the browser
 
-## Phase 8.3 — Telegram bot + account linking ⬜
+## Phase 8.3 — Telegram bot + account linking ✅ (implemented in the repo; needs deployment)
 - Create the bot via **@BotFather** in Telegram → get bot token → store as a secret (Supabase
   Vault or Cloud Function env var, never in client code)
-- In-app: "Connect Telegram" button generates a short-lived code, shows a deep link
-  `t.me/<YourBot>?start=<code>`
-- Bot webhook (can be a tiny Supabase Edge Function just for this one piece — it's simple request/
-  response, no Earth Engine involved) receives `/start <code>`, matches it in `link_codes`, saves
-  `chat_id` onto the user's `profiles` row
-- **Checkpoint:** tapping "Connect Telegram" in the app → messaging the bot → `profiles.telegram_chat_id`
+- In-app: "Telegram alerts" entry in the top-right user menu opens a modal that generates a
+  short-lived code and shows a deep link `t.me/<bot>?start=<code>` (bot username from
+  `VITE_TELEGRAM_BOT_USERNAME` / `TELEGRAM_BOT_USERNAME` in `src/config.js`); the app polls the
+  user's `profiles.telegram_chat_id` every 3s until it links, then shows "Connected"
+- Bot webhook = **Supabase Edge Function** `supabase/functions/telegram-webhook/index.ts`
+  (Deno, `verify_jwt = false`): receives `/start <code>`, matches it in `link_codes` (via
+  `service_role`, which bypasses RLS — no public select-by-code policy exists), and redeems it
+  through the `redeem_link_code()` RPC (migration2.sql) which atomically sets the user's
+  `telegram_chat_id` and marks the code used
+- `migration2.sql` also adds a guard trigger so a logged-in user can only ever *clear* their
+  `telegram_chat_id` (disconnect) — the actual chat id is set only by the bot
+- Deploy steps: run `migration2.sql` in the SQL editor → `supabase functions deploy
+  telegram-webhook` → `supabase secrets set TELEGRAM_BOT_TOKEN=...` → register the webhook
+  `https://wopwwtnvqyomiwbsxiks.functions.supabase.co/telegram-webhook` via Telegram's
+  `setWebhook` API
+- **Checkpoint:** tapping "Telegram alerts" in the app → messaging the bot → `profiles.telegram_chat_id`
   populates for that user
 
 ## Phase 8.4 — Earth Engine service account ⬜

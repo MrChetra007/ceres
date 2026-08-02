@@ -91,3 +91,27 @@ export async function signInWithGoogle() {
 export async function signOut() {
   return sb.auth.signOut()
 }
+
+// ---------------------------------------------------------------------------
+// Telegram linking (Phase 8.3)
+// ---------------------------------------------------------------------------
+export async function getMyProfile() {
+  const { data, error } = await sb.from('profiles').select('telegram_chat_id').maybeSingle()
+  if (error) throw error
+  return data || { telegram_chat_id: null }
+}
+
+export async function insertLinkCode(code, userId, expiresAt) {
+  const { data, error } = await sb
+    .from('link_codes')
+    .insert({ code, user_id: userId, expires_at: expiresAt })
+    .select()
+    .single()
+  if (error) throw error
+  return data
+}
+
+export async function clearTelegramChatId() {
+  const { error } = await sb.from('profiles').update({ telegram_chat_id: null })
+  if (error) throw error
+}

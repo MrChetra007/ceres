@@ -4,6 +4,7 @@ import { jsPDF } from 'jspdf'
 import {
   EE_PROJECT_ID, CLIENT_ID, MONTHS, DEFAULT_AOI, DEFAULT_PRESETS,
   RICE_GROWTH_STAGES, EVENTS, EVENT_COLORS, INDICES, MAP_CENTER, MAP_ZOOM,
+  TELEGRAM_BOT_USERNAME, TELEGRAM_LINK_TTL_MS,
 } from './config'
 import * as ee from './services/earthEngine'
 import { sb } from './services/supabase'
@@ -63,6 +64,9 @@ export const state = reactive({
   aoiCoords: DEFAULT_AOI.slice(),
   aois: [],
   selectedAoiId: null,
+  telegramChatId: null,
+  telegramModalVisible: false,
+  telegramLinking: false,
 })
 
 export const currentGeometry = shallowRef(null)
@@ -250,6 +254,94 @@ export async function deleteAoi(id) {
     }
   } catch (err) {
     showToast('Failed to delete area: ' + err.message)
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Telegram linking (Phase 8.3)
+// ---------------------------------------------------------------------------
+let telegramPollTimer = null
+
+export async function loadTelegramChatId() {
+  if (!state.supabaseUser) {
+    state.telegramChatId = null
+    return
+  }
+  try {
+    const profile = await supabase.getMyProfile()
+    state.telegramChatId = profile?.telegram_chat_id || null
+  } catch (err) {
+    state.telegramChatId = null
+  }
+}
+
+function generateLinkCode() {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+  let code = ''
+  const rand = new Uint32Array(1)
+  for (let i = 0; i < 6; i++) {
+    crypto.getRandomValues(rand)
+    code += chars[rand[0] % chars.length]
+  }
+  return code
+}
+
+export function openTelegramModal() {
+  state.telegramModalVisible = true
+  loadTelegramChatId()
+}
+
+export function closeTelegramModal() {
+  state.telegramModalVisible = false
+  stopTelegramPolling()
+}
+
+export async function connectTelegram() {
+  if (!state.supabaseUser) { showToast('Sign in to connect Telegram'); return null }
+  const code = generateLinkCode()
+  const expiresAt = new Date(Date.now() + TELEGRAM_LINK_TTL_MS).toISOString()
+  try {
+    await supabase.insertLinkCode(code, state.supabaseUser.id, expiresAt)
+  } catch (err) {
+    showToast('Failed to start linking: ' + err.message)
+    return null
+  }
+  state.telegramLinking = true
+  startTelegramPolling()
+  return {
+    code,
+    link: 'https://t.me/' + TELEGRAM_BOT_USERNAME + '?start=' + code,
+    expiresAt,
+  }
+}
+
+function startTelegramPolling() {
+  stopTelegramPolling()
+  telegramPollTimer = setInterval(async () => {
+    await loadTelegramChatId()
+    if (state.telegramChatId) {
+      stopTelegramPolling()
+      state.telegramLinking = false
+      showToast('Telegram linked \u2014 alerts will arrive there')
+    }
+  }, 3000)
+}
+
+export function stopTelegramPolling() {
+  if (telegramPollTimer) {
+    clearInterval(telegramPollTimer)
+    telegramPollTimer = null
+  }
+}
+
+export async function disconnectTelegram() {
+  if (!state.supabaseUser) return
+  try {
+    await supabase.clearTelegramChatId()
+    state.telegramChatId = null
+    showToast('Telegram disconnected')
+  } catch (err) {
+    showToast('Failed to disconnect: ' + err.message)
   }
 }
 
@@ -562,6 +654,7 @@ sb.auth.onAuthStateChange((event, session) => {
     if (session) {
       loadFieldsFromSupabase()
       loadAoisFromSupabase()
+      loadTelegramChatId()
       if (localStorage.getItem('ndvi_fields') && !localStorage.getItem('ndvi_import_skipped')) {
         importLocalFieldsIfAny()
       }
@@ -571,6 +664,9 @@ sb.auth.onAuthStateChange((event, session) => {
     state.aois = []
     state.selectedAoiId = null
     state.aoiCoords = DEFAULT_AOI.slice()
+    state.telegramChatId = null
+    state.telegramLinking = false
+    stopTelegramPolling()
     if (mapReg.aoiRectangle) {
       if (mapReg.map) mapReg.map.removeLayer(mapReg.aoiRectangle)
       mapReg.aoiRectangle = null

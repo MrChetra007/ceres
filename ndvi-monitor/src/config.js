@@ -4,6 +4,10 @@ export const CLIENT_ID = '355514869488-q3v52vvkb7c3gikr0og89o26m51ev403.apps.goo
 export const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'https://wopwwtnvqyomiwbsxiks.supabase.co'
 export const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndvcHd3dG52cXlvbWl3YnN4aWtzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk1NjAyMzcsImV4cCI6MjA5NTEzNjIzN30.2Wl7erPZYi5iuqrF-4UvMObDEYMmt6M86Pg3p89YGeU'
 
+// Telegram alerts (Phase 8.3)
+export const TELEGRAM_BOT_USERNAME = import.meta.env.VITE_TELEGRAM_BOT_USERNAME || 'YOUR_TELEGRAM_BOT'
+export const TELEGRAM_LINK_TTL_MS = 10 * 60 * 1000
+
 export const DEFAULT_AOI = [102.985, 12.845, 103.048, 12.898]
 export const MAP_CENTER = [12.8715, 103.0165]
 export const MAP_ZOOM = 14

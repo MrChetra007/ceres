@@ -18,6 +18,7 @@
   <ChartModal />
   <AuthOverlay />
   <DatePickerModal />
+  <TelegramModal />
 
   <div id="toast" class="toast" :class="{ show: !!state.toast }">{{ state.toast }}</div>
 </template>
@@ -39,6 +40,7 @@ import HelpModal from './components/HelpModal.vue'
 import ChartModal from './components/ChartModal.vue'
 import AuthOverlay from './components/AuthOverlay.vue'
 import DatePickerModal from './components/DatePickerModal.vue'
+import TelegramModal from './components/TelegramModal.vue'
 
 const sidebarRef = ref(null)
 let statusTimer = null
