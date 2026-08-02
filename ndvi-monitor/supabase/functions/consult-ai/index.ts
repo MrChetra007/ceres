@@ -105,21 +105,28 @@ In 2-3 short sentences: describe what the numbers suggest, and name 1-2 possible
         }),
       },
     );
+    console.log("Gemini response status:", geminiRes.status);
     const geminiData = await geminiRes.json();
-    const explanation =
-      geminiData?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ||
-      "Could not generate an explanation right now — please try again.";
+    const explanation = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+    if (!explanation) {
+      console.error(
+        "Gemini returned no usable text. Full response:",
+        JSON.stringify(geminiData),
+      );
+    }
+    const finalExplanation =
+      explanation || "Could not generate an explanation right now — please try again.";
 
     // 4. Cache it
     await supabase.from("ai_explanations").upsert({
       field_id: fieldId,
       ndvi_value: ndviValue,
       status,
-      explanation,
+      explanation: finalExplanation,
       created_at: new Date().toISOString(),
     });
 
-    return jsonResponse({ ok: true, explanation, cached: false });
+    return jsonResponse({ ok: true, explanation: finalExplanation, cached: false });
   } catch (e) {
     console.error(e);
     return jsonResponse({ ok: false, error: String(e) }, 500);
