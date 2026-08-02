@@ -36,11 +36,12 @@
       </div>
 
       <div class="detail-section ai-card">
-        <button class="ai-consult-btn" :disabled="consultingAi" @click="consultAi">
+        <button class="ai-consult-btn" :disabled="consultingAi || noSceneData" @click="consultAi">
           <span v-if="consultingAi" class="ai-spinner"></span>
           <i v-else class="ti ti-sparkles"></i>
           {{ consultingAi ? 'Consulting AI...' : 'Consult AI' }}
         </button>
+        <p v-if="noSceneData" class="ai-note no-scene-note">No satellite data for this month — try a recent month with data.</p>
         <div v-if="aiExplanation" class="ai-answer">
           <p class="detail-card-label">AI agronomist</p>
           <p class="ai-text">{{ aiExplanation }}</p>
@@ -98,6 +99,9 @@ const currentField = computed(() => state.fields.find((f) => f.id === state.curr
 const isField = computed(() => !!currentField.value)
 const status = computed(() => fieldStatus[state.currentFieldId] || null)
 const trend = computed(() => fieldTrends[state.currentFieldId] || null)
+// Mirrors the time slider's "no scenes" badge: no scenes for the selected month
+// AND no request currently in flight (so it's permanently unavailable, not loading).
+const noSceneData = computed(() => !state.loading && state.sceneCount.main === 0)
 
 const title = computed(() => (isField.value ? currentField.value.name : INDICES[state.chartIndex].name + ' Trend'))
 const statusText = computed(() => (status.value && status.value.badgeText) || '\u2014')
@@ -189,6 +193,10 @@ async function consultAi() {
     store.showToast('Satellite data is still loading \u2014 try again in a moment')
     return
   }
+  if (noSceneData.value) {
+    store.showToast('No satellite data for this month \u2014 try a recent month with data.')
+    return
+  }
   const geom = field.geojson && (field.geojson.geometry || field.geojson)
   if (!geom || !geom.coordinates) {
     store.showToast('Couldn\'t get an explanation right now \u2014 please try again.')
@@ -206,6 +214,11 @@ async function consultAi() {
     ndviValue = ndvi
     lswiValue = lswi
     if (rainfallMm == null) rainfallMm = await getRainfall(geometry)
+    if (ndviValue == null) {
+      consultingAi.value = false
+      store.showToast('No recent satellite data for this field yet \u2014 check back in a few days.')
+      return
+    }
   } catch (e) {
     consultingAi.value = false
     store.showToast('Couldn\'t get an explanation right now \u2014 please try again.')
@@ -250,6 +263,10 @@ async function consultAi() {
     try { body = await res.json() } catch (e) {}
     if (res.status === 429 || (body && body.ok === false && body.error === 'daily_limit_reached')) {
       store.showToast('You\'ve used today\'s AI explanations \u2014 more tomorrow.')
+      return
+    }
+    if (body && body.error === 'missing_data') {
+      store.showToast('No recent satellite data for this field yet \u2014 check back in a few days.')
       return
     }
     if (body && body.ok && body.explanation) {

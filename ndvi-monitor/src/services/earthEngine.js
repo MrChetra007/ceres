@@ -108,17 +108,31 @@ export function getDryMonths(months, geometry, cb) {
 export function getRecentIndexValue(geometry, index, cb) {
   const e = ee()
   const cfg = INDICES[index] || INDICES.ndvi
-  const start = e.Date(Date.now()).advance(-1, 'month')
+  // Same 14-month window the trend chart uses — a hard 30-day window returns
+  // zero scenes whenever the latest cloud-free image is older than a month
+  // (common in Cambodia's rainy season), which silently showed "No recent data"
+  // while the trend/stress cards had real values. Sort desc + first() so we
+  // report the most recent available value, consistent with the chart's last point.
+  const start = e.Date(Date.now()).advance(-14, 'month')
   const end = e.Date(Date.now())
-  const collection = s2Collection(geometry, start, end)
+  const collection = s2Collection(geometry, start, end).sort('system:time_start', false)
   collection.size().evaluate((count) => {
     if (count === 0) { cb({ count: 0, value: null }); return }
-    const recent = collection.median().normalizedDifference(cfg.bands).rename(cfg.name)
+    const recent = collection.first().normalizedDifference(cfg.bands).rename(cfg.name)
     recent.reduceRegion({ reducer: e.Reducer.mean(), geometry, scale: 10, maxPixels: 1e9 })
-      .evaluate((result) => {
-        const value = result && result[cfg.name]
-        cb({ count, value: value == null || value === undefined ? null : value })
-      })
+      .evaluate(
+        (result) => {
+          const value = result && result[cfg.name]
+          cb({ count, value: value == null || value === undefined ? null : value })
+        },
+        (err) => {
+          console.error('getRecentIndexValue.reduceRegion failed:', err)
+          cb({ count: 0, value: null })
+        },
+      )
+  }, (err) => {
+    console.error('getRecentIndexValue.size failed:', err)
+    cb({ count: 0, value: null })
   })
 }
 
@@ -132,5 +146,11 @@ export function getRainfallMm(geometry, daysBack, cb) {
     .filterBounds(geometry)
     .sum()
     .reduceRegion({ reducer: e.Reducer.mean(), geometry, scale: 5000, maxPixels: 1e9 })
-    .evaluate((result) => cb(result && result.precipitation))
+    .evaluate(
+      (result) => cb(result && result.precipitation),
+      (err) => {
+        console.error('getRainfallMm failed:', err)
+        cb(null)
+      },
+    )
 }

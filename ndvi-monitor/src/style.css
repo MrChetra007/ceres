@@ -2918,6 +2918,11 @@ body {
   color: var(--text-faint);
 }
 
+.ai-note.no-scene-note {
+  margin-top: 10px;
+  color: var(--amber);
+}
+
 /* ---- Stage 2 responsive (spec section 5) ---- */
 @media (max-width: 1024px) {
   #sidebar { width: 280px; }
