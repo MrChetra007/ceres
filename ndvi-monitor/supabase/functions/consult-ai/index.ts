@@ -91,7 +91,7 @@ async function callDeepSeek(prompt: string): Promise<string | null> {
           Authorization: `Bearer ${DEEPSEEK_KEY}`,
         },
         body: JSON.stringify({
-          model: "deepseek-chat",
+          model: "deepseek-v4-flash",
           messages: [{ role: "user", content: prompt }],
           max_tokens: 500,
           temperature: 0.4,

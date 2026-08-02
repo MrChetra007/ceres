@@ -87,7 +87,7 @@ import * as store from '../store'
 import { getOrComputeArea, formatHectares } from '../store'
 import { buildChartConfig } from '../services/chart'
 import { INDICES, MONTHS, CONSULT_AI_URL, CONSULT_AI_LANG } from '../config'
-import { sb } from '../services/supabase'
+import { sb, requireSession } from '../services/supabase'
 import { getRecentIndexValue, getRainfallMm } from '../services/earthEngine'
 
 const chartCanvas = ref(null)
@@ -240,11 +240,13 @@ async function consultAi() {
   }
   const healthStatus = status.value ? status.value.badgeText : ''
 
-  const session = await sb.auth.getSession()
-  const token = session && session.data && session.data.session ? session.data.session.access_token : null
-  if (!token) {
+  let token
+  try {
+    const session = await requireSession()
+    token = session.access_token
+  } catch (e) {
     consultingAi.value = false
-    store.showToast('Sign in to consult the AI agronomist')
+    store.showToast(e.message || 'Please sign in to continue')
     return
   }
 
