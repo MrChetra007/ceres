@@ -664,10 +664,19 @@ export async function signOut() {
   await supabase.signOut()
 }
 
+// Last user id whose fields/AOIs were loaded from Supabase. Guards against
+// re-loading on `SIGNED_IN` events fired by supabase-js when it recovers an
+// already-known session on every tab focus (visibilitychange), which would
+// otherwise re-run `loadAoisFromSupabase()` -> `applyAoiBounds()` and re-compute
+// the NDVI map ("Reloading NDVI for ...") each time the user returns to the tab.
+let lastLoadedUserId = null
+
 sb.auth.onAuthStateChange((event, session) => {
-  state.supabaseUser = session ? session.user : null
+  const user = session ? session.user : null
+  state.supabaseUser = user
   if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
-    if (session) {
+    if (user && user.id !== lastLoadedUserId) {
+      lastLoadedUserId = user.id
       loadFieldsFromSupabase()
       loadAoisFromSupabase()
       loadTelegramChatId()
@@ -676,6 +685,7 @@ sb.auth.onAuthStateChange((event, session) => {
       }
     }
   } else if (event === 'SIGNED_OUT') {
+    lastLoadedUserId = null
     state.fields = []
     state.aois = []
     state.selectedAoiId = null
