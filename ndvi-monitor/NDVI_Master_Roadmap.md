@@ -23,7 +23,7 @@ satellite imagery). A visitor can:
 does the satellite math on Google's machines; your app just asks for images and displays them.
 
 > **Update (Part 5):** this "no login/accounts, browser-only" story has since evolved. Saved fields
-> are synced through **Supabase** (email magic-link login), and a scheduled **Telegram alert** backend
+> are synced through **Supabase** (**Google sign-in**), and a scheduled **Telegram alert** backend
 > is being added. Everything in Parts 1–4 is the browser-only journey; Part 5 is the server-side step.
 
 **Vision evolution:** started as a tech-show demo → became a simple, real single-user tool
@@ -244,10 +244,10 @@ that same problem in an even less-tested runtime.
 
 ### 5.1 Phase 8.1 — Supabase schema & auth ✅
 - Supabase project `https://wopwwtnvqyomiwbsxiks.supabase.co` (anon key in `.env` / `app.js`)
-- Auth: **email magic link** (free, built into Supabase Auth)
+- Auth: **Google OAuth** (single provider — the email magic-link/password forms were removed; Earth Engine keeps its own separate Google OAuth popup)
 - `schema.sql` updated: `fields.owner_id` now defaults to `auth.uid()`, added `set_updated_at()` trigger
-- App: supabase-js CDN added, auth overlay reworked (email magic link + EE sign-in side by side), user menu with sign-in/sign-out, `onAuthStateChange` auto-loads fields
-- **Checkpoint:** can sign up, log in, and see an empty `fields` list from Supabase in the Supabase dashboard table view
+- App: supabase-js CDN added, auth overlay reworked into a dark-glass card with one "Sign in with Google" button for Supabase + one for Earth Engine, user menu with sign-in/sign-out, `onAuthStateChange` auto-loads fields and areas
+- **Checkpoint:** can sign in with Google and see an empty `fields` list from Supabase in the Supabase dashboard table view
 
 ### 5.2 Phase 8.2 — Migrate the app off localStorage ✅
 - `saveField()` / `getSavedFields()` / `deleteField()` / `loadField()` / `loadFieldById()` now use Supabase (`fieldsCache` in-memory mirror + async CRUD); same function names, new implementation
@@ -349,6 +349,27 @@ logic. Do not build this now — only implement it if explicitly asked to start 
 
 ---
 
+## Part 6 — Multi-area support (per-user AOIs) ✅
+
+Replaces the single hardcoded/localStorage AOI with per-user, multi-AOI support backed by Supabase.
+
+### Feature: Areas dropdown + New Area modal
+- `aois` table (`owner_id`, `name`, `bounds` jsonb, `created_at`), capped at **5 per user** via a DB trigger; nullable `aoi_id` added to `fields` (schema-ready, not wired to the UI yet)
+- CRUD mirrors the fields pattern: `getAois()` / `createAoi()` / `updateAoi()` / `deleteAoi()` in `store.js`, backed by `loadAois` / `insertAoi` / `updateAoi` / `deleteAoi` in `src/services/supabase.js`; in-memory `state.aois` mirror
+- **"Areas" dropdown** in the BandPanel: lists saved areas by name (select → recenter + re-clip NDVI/NDWI/LSWI on both maps), trash to delete, "+ New area"
+- **New Area modal** (`AoiEditor.vue`): name field + West/South/East/North inputs (prefilled from current area) **or** a Nominatim place search that auto-fills the box from the matched place's bounding box
+- **5-area cap handled in UI**: "+ New area" hidden and the map-icon button gated once 5 areas exist; insert errors matching the limit → toast "Limit of 5 areas reached"
+- **Default seed**: on first login with no areas, auto-creates "Battambang (default)" from `[102.985, 12.845, 103.048, 12.898]` so the map is never empty
+- `ndvi_aoi` localStorage key removed; `state.aoiCoords` now derives from the selected AOI row via `applyAoiBounds()` (redraws the red dashed rectangle, recenters, recomputes dry months + both maps)
+- Help modal updated with an "Areas of interest" section
+
+### Supporting UX work (this session)
+- Supabase auth simplified to **Google OAuth only** (email magic-link/password forms removed)
+- Auth overlay redesigned to the dark-glass design system (brand icon, Google-logo buttons with captions, ✕ close)
+- Mobile fixes: TopBar user chip collapses to an icon + dropdown at ≤780px; `.time-panel` z-index lowered to 25 so the Export dropdown paints above it; redundant Street/Satellite toggle hidden at ≤480px
+
+---
+
 ## Stack notes (migration + current state)
 
 ### Why no Vite
@@ -376,14 +397,14 @@ Fix: load EE via a plain `<script>` tag (Google's own documented approach).
 | Frontend | Plain HTML/CSS/JS (historical) → **Vue 3 + Vite** (current, `src/`) |
 | Map | Leaflet + OpenStreetMap tiles / Esri World Imagery |
 | Satellite compute | Google Earth Engine (JS client via CDN `<script>` tag, v1.7.36) |
-| Auth | Earth Engine OAuth popup (`ee.data.authenticateViaOauth`) + **Supabase email magic link** |
+| Auth | Earth Engine OAuth popup (`ee.data.authenticateViaOauth`) + **Supabase Google OAuth** |
 | Geocoding | Nominatim (OpenStreetMap free API) |
 | Drawing | leaflet-draw (v1.0.4) |
 | Area calc | turf.js (v6) |
 | Charts | Chart.js (v4.4.7) |
 | PDF | jsPDF |
 | Icons | Tabler Icons (`@tabler/icons-webfont`) |
-| Storage | localStorage (auth token, AOI coords, presets) → **Supabase** (fields, alerts) |
+| Storage | localStorage (EE token, presets) → **Supabase** (fields, areas, alerts) |
 
 ### OAuth setup (Google Cloud Console)
 - OAuth 2.0 Client ID (Web application type): `355514869488-q3v52vvkb7c3gikr0og89o26m51ev403.apps.googleusercontent.com`
@@ -429,11 +450,12 @@ Fix: load EE via a plain `<script>` tag (Google's own documented approach).
 9. Patches: field area → growth-stage thresholds → LSWI + CHIRPS → UI redesign
 10. Product features: presets/AOI editors, satellite toggle, deselection, geocoder, auto dry-month markers
 11. **Backend (Phase 8, in progress):** Supabase schema+auth → migrate CRUD off localStorage → Telegram bot + linking → EE service account → Python scheduled worker → end-to-end test (see Part 5)
+12. **Multi-area (Part 6, done):** per-user `aois` in Supabase → Areas dropdown + New Area modal (manual coords or Nominatim place search) → 5-area cap + default seed → Google-only auth + auth card redesign + mobile fixes
 
 ---
 
 ## Status
 
-Parts 1–4 are complete and feature-stable: NDVI/NDWI/LSWI analysis, time slider with Latest button and scene count indicator, draw & save fields, dashboard with growth-stage-aware health badges, compare mode, PNG/PDF export, event overlays, CHIRPS rainfall context on stress alerts, preset locations, UI-managed preset/AOI editors, area recalculation on edit, satellite basemap toggle, place search, field deselection, and a help panel. The frontend runs as a Vue 3 + Vite app with CDN-loaded Earth Engine/Leaflet.
+Parts 1–4 are complete and feature-stable: NDVI/NDWI/LSWI analysis, time slider with Latest button and scene count indicator, draw & save fields, dashboard with growth-stage-aware health badges, compare mode, PNG/PDF export, event overlays, CHIRPS rainfall context on stress alerts, preset locations, UI-managed preset/AOI editors, area recalculation on edit, satellite basemap toggle, place search, field deselection, and a help panel. **Part 6 adds per-user multi-area support** (Areas dropdown, New Area modal with coords/place search, 5-area cap, first-login default seed). The frontend runs as a Vue 3 + Vite app with CDN-loaded Earth Engine/Leaflet.
 
-**Phase 8 (Part 5) is in progress:** 8.1 (Supabase schema & auth) ✅ and 8.2 (migrate fields off localStorage) ✅ are done. Pending: 8.3 Telegram bot + account linking, 8.4 EE service account, 8.5 scheduled Python worker, 8.6 end-to-end test. Also pending separately: the Vue rewrite's final end-to-end smoke test and the design-system redesign (see `PROCESS.md`).
+**Phase 8 (Part 5) is in progress:** 8.1 (Supabase schema & auth) ✅ and 8.2 (migrate fields off localStorage) ✅ are done. Pending: 8.3 Telegram bot + account linking, 8.4 EE service account, 8.5 scheduled Python worker, 8.6 end-to-end test. **Part 6 (multi-area support) ✅ is complete.** Also pending separately: the Vue rewrite's final end-to-end smoke test and the design-system redesign (see `PROCESS.md`).

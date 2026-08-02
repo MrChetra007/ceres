@@ -1,7 +1,7 @@
 # NDVI Rice Crop Health Monitor — Build Process
 
 ## Project goal
-A single-page web app that shows a satellite map of rice-growing areas in Battambang, Cambodia, colored by NDVI (vegetation health). Visitors can drag a time slider to see health change over a season and click any spot for a mini trend chart + stress alert. No visitor login — developer authenticates once. (Phase 8 adds Supabase-backed field sync with email magic-link login for saved fields, plus scheduled Telegram alerts.)
+A single-page web app that shows a satellite map of rice-growing areas in Battambang, Cambodia, colored by NDVI (vegetation health). Visitors can drag a time slider to see health change over a season and click any spot for a mini trend chart + stress alert. No visitor login — developer authenticates once. (Phase 8 adds Supabase-backed field sync with **Google sign-in** for saved fields, plus scheduled Telegram alerts; Phase 11 adds per-user multi-area support.)
 
 ---
 
@@ -80,12 +80,12 @@ A single-page web app that shows a satellite map of rice-growing areas in Battam
 
 ### 8.1 Supabase schema & auth ✅ Complete
 - Supabase project: `https://wopwwtnvqyomiwbsxiks.supabase.co`
-- Auth via **email magic link** (free, built into Supabase Auth)
+- Auth via **Google OAuth** — single provider. The email magic-link (and any password) forms were removed; Supabase now uses `sb.auth.signInWithOAuth({ provider: 'google' })` only, kept separate from Earth Engine's own Google OAuth popup
 - `schema.sql` defines: `profiles` (extends auth.users), `fields`, `link_codes`, `alerts_log` with row-level security policies
 - `fields.owner_id` defaults to `auth.uid()` so client inserts pass RLS; `set_updated_at()` trigger keeps `updated_at` current
 - supabase-js (v2) loaded via CDN `<script>` tag; client created as `sbClient` (avoids the UMD global `supabase` collision)
-- Auth overlay reworked: email magic-link section + Earth Engine sign-in side by side
-- Top-right user menu shows signed-in email / sign-out; "Sign in to sync fields" affordance when EE is ready but Supabase is not
+- Auth overlay redesigned to the dark-glass design system: brand icon, Google-logo buttons with per-section captions, ✕ close, "Explore the map first" kept
+- Top-right user menu shows signed-in email / sign-out (collapses to an icon + dropdown on mobile); "Sign in to sync fields" affordance when EE is ready but Supabase is not
 
 ### 8.2 Migrate app off localStorage ✅ Complete
 - Field CRUD now backed by Supabase `fields` table with an in-memory `fieldsCache` mirror
@@ -128,7 +128,7 @@ A single-page web app that shows a satellite map of rice-growing areas in Battam
 - **Info panel showed two header buttons** — removed the collapse `>>` button and its `collapsed` state/watcher, keeping only the `×` close button.
 - **Leaflet/leaflet-draw moved to CDN** — same UMD/global rationale as EE (see "How it's set up" above). Removed `leaflet` + `leaflet-draw` from npm deps, deleted the unused legacy `src/components/MapView.vue`, and components use the global `L = window.L`.
 
-**Acceptance:** `npm run build` succeeds AND all existing features (NDVI/NDWI/LSWI, time slider + scene count + latest button, click-to-inspect trend chart with gradient fill + date marker + expand modal, draw & save fields synced to Supabase, dashboard with growth-stage badges, compare mode, PNG/PDF export, event overlays, CHIRPS rainfall context, presets/AOI editors, place search, satellite basemap, magic-link login, help panel) behave identically to `index_old.html`.
+**Acceptance:** `npm run build` succeeds AND all existing features (NDVI/NDWI/LSWI, time slider + scene count + latest button, click-to-inspect trend chart with gradient fill + date marker + expand modal, draw & save fields synced to Supabase, dashboard with growth-stage badges, compare mode, PNG/PDF export, event overlays, CHIRPS rainfall context, presets/AOI editors, place search, satellite basemap, Google sign-in, help panel) behave identically to `index_old.html`.
 
 ---
 
@@ -211,6 +211,31 @@ panel rework) complete; polish (motion/toasts/onboarding modal) is Stage 3.
 
 ---
 
+## Phase 11 — Multi-area support + auth & mobile UX hardening ✅ Complete
+
+**Goal:** Replace the single hardcoded/localStorage AOI with per-user, multi-AOI support backed by Supabase, simplify Supabase auth to Google-only, and fix mobile stacking/overflow regressions.
+
+### Feature P — Multi-area support (per-user AOIs)
+- `aois` table (`owner_id`, `name`, `bounds` jsonb, `created_at`), capped at **5 per user** via a DB trigger; nullable `aoi_id` added to `fields` (schema-ready, not wired to the UI yet)
+- CRUD mirrors the fields pattern: `getAois()` / `createAoi()` / `updateAoi()` / `deleteAoi()` in `store.js`, backed by `loadAois` / `insertAoi` / `updateAoi` / `deleteAoi` in `src/services/supabase.js`; in-memory `state.aois` mirror
+- **"Areas" dropdown** in `BandPanel.vue`: lists saved areas by name (select → recenter + re-clip NDVI/NDWI/LSWI on both maps), trash to delete, "+ New area"
+- **New Area modal** (`AoiEditor.vue`): name field + West/South/East/North inputs (prefilled from current area) **or** a Nominatim place search that auto-fills the box from the matched place's bounding box; "Create" → insert + select
+- **5-area cap handled in UI**: "+ New area" hidden and the map-icon button gated once 5 areas exist; insert errors matching the limit → toast "Limit of 5 areas reached"
+- **Default seed**: on first login with no areas, auto-creates "Battambang (default)" from `[102.985, 12.845, 103.048, 12.898]` so the map is never empty
+- `ndvi_aoi` localStorage key removed; `state.aoiCoords` now derives from the selected AOI row via `applyAoiBounds()` (redraws the red dashed rectangle, recenters, recomputes dry months + both maps)
+- Help modal updated with an "Areas of interest" section
+
+### UX hardening (this session)
+- **Supabase auth → Google-only** — removed the email magic-link input/form/handlers and `signInWithOtp`/`sendMagicLink`; Supabase now uses `sb.auth.signInWithOAuth({ provider: 'google' })` only. Earth Engine's separate Google flow untouched. Removed dead email CSS.
+- **Auth overlay redesign** (`AuthOverlay.vue`) — dark-glass card matching the design system: backdrop blur, brand icon, Google-logo buttons with per-section captions, ✕ close, "Explore the map first" kept.
+- **Mobile responsive fixes:**
+  - TopBar user chip collapses to an icon button + dropdown menu (email truncated with ellipsis, "Sign out" inside the menu) ≤780px — no more horizontal overflow of email/sign-out.
+  - `.time-panel` z-index lowered to 25 (below TopBar's 30) so the Export dropdown paints above the time panel instead of being hidden underneath.
+  - BandPanel compacted on mobile; ≤480px hides the redundant Street/Satellite segmented (TopBar already has it) so the panel fits 360–414px widths.
+- **Verified:** `npm run build` ✅ after every change.
+
+---
+
 ## Product Pivot Features (added during development)
 
 ### Feature A — Draw & save fields ✅ Complete
@@ -280,12 +305,13 @@ panel rework) complete; polish (motion/toasts/onboarding modal) is Stage 3.
 - "Reset defaults" restores the original four locations
 - All changes persisted to `localStorage` under `ndvi_presets`
 
-### Feature J — AOI editor (UI-managed bounding box) ✅ Complete
+### Feature J — AOI editor (UI-managed bounding box) ✅ Complete → superseded by Feature P (multi-area, Phase 11)
 - `const AOI_COORDS` replaced with `var aoiCoords` loaded from `localStorage` key `ndvi_aoi`
 - Map icon button in slider panel opens AOI editor modal with West/South/East/North inputs
 - Red dashed rectangle overlay on map shows current AOI boundary
 - Applied/reset triggers `fetchDryMonths()` and `loadNdviForMonth()` to recompute with new geometry
 - Reset defaults restores the cement-factory box `[102.985, 12.845, 103.048, 12.898]`
+- **Note:** as of Phase 11 the single localStorage AOI is replaced by per-user multi-AOI via Supabase (Feature P); the `ndvi_aoi` key is gone and the editor is now the "New area" modal.
 
 ### Feature K — Satellite basemap toggle ✅ Complete
 - Street / Satellite segmented toggle in slider panel `nav-row`
@@ -343,14 +369,14 @@ panel rework) complete; polish (motion/toasts/onboarding modal) is Stage 3.
 | Frontend | Vue 3 (SFC) + Vite (`index.html` + `src/`); legacy fallback in `index_old.html` (plain JS) |
 | Map | Leaflet + OpenStreetMap tiles / Esri World Imagery |
 | Satellite compute | Google Earth Engine (JS client via CDN `<script>` tag, v1.7.36) |
-| Auth | Earth Engine OAuth popup (`ee.data.authenticateViaOauth`) |
+| Auth | Earth Engine OAuth popup (`ee.data.authenticateViaOauth`) + Supabase Google OAuth |
 | Geocoding | Nominatim (OpenStreetMap free API) |
 | Drawing | leaflet-draw (v1.0.4) |
 | Area calc | turf.js (v6) |
 | Charts | Chart.js (v4.4.7) |
-| Backend / DB | Supabase (Postgres + Auth, email magic link) |
-| Storage | Supabase `fields` table (primary), localStorage (EE token, AOI coords, presets) |
+| Backend / DB | Supabase (Postgres + Auth, Google OAuth) |
+| Storage | Supabase `fields` + `aois` tables (primary), localStorage (EE token, presets) |
 
 ## Status
 
-All phases complete except Phase 8.3+ (Telegram alerts) and Phase 10 (design-system redesign — Stages 1–2 done, Stage 3 polish pending), plus the final end-to-end smoke test of Phase 9 (Vue migration). Phases 8.1 (schema + auth) and 8.2 (fields migrated off localStorage) are done. The static app from Phase 2–7 is preserved intact as `index_old.html` (fully working). The Vue rewrite (`index.html` + `src/`) is ported from that stable codebase: build ✅, dev server ✅, map + trend panel verified in-browser; remaining to verify by hand: draw/save field → Supabase, compare mode, PNG/PDF export. Phase 10 Stage 1 re-skinned the app to the dark design-system spec (`design.md`) — build ✅, all modules serve ✅. Stage 2 swapped the ☰ dashboard + info panel for the spec's Monitored-Fields sidebar + field-inspector detail panel (sparklines, filters, draw footer, benchmark hero, phenology, rainfall, metadata) and hardened the app: map z-index stacking fixed, leaflet controls moved below the header, polygon draw with Esc-cancel + sign-in gate, proper toast styling, "Jump to:" preset panel removed, month-only chart ticks with year title, and Compare mode now fully decoupled with a draggable divider and proper teardown on close — build ✅, dev serves ✅. Remaining overall: Telegram bot linking, EE service account, Python scheduled worker, end-to-end test. The app is feature-stable with NDVI/NDWI/LSWI analysis, time slider with Latest button and scene count indicator, draw & save fields (now synced to Supabase), Monitored-Fields sidebar + field-inspector panel with growth-stage-aware health badges, resizable split-screen compare mode, PNG/PDF export, event overlays, CHIRPS rainfall context on stress alerts, UI-managed preset/AOI editors, area recalculation on edit, satellite basemap toggle, place search, field deselection, email magic-link login, and a help panel.
+All phases complete except Phase 8.3+ (Telegram alerts) and Phase 10 (design-system redesign — Stages 1–2 done, Stage 3 polish pending), plus the final end-to-end smoke test of Phase 9 (Vue migration). Phases 8.1 (schema + auth) and 8.2 (fields migrated off localStorage) are done. The static app from Phase 2–7 is preserved intact as `index_old.html` (fully working). The Vue rewrite (`index.html` + `src/`) is ported from that stable codebase: build ✅, dev server ✅, map + trend panel verified in-browser; remaining to verify by hand: draw/save field → Supabase, compare mode, PNG/PDF export. Phase 10 Stage 1 re-skinned the app to the dark design-system spec (`design.md`) — build ✅, all modules serve ✅. Stage 2 swapped the ☰ dashboard + info panel for the spec's Monitored-Fields sidebar + field-inspector detail panel (sparklines, filters, draw footer, benchmark hero, phenology, rainfall, metadata) and hardened the app: map z-index stacking fixed, leaflet controls moved below the header, polygon draw with Esc-cancel + sign-in gate, proper toast styling, "Jump to:" preset panel removed, month-only chart ticks with year title, and Compare mode now fully decoupled with a draggable divider and proper teardown on close — build ✅, dev serves ✅. **Phase 11 is complete:** Supabase auth is now Google-only (email magic-link/password forms removed), the auth overlay was redesigned to the dark-glass design system, mobile stacking/overflow was fixed (TopBar user chip collapses to an icon + dropdown ≤780px, `.time-panel` z-index lowered so the Export dropdown paints above, redundant Street/Satellite toggle hidden ≤480px), and per-user multi-area support was added — `aois` table CRUD, "Areas" dropdown, New Area modal (manual coords or Nominatim place search), 5-area cap handling with toast, and a first-login "Battambang (default)" seed. Remaining overall: Telegram bot linking, EE service account, Python scheduled worker, end-to-end test. The app is feature-stable with NDVI/NDWI/LSWI analysis, time slider with Latest button and scene count indicator, draw & save fields (now synced to Supabase), Monitored-Fields sidebar + field-inspector panel with growth-stage-aware health badges, resizable split-screen compare mode, PNG/PDF export, event overlays, CHIRPS rainfall context on stress alerts, per-user multi-area support (Areas dropdown + New Area modal), area recalculation on edit, satellite basemap toggle, place search, field deselection, Google sign-in, and a help panel.
