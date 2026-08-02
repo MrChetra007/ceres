@@ -56,12 +56,21 @@
 
       <div
         v-if="state.supabaseUser || state.eeReady || !state.authOverlayVisible"
+        ref="userWrap"
         class="topbar-user"
+        :class="{ 'menu-open': userMenuOpen }"
         :title="state.supabaseUser ? 'Signed in' : 'Sign in to sync fields'"
         @click="onUserClick"
       >
+        <i class="ti ti-user"></i>
         <span class="user-email">{{ userLabel }}</span>
-        <button v-if="state.supabaseUser" class="sign-out-btn" @click.stop="store.signOut()">Sign out</button>
+        <button v-if="state.supabaseUser" class="sign-out-btn" @click.stop="doSignOut">Sign out</button>
+        <div class="topbar-user-menu" v-show="userMenuOpen" @click.stop>
+          <span class="user-menu-email">{{ userLabel }}</span>
+          <button v-if="state.supabaseUser" class="user-menu-item sign-out" @click="doSignOut">
+            <i class="ti ti-logout"></i> Sign out
+          </button>
+        </div>
       </div>
 
       <button class="glass-pill icon" title="My fields" @click="$emit('menu')">
@@ -80,6 +89,8 @@ defineEmits(['menu'])
 
 const exportMenuOpen = ref(false)
 const exportWrap = ref(null)
+const userWrap = ref(null)
+const userMenuOpen = ref(false)
 const searchQuery = ref('')
 
 const userLabel = computed(() =>
@@ -88,7 +99,16 @@ const userLabel = computed(() =>
 
 function onUserClick(e) {
   if (e.target.classList.contains('sign-out-btn')) return
-  if (!state.supabaseUser || !state.eeReady) store.showAuthOverlay()
+  if (state.supabaseUser && state.eeReady) {
+    userMenuOpen.value = !userMenuOpen.value
+    return
+  }
+  store.showAuthOverlay()
+}
+
+function doSignOut() {
+  userMenuOpen.value = false
+  store.signOut()
 }
 
 function toggleExportMenu() {
@@ -108,6 +128,9 @@ function doSearch() {
 function onDocClick(e) {
   if (exportWrap.value && !exportWrap.value.contains(e.target)) {
     exportMenuOpen.value = false
+  }
+  if (userWrap.value && !userWrap.value.contains(e.target)) {
+    userMenuOpen.value = false
   }
 }
 

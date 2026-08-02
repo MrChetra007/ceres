@@ -1551,6 +1551,7 @@ body {
 .glass-pill.icon { padding: 6px 9px; }
 
 .topbar-user {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -1558,7 +1559,10 @@ body {
   border: 0.5px solid var(--panel-border);
   border-radius: 999px;
   padding: 4px 6px 4px 12px;
+  cursor: pointer;
 }
+
+.topbar-user .ti-user { display: none; font-size: 16px; color: var(--text-dim); }
 
 .topbar-user .user-email {
   font-size: 11.5px;
@@ -1569,13 +1573,60 @@ body {
   white-space: nowrap;
 }
 
+.topbar-user-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  display: none;
+  min-width: 200px;
+  background: var(--panel-2);
+  border: 0.5px solid var(--panel-border-strong);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow);
+  padding: 6px;
+  text-align: left;
+  z-index: 5;
+}
+
+.topbar-user-menu .user-menu-email {
+  display: block;
+  font-size: 12px;
+  color: var(--text-dim);
+  padding: 8px 10px;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border-bottom: 0.5px solid var(--panel-border);
+  margin-bottom: 4px;
+}
+
+.topbar-user-menu .user-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  background: transparent;
+  border: none;
+  color: var(--text-dim);
+  font-size: 12.5px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.topbar-user-menu .user-menu-item:hover { background: rgba(255, 255, 255, 0.08); color: var(--text); }
+.topbar-user-menu .user-menu-item.sign-out:hover { background: var(--red-dim); color: var(--red); }
+
 /* ---- Time control (top-center) ---- */
 .time-panel {
   position: fixed;
   top: 68px;
   left: 50%;
   transform: translateX(-50%);
-  z-index: 30;
+  /* Below .topbar (z 30) so the topbar's Export dropdown can paint above it. */
+  z-index: 25;
   width: min(560px, 90vw);
   padding: 12px 16px 10px;
 }
@@ -2107,6 +2158,11 @@ body {
   .glass-pill span.pill-text { display: none; }
   .time-panel { width: calc(100vw - 24px); }
   .topbar-right .glass-pill { padding: 6px 9px; }
+  .topbar-user { padding: 6px 9px; border-radius: var(--radius-sm); }
+  .topbar-user .ti-user { display: flex; }
+  .topbar-user .user-email,
+  .topbar-user .sign-out-btn { display: none; }
+  .topbar-user-menu { display: block; }
   .info-panel {
     width: 100%;
     height: 55%;
