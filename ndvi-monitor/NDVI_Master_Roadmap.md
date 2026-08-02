@@ -380,12 +380,18 @@ season's alert log" during a pitch) while only pinging Telegram on genuine chang
 - **Free tier limits** — Supabase free tier and a once-daily job are both comfortably
   within free quotas at this scale; recheck if usage grows past a handful of test fields
 
-### 5.10 AI window (not built in this phase)
+### 5.10 AI window
 
 `buildAlertMessage()` in Phase 8.5 is deliberately a standalone function, not inline code, so that a
 future AI/LLM layer can replace what's _inside_ it (plain-language generation from the same status/
 NDVI/rainfall/growth-stage inputs) without touching Supabase, the scheduler, or the Telegram send
-logic. Do not build this now — only implement it if explicitly asked to start the AI phase.
+logic.
+
+> **Update (Part 7):** the AI layer has since been built as **Consult AI** — a separate Edge
+> Function (`consult-ai`) with a **Gemini → DeepSeek → Qwen** fallback chain, called on demand from
+> the field detail panel. See Part 7. The Telegram worker's `buildAlertMessage()` remains a plain
+> template and was left untouched; it is still the future hook if alert messages should also become
+> LLM-generated.
 
 ---
 
@@ -409,6 +415,66 @@ Replaces the single hardcoded/localStorage AOI with per-user, multi-AOI support 
 - Supabase auth simplified to **Google OAuth only** (email magic-link/password forms removed)
 - Auth overlay redesigned to the dark-glass design system (brand icon, Google-logo buttons with captions, ✕ close)
 - Mobile fixes: TopBar user chip collapses to an icon + dropdown at ≤780px; `.time-panel` z-index lowered to 25 so the Export dropdown paints above it; redundant Street/Satellite toggle hidden at ≤480px
+
+---
+
+## Part 7 — Consult AI (AI agronomist) + multi-provider LLM fallback 🚧 Implemented (needs deploy/verify)
+
+The "AI window" opened in 5.10. A farmer can get a plain-language interpretation of a field's
+satellite health data (NDVI, LSWI, 21-day rainfall, growth stage) from a server-side LLM, with a
+resilient **Gemini → DeepSeek → Qwen** fallback chain so one provider's quota/404/outage never
+blocks the feature.
+
+### 7.1 Consult AI button + Edge Function
+
+- **Frontend** (`src/components/FieldDetailPanel.vue`): "Consult AI" button + response card on
+  saved fields; disabled while the map is loading and when the selected month has no scenes;
+  guards on `ndviValue == null`, not-signed-in, EE-not-ready, and surfaces
+  `429 daily_limit_reached` / `400 missing_data` as toasts.
+- **Auth token** comes from `requireSession()` (`src/services/supabase.js` — auto-refreshes a
+  stale/near-expired access token before returning, same helper `insertField`/`insertAoi` use),
+  wrapped in a try/catch so genuine sign-in failures show a friendly toast instead of a rejected
+  request.
+- **Edge Function** `supabase/functions/consult-ai/index.ts` (JWT-required):
+  - verifies the user JWT; rejects missing NDVI with `400 missing_data`
+  - serves cached explanations from `ai_explanations` when NDVI + status haven't moved (<0.02)
+  - per-user daily cap via `ai_usage.calls_today` (default 20) → `429 daily_limit_reached`
+  - CORS from the `APP_URL` secret (fallback `*`) + OPTIONS preflight
+
+### 7.2 Multi-provider fallback
+
+- `generateExplanation(prompt)` orchestrator tries providers in order, returns the first usable
+  answer as `{ text, model }`. Each caller returns `string | null` and never throws, so the chain
+  proceeds cleanly; every call has a 20s `AbortController` timeout for fast failover:
+  - `callGemini` — `gemini-3.5-flash` (`generateContent`); 2.0-flash reported zero quota and
+    2.5-flash returned 404 "no longer available" for this API key. `thinkingConfig` low +
+    `maxOutputTokens: 800` (raised from 500 so thinking overhead can't truncate the answer).
+  - `callDeepSeek` — OpenAI-compatible `https://api.deepseek.com/chat/completions`,
+    `deepseek-chat`, `max_tokens: 500`.
+  - `callQwen` — DashScope compatible-mode
+    `https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions`, `qwen3-max`,
+    `max_tokens: 500`.
+- Responding model stored as `ai_explanations.model_used` (`migration6.sql`) and logged as
+  "AI explanation served by: …" — **auditing only**, never sent to the frontend. API response
+  stays `{ ok, explanation, cached }`; the UI keeps the "AI-generated interpretation to guide
+  you — not a diagnosis" framing regardless of provider. Same English/Khmer prompts across providers.
+
+### 7.3 Related fixes
+
+- **Tab-refresh regression:** supabase-js fires `SIGNED_IN` on every tab focus (visibility-change
+  session recovery); a `lastLoadedUserId` guard in `src/store.js` prevents re-running
+  field/AOI loading and the "Reloading NDVI for …" recompute on tab return.
+- **Rainfall (21-day) card:** "Loading…" / "Data unavailable" instead of a bare dash when CHIRPS
+  data can't be fetched.
+- RLS/session hardening (`migration5.sql`, `requireSession()`) for field/AOI inserts.
+
+### 7.4 Deploy steps
+
+1. `supabase secrets set DEEPSEEK_API_KEY="..."` and `supabase secrets set QWEN_API_KEY="..."`
+2. Apply `migration6.sql` in the Supabase SQL editor
+3. `supabase functions deploy consult-ai`
+4. Verify: with a bad Gemini key the request falls through to DeepSeek; check
+   `supabase functions logs consult-ai` for "AI explanation served by: deepseek-chat".
 
 ---
 
@@ -496,6 +562,7 @@ Fix: load EE via a plain `<script>` tag (Google's own documented approach).
 10. Product features: presets/AOI editors, satellite toggle, deselection, geocoder, auto dry-month markers
 11. **Backend (Phase 8, nearly done):** Supabase schema+auth ✅ → migrate CRUD off localStorage ✅ → Telegram bot + linking ✅ (Edge Function + app UI, awaiting deployment) → EE service account ✅ (verified in Deno) → scheduled worker ✅ (`ee-alerts-worker` + `migration3.sql` pg_cron/Vault job) → end-to-end test 🚧 (multi-day dedup validation; see Part 5)
 12. **Multi-area (Part 6, done):** per-user `aois` in Supabase → Areas dropdown + New Area modal (manual coords or Nominatim place search) → 5-area cap + default seed → Google-only auth + auth card redesign + mobile fixes
+13. **Consult AI (Part 7, implemented — needs deploy):** `consult-ai` Edge Function with Gemini → DeepSeek → Qwen fallback, "Consult AI" button + response card, `ai_explanations` cache + `model_used`, daily per-user cap, `requireSession()` token refresh → set DeepSeek/Qwen secrets, apply `migration6.sql`, deploy function
 
 ---
 
@@ -503,4 +570,4 @@ Fix: load EE via a plain `<script>` tag (Google's own documented approach).
 
 Parts 1–4 are complete and feature-stable: NDVI/NDWI/LSWI analysis, time slider with Latest button and scene count indicator, draw & save fields, dashboard with growth-stage-aware health badges, compare mode, PNG/PDF export, event overlays, CHIRPS rainfall context on stress alerts, preset locations, UI-managed preset/AOI editors, area recalculation on edit, satellite basemap toggle, place search, field deselection, and a help panel. **Part 6 adds per-user multi-area support** (Areas dropdown, New Area modal with coords/place search, 5-area cap, first-login default seed). The frontend runs as a Vue 3 + Vite app with CDN-loaded Earth Engine/Leaflet.
 
-**Phase 8 (Part 5) is nearly complete:** 8.1 (Supabase schema & auth) ✅, 8.2 (migrate fields off localStorage) ✅, 8.3 (Telegram bot + account linking — Edge Function + app UI, implemented, awaiting deployment) ✅, 8.4 (EE service account, verified in Deno) ✅, 8.5 (scheduled worker — `ee-alerts-worker` Edge Function + `migration3.sql` pg_cron/Vault daily job) ✅ are done and confirmed working. Remaining: 8.6 sustained end-to-end dedup validation, plus deployment of 8.3's webhook/token secrets. **Part 6 (multi-area support) ✅ is complete.** Also pending separately: the Vue rewrite's final end-to-end smoke test and the design-system redesign (see `PROCESS.md`).
+**Phase 8 (Part 5) is nearly complete:** 8.1 (Supabase schema & auth) ✅, 8.2 (migrate fields off localStorage) ✅, 8.3 (Telegram bot + account linking — Edge Function + app UI, implemented, awaiting deployment) ✅, 8.4 (EE service account, verified in Deno) ✅, 8.5 (scheduled worker — `ee-alerts-worker` Edge Function + `migration3.sql` pg_cron/Vault daily job) ✅ are done and confirmed working. Remaining: 8.6 sustained end-to-end dedup validation, plus deployment of 8.3's webhook/token secrets. **Part 6 (multi-area support) ✅ is complete.** **Part 7 (Consult AI) is implemented in the repo** — `consult-ai` Edge Function with a Gemini → DeepSeek → Qwen fallback chain, "Consult AI" button + response card in the field detail panel, `ai_explanations` cache with `model_used`, per-user daily cap, and `requireSession()` token refresh; still needs the DeepSeek/Qwen secrets set, `migration6.sql` applied, and the function redeployed. Also pending separately: the Vue rewrite's final end-to-end smoke test and the design-system redesign (see `PROCESS.md`).
