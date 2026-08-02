@@ -46,11 +46,8 @@ export async function deleteField(id) {
   if (error) throw error
 }
 
-export async function signInWithOtp(email, redirectTo) {
-  return sb.auth.signInWithOtp({
-    email,
-    options: { emailRedirectTo: redirectTo },
-  })
+export async function signInWithGoogle() {
+  return sb.auth.signInWithOAuth({ provider: 'google' })
 }
 
 export async function signOut() {

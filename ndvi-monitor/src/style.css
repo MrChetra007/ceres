@@ -97,6 +97,22 @@ html, body {
   background: #1557b0;
 }
 
+.sb-sign-in-btn {
+  background: #1a73e8;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 0.75rem 2rem;
+  font-size: 1rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.sb-sign-in-btn:hover {
+  background: #1557b0;
+}
+
 .panel {
   background: #ffffff;
   border: 0.5px solid #e5e3da;
@@ -1163,29 +1179,6 @@ html, body {
   color: #555;
 }
 
-#auth-email {
-  padding: 0.6rem 0.75rem;
-  border: 1px solid #ccc;
-  border-radius: 6px;
-  font-size: 0.9rem;
-  width: 100%;
-}
-
-.auth-email-btn {
-  background: #1a73e8;
-  color: #fff;
-  border: none;
-  border-radius: 6px;
-  padding: 0.7rem 1.5rem;
-  font-size: 0.9rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 0.2s;
-}
-
-.auth-email-btn:hover { background: #1557b0; }
-.auth-email-btn:disabled { background: #9db8e8; cursor: default; }
-
 .auth-divider {
   display: flex;
   align-items: center;
@@ -1201,15 +1194,6 @@ html, body {
   height: 1px;
   background: #e5e3da;
 }
-
-.auth-message {
-  font-size: 0.8rem;
-  color: #1a73e8;
-  min-height: 1em;
-  margin: 0;
-}
-
-.auth-message.error { color: #dc2626; }
 
 .auth-skip {
   margin-top: 1.5rem;
@@ -1882,15 +1866,13 @@ body {
 
 .preset-editor-modal input,
 .aoi-editor-modal input,
-.date-picker-modal input,
-#auth-email {
+.date-picker-modal input {
   background: rgba(255, 255, 255, 0.05);
   border: 0.5px solid var(--panel-border);
   color: var(--text);
 }
 .preset-editor-modal input::placeholder,
-.aoi-editor-modal input::placeholder,
-#auth-email::placeholder { color: var(--text-faint); }
+.aoi-editor-modal input::placeholder { color: var(--text-faint); }
 
 .preset-editor-actions button,
 .aoi-editor-actions button,
@@ -1909,23 +1891,18 @@ body {
 
 .pe-save-btn,
 .ae-apply-btn,
-.date-picker-save,
-.auth-email-btn {
+.date-picker-save {
   background: var(--accent);
   color: #0b0f14;
 }
 .pe-save-btn:hover,
 .ae-apply-btn:hover,
-.date-picker-save:hover,
-.auth-email-btn:hover { background: #1bb37d; color: #0b0f14; }
-.auth-email-btn:disabled { background: #2a3a33; color: var(--text-faint); }
+.date-picker-save:hover { background: #1bb37d; color: #0b0f14; }
 
 .aoi-editor-desc,
 .aoi-editor-hint,
 .auth-divider { color: var(--text-faint); }
 .auth-label { color: var(--text-dim); }
-.auth-message { color: var(--accent); }
-.auth-message.error { color: var(--red); }
 .auth-skip-btn { color: var(--text-faint); }
 .auth-skip-btn:hover { color: var(--text); }
 

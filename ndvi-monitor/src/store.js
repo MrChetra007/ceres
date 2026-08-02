@@ -466,9 +466,8 @@ export function hideAuthOverlay() {
   state.authOverlayVisible = false
 }
 
-export async function sendMagicLink(email) {
-  if (!email || !email.trim()) return { error: { message: 'Enter your email first.' } }
-  return supabase.signInWithOtp(email.trim(), window.location.origin + window.location.pathname)
+export async function signInWithSupabaseGoogle() {
+  return supabase.signInWithGoogle()
 }
 
 export async function signOut() {
