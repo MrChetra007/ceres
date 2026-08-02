@@ -65,7 +65,7 @@
 
     <div class="detail-section rain-card">
       <p class="detail-card-label">Rainfall <span class="mono">(21-day)</span></p>
-      <p class="rain-value mono">{{ rainText }}</p>
+      <p class="rain-value mono" :class="{ 'rain-unavailable': state.rainfallMm == null }">{{ rainText }}</p>
     </div>
 
     <template v-if="isField">
@@ -140,7 +140,11 @@ const stressMsg = computed(() => {
   return 'Within the expected NDVI range for this growth stage.'
 })
 
-const rainText = computed(() => (state.rainfallMm != null ? state.rainfallMm.toFixed(0) + ' mm' : '\u2014'))
+const rainText = computed(() => {
+  if (state.rainfallMm != null) return state.rainfallMm.toFixed(0) + ' mm'
+  if (!state.eeReady) return 'Loading\u2026'
+  return 'Data unavailable'
+})
 
 const plantingText = computed(() => (currentField.value && currentField.value.plantingDate) || '\u2014')
 const addedText = computed(() => (currentField.value && currentField.value.createdAt ? new Date(currentField.value.createdAt).toLocaleDateString() : '\u2014'))

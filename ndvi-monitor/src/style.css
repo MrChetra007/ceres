@@ -2848,6 +2848,12 @@ body {
   color: var(--blue);
 }
 
+.rain-value.rain-unavailable {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-dim);
+}
+
 /* Metadata */
 .meta-row {
   display: flex;

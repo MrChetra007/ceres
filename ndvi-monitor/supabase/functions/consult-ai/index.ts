@@ -3,8 +3,11 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
 const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
 const GEMINI_KEY = Deno.env.get("GEMINI_API_KEY") || "";
+const DEEPSEEK_KEY = Deno.env.get("DEEPSEEK_API_KEY") || "";
+const QWEN_KEY = Deno.env.get("QWEN_API_KEY") || "";
 const APP_URL = Deno.env.get("APP_URL") || "*";
 const DAILY_CAP = 20;
+const PROVIDER_TIMEOUT_MS = 20_000;
 
 const supabase = createClient(SUPABASE_URL, SERVICE_ROLE);
 
@@ -20,6 +23,156 @@ function jsonResponse(body: unknown, status = 200): Response {
     status,
     headers: { "Content-Type": "application/json", ...corsHeaders },
   });
+}
+
+async function fetchWithTimeout(
+  url: string,
+  options: RequestInit,
+  ms: number,
+): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ms);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Provider callers — each returns the explanation text on success or null on
+// any failure (bad shape, HTTP error, timeout). Never throw, so the fallback
+// chain below can move on cleanly.
+// ---------------------------------------------------------------------------
+
+async function callGemini(prompt: string): Promise<string | null> {
+  if (!GEMINI_KEY) return null;
+  try {
+    const res = await fetchWithTimeout(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.5-flash:generateContent?key=${GEMINI_KEY}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: {
+            thinkingConfig: { thinkingLevel: "low" },
+            maxOutputTokens: 500,
+          },
+        }),
+      },
+      PROVIDER_TIMEOUT_MS,
+    );
+    console.log("Gemini response status:", res.status);
+    const data = await res.json();
+    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+    if (!text) {
+      console.error(
+        "Gemini returned no usable text. Full response:",
+        JSON.stringify(data),
+      );
+    }
+    return text || null;
+  } catch (e) {
+    console.error("Gemini call failed:", e);
+    return null;
+  }
+}
+
+async function callDeepSeek(prompt: string): Promise<string | null> {
+  if (!DEEPSEEK_KEY) return null;
+  try {
+    const res = await fetchWithTimeout(
+      "https://api.deepseek.com/chat/completions",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${DEEPSEEK_KEY}`,
+        },
+        body: JSON.stringify({
+          model: "deepseek-chat",
+          messages: [{ role: "user", content: prompt }],
+          max_tokens: 500,
+          temperature: 0.4,
+        }),
+      },
+      PROVIDER_TIMEOUT_MS,
+    );
+    console.log("DeepSeek response status:", res.status);
+    const data = await res.json();
+    const text = data?.choices?.[0]?.message?.content?.trim();
+    if (!text) {
+      console.error(
+        "DeepSeek returned no usable text. Full response:",
+        JSON.stringify(data),
+      );
+    }
+    return text || null;
+  } catch (e) {
+    console.error("DeepSeek call failed:", e);
+    return null;
+  }
+}
+
+async function callQwen(prompt: string): Promise<string | null> {
+  if (!QWEN_KEY) return null;
+  try {
+    const res = await fetchWithTimeout(
+      "https://dashscope.aliyuncs.com/compatible-mode/v1/chat/completions",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${QWEN_KEY}`,
+        },
+        body: JSON.stringify({
+          model: "qwen3-max",
+          messages: [{ role: "user", content: prompt }],
+          max_tokens: 500,
+          temperature: 0.4,
+        }),
+      },
+      PROVIDER_TIMEOUT_MS,
+    );
+    console.log("Qwen response status:", res.status);
+    const data = await res.json();
+    const text = data?.choices?.[0]?.message?.content?.trim();
+    if (!text) {
+      console.error(
+        "Qwen returned no usable text. Full response:",
+        JSON.stringify(data),
+      );
+    }
+    return text || null;
+  } catch (e) {
+    console.error("Qwen call failed:", e);
+    return null;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Orchestrator — tries providers in order, returns the first usable answer.
+// The model label is only for our logs/cache, never shown to the farmer.
+// ---------------------------------------------------------------------------
+
+async function generateExplanation(
+  prompt: string,
+): Promise<{ text: string; model: string } | null> {
+  const providers: [string, (p: string) => Promise<string | null>][] = [
+    ["gemini-3.5-flash", callGemini],
+    ["deepseek-chat", callDeepSeek],
+    ["qwen3-max", callQwen],
+  ];
+  for (const [name, fn] of providers) {
+    try {
+      const text = await fn(prompt);
+      if (text) return { text, model: name };
+    } catch (e) {
+      console.error(`Provider ${name} threw:`, e);
+    }
+  }
+  return null;
 }
 
 Deno.serve(async (req) => {
@@ -83,7 +236,7 @@ Deno.serve(async (req) => {
       .from("ai_usage")
       .upsert({ user_id: user.id, calls_today: callsToday + 1 });
 
-    // 3. Call Gemini
+    // 3. Generate the explanation (Gemini -> DeepSeek -> Qwen)
     const langLine =
       lang === "km"
         ? "Reply in plain, simple Khmer a rural farmer would understand."
@@ -94,39 +247,24 @@ Data: NDVI ${ndviValue.toFixed(2)}, LSWI (moisture) ${lswiValue?.toFixed(2) ?? "
 ${langLine}
 In 2-3 short sentences: describe what the numbers suggest, and name 1-2 possible causes as possibilities to check — never state a single cause as certain. End with one practical next step. Do not use technical jargon like "NDVI" or "LSWI" in the reply itself.`;
 
-    const geminiRes = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_KEY}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { maxOutputTokens: 200, temperature: 0.4 },
-        }),
-      },
-    );
-    console.log("Gemini response status:", geminiRes.status);
-    const geminiData = await geminiRes.json();
-    const explanation = geminiData?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
-    if (!explanation) {
-      console.error(
-        "Gemini returned no usable text. Full response:",
-        JSON.stringify(geminiData),
-      );
-    }
-    const finalExplanation =
-      explanation || "Could not generate an explanation right now — please try again.";
+    const result = await generateExplanation(prompt);
+    const explanation =
+      result?.text ||
+      "Could not generate an explanation right now — please try again.";
+    const modelUsed = result?.model || "none";
+    console.log("AI explanation served by:", modelUsed);
 
-    // 4. Cache it
+    // 4. Cache it (model_used is for our own auditing only)
     await supabase.from("ai_explanations").upsert({
       field_id: fieldId,
       ndvi_value: ndviValue,
       status,
-      explanation: finalExplanation,
+      explanation,
+      model_used: modelUsed,
       created_at: new Date().toISOString(),
     });
 
-    return jsonResponse({ ok: true, explanation: finalExplanation, cached: false });
+    return jsonResponse({ ok: true, explanation, cached: false });
   } catch (e) {
     console.error(e);
     return jsonResponse({ ok: false, error: String(e) }, 500);
