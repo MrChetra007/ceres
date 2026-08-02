@@ -8,6 +8,10 @@ export const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJh
 export const TELEGRAM_BOT_USERNAME = import.meta.env.VITE_TELEGRAM_BOT_USERNAME || 'YOUR_TELEGRAM_BOT'
 export const TELEGRAM_LINK_TTL_MS = 10 * 60 * 1000
 
+// AI agronomist (Consult AI) — Supabase Edge Function, requires a logged-in JWT
+export const CONSULT_AI_URL = 'https://wopwwtnvqyomiwbsxiks.functions.supabase.co/consult-ai'
+export const CONSULT_AI_LANG = 'en'
+
 export const DEFAULT_AOI = [102.985, 12.845, 103.048, 12.898]
 export const MAP_CENTER = [12.8715, 103.0165]
 export const MAP_ZOOM = 14

@@ -96,6 +96,21 @@ export function showToast(msg) {
   toastTimer = setTimeout(() => { state.toast = null }, 3000)
 }
 
+// A request reached Supabase without a valid user JWT (stale/expired session).
+export function isAuthError(err) {
+  const msg = (err && err.message) || ''
+  return /No active session|Session expired|Please sign in/.test(msg)
+}
+
+function handleAuthError(err) {
+  if (isAuthError(err)) {
+    state.authOverlayVisible = true
+    showToast(err.message)
+    return true
+  }
+  return false
+}
+
 function beginLoading() {
   loadingCount++
   state.loading = true
@@ -211,6 +226,7 @@ export async function createAoi(name, bounds) {
     selectAoi(aoi.id)
     return aoi
   } catch (err) {
+    if (handleAuthError(err)) return null
     const msg = /limit|exceeded|maximum|violates|cap/i.test(err.message || '')
       ? 'Limit of 5 areas reached'
       : err.message
@@ -713,6 +729,7 @@ export async function importLocalFieldsIfAny() {
         planting_date: f.plantingDate || null,
       })
     } catch (err) {
+      if (handleAuthError(err)) return
       showToast('Import failed for "' + f.name + '": ' + err.message)
       return
     }
@@ -735,6 +752,7 @@ export async function saveField(name, geojson, plantingDate) {
     loadFieldTrend(field)
     return field
   } catch (err) {
+    if (handleAuthError(err)) return null
     showToast('Failed to save field: ' + err.message)
     return null
   }

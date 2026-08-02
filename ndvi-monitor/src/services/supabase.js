@@ -17,6 +17,28 @@ export function mapRowToField(row) {
   }
 }
 
+// Returns a valid session, refreshing the access token if it's stale/expired.
+// Throws a clear message if there is genuinely no active session — callers can
+// surface that as "please sign in again" instead of a confusing RLS error.
+export async function requireSession() {
+  const { data, error } = await sb.auth.getSession()
+  if (error) throw error
+  let session = data && data.session ? data.session : null
+  if (session) {
+    const expMs = session.expires_at ? session.expires_at * 1000 : Infinity
+    if (expMs < Date.now() + 60000) {
+      const { data: refreshed, error: refreshErr } = await sb.auth.refreshSession()
+      if (refreshErr || !refreshed.session) {
+        await sb.auth.signOut().catch(() => {})
+        throw new Error('Session expired \u2014 please sign in again')
+      }
+      session = refreshed.session
+    }
+  }
+  if (!session) throw new Error('Please sign in to continue')
+  return session
+}
+
 export async function loadFields() {
   const { data, error } = await sb
     .from('fields')
@@ -27,9 +49,10 @@ export async function loadFields() {
 }
 
 export async function insertField({ name, geojson, area_ha, planting_date }) {
+  const session = await requireSession()
   const { data, error } = await sb
     .from('fields')
-    .insert({ name, geojson, area_ha, planting_date })
+    .insert({ name, geojson, area_ha, planting_date, owner_id: session.user.id })
     .select()
     .single()
   if (error) throw error
@@ -65,9 +88,10 @@ export async function loadAois() {
 }
 
 export async function insertAoi({ name, bounds }) {
+  const session = await requireSession()
   const { data, error } = await sb
     .from('aois')
-    .insert({ name, bounds })
+    .insert({ name, bounds, owner_id: session.user.id })
     .select()
     .single()
   if (error) throw error

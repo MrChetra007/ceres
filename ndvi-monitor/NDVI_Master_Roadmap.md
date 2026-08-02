@@ -36,6 +36,7 @@ scheduled stress alerts over Telegram.
 ## Part 1 — Core build (Phases 1–7)
 
 ## Phase 1 — Foundations (prove NDVI works) ✅
+
 - Explore in the **Earth Engine Code Editor** (`code.earthengine.google.com`) before touching the app
 - Original AOI test box: `ee.Geometry.Rectangle([103.10, 12.95, 103.25, 13.05])`
 - Load Sentinel-2 (`COPERNICUS/S2_SR_HARMONIZED`), filter date/cloud, `.median()` → `.normalizedDifference(['B8', 'B4'])`
@@ -44,6 +45,7 @@ scheduled stress alerts over Telegram.
 - **Checkpoint:** real NDVI colors over real Battambang rice fields inside the Code Editor
 
 ## Phase 2 — Scaffold ✅ (migrated)
+
 - **Original:** Vue 3 + Vite project
 - **Current:** plain HTML/CSS/JS static site (`ndvi-monitor/`: `index.html`, `style.css`, `app.js`)
 - **Why migrated:** `@google/earthengine` npm package breaks under Vite's ESM interop
@@ -52,6 +54,7 @@ scheduled stress alerts over Telegram.
 - **Checkpoint:** `typeof L` and `typeof ee` both `"object"`; blank Battambang map renders
 
 ## Phase 3 — NDVI on the map ✅
+
 - Auth flow: `ee.data.authenticateViaOauth(CLIENT_ID, success, error)` → `ee.initialize(null, null, cb, err, null, PROJECT_ID)`
 - **Auth persistence:** OAuth token saved to `localStorage` — page reload restores it automatically
 - `getMap()` returns tile URL → `L.tileLayer(...)` added to map
@@ -59,6 +62,7 @@ scheduled stress alerts over Telegram.
 - **Checkpoint:** OAuth popup completes and the green/red NDVI overlay appears (the point that was blocked under Vite)
 
 ## Phase 4 — Time slider ✅
+
 - `<input type="range">` dynamically built from 14 months back (`buildMonths()`)
 - Debounced 300ms — fires EE request only after user stops dragging
 - Loading spinner on slider panel during computation; swaps NDVI tile layer on month change
@@ -67,12 +71,14 @@ scheduled stress alerts over Telegram.
 - **Checkpoint:** dragging the slider visibly changes map colors month to month
 
 ## Phase 5 — Click-to-inspect + trend chart ✅
+
 - `map.on('click')` captures lat/lng → `getNdviTimeSeriesAtPoint()` queries EE
 - Chart.js line chart (green fill, NDVI −0.5 to 1.0) in right-side info panel
 - **Stress detection:** recent NDVI vs. value 14+ days earlier; >15% drop → yellow alert badge
 - **Checkpoint:** clicking a field shows its own mini health history, not just a static color
 
 ## Phase 6 — Polish ✅
+
 - Preset "interesting" location buttons (fly-to) for live demos
 - "How this works" explanation modal (non-technical-friendly)
 - Loading states hardening (counter-based spinner for rapid slider changes)
@@ -80,17 +86,22 @@ scheduled stress alerts over Telegram.
 - **Checkpoint:** demo-ready; loading states everywhere, presets, explanation panel
 
 ## Phase 7 — Stretch goals ✅
+
 ### 7.1 Event overlay
+
 - Flood markers (Aug–Sep 2025) and Dry spell markers (Jan–Mar 2026) as colored bands below the slider + inline badge
 
 ### 7.2 Compare two dates
+
 - Split-screen: two Leaflet maps side-by-side (50% each), dual sliders, view-synced via `syncing` flag
 - Right map is display-only (no draw controls)
 
 ### 7.3 Export report
+
 - One-page PDF: field name/coords, NDVI trend chart, health status, stress alerts, NDVI explanation (jsPDF + chart canvas)
 
 ### 7.4 NDWI water index
+
 - Toggle adds NDWI (`B3`/`B8`, blue/brown palette); dashboard statuses adapt per active index
 - Works with compare, export, presets, click-to-inspect
 
@@ -104,6 +115,7 @@ saved fields live in `localStorage`, keyed to device/browser. A real backend onl
 worthwhile when you need multi-device sync or multiple users.
 
 ### Feature A — Draw & save fields ✅
+
 - leaflet-draw (v1.0.4) polygon + rectangle tools; live area tooltip while drawing (`showArea: true`, hectares)
 - `promptSaveField()` → saved to `localStorage` as GeoJSON with `crypto.randomUUID()` keys
 - Optional planting date captured at save time
@@ -113,6 +125,7 @@ worthwhile when you need multi-device sync or multiple users.
 - Edit/delete buttons only visible when `drawnItems` has layers
 
 ### Feature B — Dashboard ✅
+
 - ☰ toggle opens 280px left sidebar listing saved fields
 - Each card: name + area (ha) + live health badge (🟢 Healthy / 🟡 Below expected / 🔴 Stressed)
 - 📅 button to set/change planting date after save
@@ -120,6 +133,7 @@ worthwhile when you need multi-device sync or multiple users.
 - Click card to load; hover ✕ to delete; backward-compatible with pre-patch fields
 
 ### Feature C — PNG/PDF export ✅
+
 - "Export PNG" button downloads `canvas.toDataURL('image/png')` from the Chart.js chart
 - PDF export via jsPDF (see 7.3)
 
@@ -128,6 +142,7 @@ worthwhile when you need multi-device sync or multiple users.
 ## Part 3 — Feature patches
 
 ### Patch: Field area (hectares) ✅
+
 - turf.js (v6) `turf.area()` (square meters → hectares) computed in-browser, cached at save time
 - `getFieldAreaHectares()` + `formatHectares()` (sub-0.1 ha shows 3 decimals) + `getOrComputeArea()` fallback
 - `map.on(L.Draw.Event.EDITED)` recalculates area after shape edits — card updates immediately
@@ -135,8 +150,9 @@ worthwhile when you need multi-device sync or multiple users.
 - Optional `showArea: true, metric: ['ha']` for a live preview while drawing
 
 ### Patch: Growth-stage-aware thresholds ✅
+
 - Problem: flat thresholds cry wolf early in the season and miss real stress later
-  (freshly transplanted rice has low NDVI that's *normal*, not stress)
+  (freshly transplanted rice has low NDVI that's _normal_, not stress)
 - `RICE_GROWTH_STAGES` table — 6-stage rice phenology (Transplanting → Harvest/Senescence)
   with expected NDVI ranges; days-since-planting → stage lookup
 - `buildStatusText()` compares actual NDVI against stage-expected range; deficit >0.15 → 🔴
@@ -147,6 +163,7 @@ worthwhile when you need multi-device sync or multiple users.
 - Sets up later: harvest reminders, more meaningful rainfall cross-referencing
 
 ### Patch: LSWI + CHIRPS rainfall ✅
+
 - **LSWI** = `normalizedDifference(['B8', 'B11'])` (NIR/SWIR) — water/moisture-sensitive, good for catching transplanting/flood events; palette tan→lightblue→darkblue
 - Slotted into a 3-way segmented control (NDVI / NDWI / LSWI) via an `INDEX_CONFIG` map
 - **CHIRPS rainfall** (`UCSB-CHG/CHIRPS/DAILY`, ~5km resolution): `getRainfallMm()` sums precipitation over a trailing 21-day window
@@ -155,6 +172,7 @@ worthwhile when you need multi-device sync or multiple users.
 - **Optional:** auto-generate dry-month bands on the slider from CHIRPS (months < 50mm) instead of hand-placed markers — done later in Feature I
 
 ### Patch: UI redesign ✅
+
 - `.panel` base class — one shared visual language across slider panel, info panel, dashboard
 - Segmented 3-way index toggle; Compare checkbox switch; Export dropdown (PNG/PDF) with outside-click-to-close
 - Field cards: header row (name + status badge) + stat row (area / planted date / NDVI) below a divider; area warning for implausibly large fields (>50 ha)
@@ -168,36 +186,43 @@ worthwhile when you need multi-device sync or multiple users.
 ## Part 4 — Product features (built during development)
 
 ### Feature D — UI-managed preset locations ✅
+
 - `PRESETS` array rendered dynamically by `renderPresets()`
 - Pencil icon opens editor overlay: editable name/lat/lng/zoom + delete
 - "Add current view" captures live map center + zoom; "Reset defaults" restores originals
 - Persisted to `localStorage` under `ndvi_presets`
 
 ### Feature E — AOI editor (UI-managed bounding box) ✅
+
 - `var aoiCoords` loaded from `localStorage` key `ndvi_aoi` (replaces hardcoded `AOI_COORDS`)
 - Map icon button opens AOI editor modal (West/South/East/North inputs); red dashed rectangle overlay
 - Applied/reset triggers recompute of dry months + NDVI with the new geometry
 - Default: cement-factory box `[102.985, 12.845, 103.048, 12.898]`
 
 ### Feature F — Satellite basemap toggle ✅
+
 - Street / Satellite segmented toggle in the slider panel `nav-row`
 - Esri World Imagery (free, no API key); swaps base layer on both main and compare maps simultaneously
 
 ### Feature G — Field deselection ✅
+
 - Clicking an already-selected field card deselects it
 - `clearFieldSelection()` clears overlay, resets `currentGeometry`, recomputes over full AOI
 - Map view stays unchanged; basemap re-asserted to prevent Leaflet tile glitches; `.field-card.active` blue border
 
 ### Feature H — Place search / geocoder ✅
+
 - Search bar + Go button in `nav-row`; uses Nominatim (OpenStreetMap free geocoding)
 - Enter key or button triggers `searchPlace()` → `map.setView([lat, lon], 16)`
 - Toast on no results or network failure — never crashes the app
 
 ### Feature I — CHIRPS auto dry-month markers ✅
+
 - `fetchDryMonths()` queries CHIRPS per month, flags months below 50mm total precipitation
 - Striped amber markers in a second row below hand-placed event markers; re-renders both sliders
 
 ### AOI refinement ✅
+
 - AOI changed from wide Battambang box to cement factory `[102.985, 12.845, 103.048, 12.898]`
 - Map center/zoom updated to `[12.8715, 103.0165], zoom 14` (both maps)
 - `.clip(geom)` added after `.median()` to restrict computation to AOI
@@ -243,6 +268,7 @@ client (`@google/earthengine`) was confirmed working in Deno (see 8.4/8.5 — th
 `Failed to locate function parameters` bug was a Vite bundler interop issue, not a Deno one).
 
 ### 5.1 Phase 8.1 — Supabase schema & auth ✅
+
 - Supabase project `https://wopwwtnvqyomiwbsxiks.supabase.co` (anon key in `.env` / `app.js`)
 - Auth: **Google OAuth** (single provider — the email magic-link/password forms were removed; Earth Engine keeps its own separate Google OAuth popup)
 - `schema.sql` updated: `fields.owner_id` now defaults to `auth.uid()`, added `set_updated_at()` trigger
@@ -250,6 +276,7 @@ client (`@google/earthengine`) was confirmed working in Deno (see 8.4/8.5 — th
 - **Checkpoint:** can sign in with Google and see an empty `fields` list from Supabase in the Supabase dashboard table view
 
 ### 5.2 Phase 8.2 — Migrate the app off localStorage ✅
+
 - `saveField()` / `getSavedFields()` / `deleteField()` / `loadField()` / `loadFieldById()` now use Supabase (`fieldsCache` in-memory mirror + async CRUD); same function names, new implementation
 - New `updateField(id, patch)` handles area recalc (on `EDITED`) and planting-date edits
 - One-time import: `importLocalFieldsIfAny()` uploads existing `ndvi_fields` localStorage on first login, then clears it
@@ -257,6 +284,7 @@ client (`@google/earthengine`) was confirmed working in Deno (see 8.4/8.5 — th
 - **Checkpoint:** draw a field, refresh the page (or open on a different device, same login) — field persists via Supabase, not the browser
 
 ### 5.3 Phase 8.3 — Telegram bot + account linking ✅ (implemented in repo; needs deployment)
+
 - In-app: "Telegram alerts" entry in the top-right user menu → modal generates a short-lived code and
   shows a deep link `t.me/<bot>?start=<code>` (bot username from `VITE_TELEGRAM_BOT_USERNAME` /
   `TELEGRAM_BOT_USERNAME` in `src/config.js`); polls `profiles.telegram_chat_id` every 3s until linked
@@ -264,7 +292,7 @@ client (`@google/earthengine`) was confirmed working in Deno (see 8.4/8.5 — th
   `verify_jwt = false`): receives `/start <code>`, matches it in `link_codes` via `service_role`
   (bypasses RLS — no public select-by-code policy exists), redeems through the `redeem_link_code()`
   RPC (migration2.sql) that atomically sets `profiles.telegram_chat_id` and marks the code used
-- `migration2.sql` guard trigger: a logged-in user can only *clear* their `telegram_chat_id`
+- `migration2.sql` guard trigger: a logged-in user can only _clear_ their `telegram_chat_id`
   (disconnect); the chat id is set only by the bot
 - **Deploy:** run `migration2.sql` → `supabase functions deploy telegram-webhook` →
   `supabase secrets set TELEGRAM_BOT_TOKEN=...` → Telegram `setWebhook` to
@@ -273,6 +301,7 @@ client (`@google/earthengine`) was confirmed working in Deno (see 8.4/8.5 — th
   populates for that user
 
 ### 5.4 Phase 8.4 — Earth Engine service account ✅
+
 - In the same GCP project (`gen-lang-client-0978198347`), created a service account, granted it Earth
   Engine access, downloaded the JSON key
 - Stored the key as a Supabase Edge Function secret (`supabase secrets set EE_SERVICE_ACCOUNT_KEY=...`)
@@ -283,6 +312,7 @@ client (`@google/earthengine`) was confirmed working in Deno (see 8.4/8.5 — th
 - **Checkpoint:** the worker authenticates and pulls a real NDVI value with no browser/OAuth popup involved ✅
 
 ### 5.5 Phase 8.5 — Scheduled worker (Supabase pg_cron → Edge Function) ✅
+
 - **Scheduling:** `migration3.sql` enables `pg_cron` + `pg_net`, stores the `service_role` key in
   **Supabase Vault**, and schedules `ndvi-alerts-daily` (once daily, 23:00 UTC = 06:00 Cambodia) to
   `net.http_post` the worker function with a `service_role` Bearer token
@@ -291,7 +321,7 @@ client (`@google/earthengine`) was confirmed working in Deno (see 8.4/8.5 — th
   2. Queries Supabase (via `service_role`) for all fields where the owner has a `telegram_chat_id` set
   3. For each field: recomputes NDVI (30-day Sentinel-2 median, `.normalizedDifference(['B8','B4'])`) +
      growth-stage-aware status — a port of the app's 6-stage phenology thresholds and flat fallback
-  4. Compares new status to the *last logged* status in `alerts_log` (dedup) — sends Telegram only on
+  4. Compares new status to the _last logged_ status in `alerts_log` (dedup) — sends Telegram only on
      a genuine change **for the worse** (or first non-healthy result)
   5. Inserts an `alerts_log` row every run (history) with the message text; calls Telegram `sendMessage`
      with `chat_id` when a message was warranted (includes 21-day CHIRPS rainfall context)
@@ -302,6 +332,7 @@ client (`@google/earthengine`) was confirmed working in Deno (see 8.4/8.5 — th
   deliberately stressed, and an `alerts_log` row every run ✅ (user-confirmed working)
 
 ### 5.6 Phase 8.6 — End-to-end test 🚧 In progress
+
 - Let the scheduled job run for a few real days on your own test field
 - Confirm: no duplicate alerts, no missed alerts, dedup logic holds up, Telegram message content is
   legible in Khmer/English as needed
@@ -338,6 +369,7 @@ season's alert log" during a pitch) while only pinging Telegram on genuine chang
 **Backend Phase 8 is effectively complete except the sustained end-to-end confirmation.**
 
 ### 5.9 Known risks to plan around (backend)
+
 - **EE noncommercial fee-for-service restriction** — fine for now, becomes a real line item the
   moment a co-op actually pays for this
 - **Alert fatigue** — the dedup logic above is a starting point; watch real usage and adjust the
@@ -351,7 +383,7 @@ season's alert log" during a pitch) while only pinging Telegram on genuine chang
 ### 5.10 AI window (not built in this phase)
 
 `buildAlertMessage()` in Phase 8.5 is deliberately a standalone function, not inline code, so that a
-future AI/LLM layer can replace what's *inside* it (plain-language generation from the same status/
+future AI/LLM layer can replace what's _inside_ it (plain-language generation from the same status/
 NDVI/rainfall/growth-stage inputs) without touching Supabase, the scheduler, or the Telegram send
 logic. Do not build this now — only implement it if explicitly asked to start the AI phase.
 
@@ -362,6 +394,7 @@ logic. Do not build this now — only implement it if explicitly asked to start 
 Replaces the single hardcoded/localStorage AOI with per-user, multi-AOI support backed by Supabase.
 
 ### Feature: Areas dropdown + New Area modal
+
 - `aois` table (`owner_id`, `name`, `bounds` jsonb, `created_at`), capped at **5 per user** via a DB trigger; nullable `aoi_id` added to `fields` (schema-ready, not wired to the UI yet)
 - CRUD mirrors the fields pattern: `getAois()` / `createAoi()` / `updateAoi()` / `deleteAoi()` in `store.js`, backed by `loadAois` / `insertAoi` / `updateAoi` / `deleteAoi` in `src/services/supabase.js`; in-memory `state.aois` mirror
 - **"Areas" dropdown** in the BandPanel: lists saved areas by name (select → recenter + re-clip NDVI/NDWI/LSWI on both maps), trash to delete, "+ New area"
@@ -372,6 +405,7 @@ Replaces the single hardcoded/localStorage AOI with per-user, multi-AOI support 
 - Help modal updated with an "Areas of interest" section
 
 ### Supporting UX work (this session)
+
 - Supabase auth simplified to **Google OAuth only** (email magic-link/password forms removed)
 - Auth overlay redesigned to the dark-glass design system (brand icon, Google-logo buttons with captions, ✕ close)
 - Mobile fixes: TopBar user chip collapses to an icon + dropdown at ≤780px; `.time-panel` z-index lowered to 25 so the Export dropdown paints above it; redundant Street/Satellite toggle hidden at ≤480px
@@ -381,12 +415,14 @@ Replaces the single hardcoded/localStorage AOI with per-user, multi-AOI support 
 ## Stack notes (migration + current state)
 
 ### Why no Vite
+
 The EE JS client does dynamic function-binding and injects its own OAuth/gapi loader
 internally. Under Vite's dev-server module graph and pre-bundling cache this produces
 `Failed to locate function parameters` — not an app bug, a client/bundler interop issue.
 Fix: load EE via a plain `<script>` tag (Google's own documented approach).
 
 ### What changes vs. Vue
+
 - No component reactivity — state lives in plain JS variables at the top of `app.js`;
   manually update the DOM via small `update...()` functions
 - No build step — edits take effect on browser refresh
@@ -400,21 +436,22 @@ Fix: load EE via a plain `<script>` tag (Google's own documented approach).
 > saved fields now persist to **Supabase** instead of localStorage (see Part 5). The stack table below
 > is the historical record; the working app is the Vue rewrite.
 
-| Layer | Tool |
-|---|---|
-| Frontend | Plain HTML/CSS/JS (historical) → **Vue 3 + Vite** (current, `src/`) |
-| Map | Leaflet + OpenStreetMap tiles / Esri World Imagery |
-| Satellite compute | Google Earth Engine (JS client via CDN `<script>` tag, v1.7.36) |
-| Auth | Earth Engine OAuth popup (`ee.data.authenticateViaOauth`) + **Supabase Google OAuth** |
-| Geocoding | Nominatim (OpenStreetMap free API) |
-| Drawing | leaflet-draw (v1.0.4) |
-| Area calc | turf.js (v6) |
-| Charts | Chart.js (v4.4.7) |
-| PDF | jsPDF |
-| Icons | Tabler Icons (`@tabler/icons-webfont`) |
-| Storage | localStorage (EE token, presets) → **Supabase** (fields, areas, alerts) |
+| Layer             | Tool                                                                                  |
+| ----------------- | ------------------------------------------------------------------------------------- |
+| Frontend          | Plain HTML/CSS/JS (historical) → **Vue 3 + Vite** (current, `src/`)                   |
+| Map               | Leaflet + OpenStreetMap tiles / Esri World Imagery                                    |
+| Satellite compute | Google Earth Engine (JS client via CDN `<script>` tag, v1.7.36)                       |
+| Auth              | Earth Engine OAuth popup (`ee.data.authenticateViaOauth`) + **Supabase Google OAuth** |
+| Geocoding         | Nominatim (OpenStreetMap free API)                                                    |
+| Drawing           | leaflet-draw (v1.0.4)                                                                 |
+| Area calc         | turf.js (v6)                                                                          |
+| Charts            | Chart.js (v4.4.7)                                                                     |
+| PDF               | jsPDF                                                                                 |
+| Icons             | Tabler Icons (`@tabler/icons-webfont`)                                                |
+| Storage           | localStorage (EE token, presets) → **Supabase** (fields, areas, alerts)               |
 
 ### OAuth setup (Google Cloud Console)
+
 - OAuth 2.0 Client ID (Web application type): `355514869488-q3v52vvkb7c3gikr0og89o26m51ev403.apps.googleusercontent.com`
 - Authorized JS origins: `http://localhost:5173` (Vite), `http://localhost:3000` (serve), `http://localhost:60822` (serve dynamic)
 - Token persisted via `localStorage` — single sign-in survives reloads
@@ -430,7 +467,7 @@ Fix: load EE via a plain `<script>` tag (Google's own documented approach).
    but don't leave the app auto-refreshing overnight.
 3. **Booth wifi** — the single biggest real-world risk to a live demo; consider pre-fetching
    and caching a few months of tiles as an offline fallback.
-4. **NDVI ≠ diagnosis** — a stress signal tells you *something* changed, not *what* caused it
+4. **NDVI ≠ diagnosis** — a stress signal tells you _something_ changed, not _what_ caused it
    (drought vs. disease vs. pest vs. soil all lower NDVI similarly). Same honesty applies to
    the growth-stage curve (approximation, not field-calibrated) and rainfall correlation (context, not causation).
 

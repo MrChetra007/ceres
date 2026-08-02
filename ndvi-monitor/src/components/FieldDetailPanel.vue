@@ -34,6 +34,19 @@
         <p class="detail-card-label">Stress alert</p>
         <p class="stress-msg">{{ stressMsg }}</p>
       </div>
+
+      <div class="detail-section ai-card">
+        <button class="ai-consult-btn" :disabled="consultingAi" @click="consultAi">
+          <span v-if="consultingAi" class="ai-spinner"></span>
+          <i v-else class="ti ti-sparkles"></i>
+          {{ consultingAi ? 'Consulting AI...' : 'Consult AI' }}
+        </button>
+        <div v-if="aiExplanation" class="ai-answer">
+          <p class="detail-card-label">AI agronomist</p>
+          <p class="ai-text">{{ aiExplanation }}</p>
+          <p class="ai-note">AI-generated interpretation to guide you — not a diagnosis.</p>
+        </div>
+      </div>
     </template>
 
     <div v-if="state.stressAlert" class="detail-section stress-card alert-msg">
@@ -72,9 +85,13 @@ import { state, fieldStatus, fieldTrends, setInfoChart, getStageAtDate } from '.
 import * as store from '../store'
 import { getOrComputeArea, formatHectares } from '../store'
 import { buildChartConfig } from '../services/chart'
-import { INDICES, MONTHS } from '../config'
+import { INDICES, MONTHS, CONSULT_AI_URL, CONSULT_AI_LANG } from '../config'
+import { sb } from '../services/supabase'
+import { getRecentIndexValue, getRainfallMm } from '../services/earthEngine'
 
 const chartCanvas = ref(null)
+const consultingAi = ref(false)
+const aiExplanation = ref('')
 let chart = null
 
 const currentField = computed(() => state.fields.find((f) => f.id === state.currentFieldId) || null)
@@ -148,6 +165,105 @@ function onClose() {
   else state.infoPanelVisible = false
 }
 
+function recentValue(geometry, index) {
+  return new Promise((resolve) => {
+    getRecentIndexValue(geometry, index, ({ value }) => resolve(value))
+  })
+}
+
+function getRainfall(geometry) {
+  return new Promise((resolve) => {
+    getRainfallMm(geometry, 21, (mm) => resolve(mm))
+  })
+}
+
+async function consultAi() {
+  if (consultingAi.value) return
+  const field = currentField.value
+  if (!field) return
+  if (!state.supabaseUser) {
+    store.showToast('Sign in to consult the AI agronomist')
+    return
+  }
+  if (!state.eeReady) {
+    store.showToast('Satellite data is still loading \u2014 try again in a moment')
+    return
+  }
+  const geom = field.geojson && (field.geojson.geometry || field.geojson)
+  if (!geom || !geom.coordinates) {
+    store.showToast('Couldn\'t get an explanation right now \u2014 please try again.')
+    return
+  }
+  const geometry = window.ee.Geometry.Polygon(geom.coordinates)
+
+  consultingAi.value = true
+  aiExplanation.value = ''
+  let ndviValue = null
+  let lswiValue = null
+  let rainfallMm = state.rainfallMm
+  try {
+    const [ndvi, lswi] = await Promise.all([recentValue(geometry, 'ndvi'), recentValue(geometry, 'lswi')])
+    ndviValue = ndvi
+    lswiValue = lswi
+    if (rainfallMm == null) rainfallMm = await getRainfall(geometry)
+  } catch (e) {
+    consultingAi.value = false
+    store.showToast('Couldn\'t get an explanation right now \u2014 please try again.')
+    return
+  }
+
+  let growthStage = null
+  let dayCount = null
+  if (field.plantingDate) {
+    const days = Math.floor((Date.now() - new Date(field.plantingDate).getTime()) / 86400000)
+    if (days >= 0) {
+      dayCount = days
+      growthStage = store.getGrowthStage(days).stage
+    }
+  }
+  const healthStatus = status.value ? status.value.badgeText : ''
+
+  const session = await sb.auth.getSession()
+  const token = session && session.data && session.data.session ? session.data.session.access_token : null
+  if (!token) {
+    consultingAi.value = false
+    store.showToast('Sign in to consult the AI agronomist')
+    return
+  }
+
+  try {
+    const res = await fetch(CONSULT_AI_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
+      body: JSON.stringify({
+        fieldId: field.id,
+        ndviValue,
+        lswiValue,
+        rainfallMm,
+        status: healthStatus,
+        growthStage,
+        dayCount,
+        lang: CONSULT_AI_LANG,
+      }),
+    })
+    let body = null
+    try { body = await res.json() } catch (e) {}
+    if (res.status === 429 || (body && body.ok === false && body.error === 'daily_limit_reached')) {
+      store.showToast('You\'ve used today\'s AI explanations \u2014 more tomorrow.')
+      return
+    }
+    if (body && body.ok && body.explanation) {
+      aiExplanation.value = body.explanation
+    } else {
+      store.showToast('Couldn\'t get an explanation right now \u2014 please try again.')
+    }
+  } catch (e) {
+    store.showToast('Couldn\'t get an explanation right now \u2014 please try again.')
+  } finally {
+    consultingAi.value = false
+  }
+}
+
 watch(() => state.chartData, (data) => {
   if (data && state.infoPanelVisible) render(data)
 })
@@ -155,4 +271,5 @@ watch(() => state.benchmarkValue, () => {
   if (state.chartData && state.infoPanelVisible) render(state.chartData)
 })
 watch(() => state.mainMonth, () => updateMarker())
+watch(() => state.currentFieldId, () => { aiExplanation.value = '' })
 </script>
