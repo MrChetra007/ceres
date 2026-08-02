@@ -99,9 +99,10 @@ A single-page web app that shows a satellite map of rice-growing areas in Battam
 ### 8.3 Telegram bot + account linking ✅ Implemented (needs deployment)
 - Bot webhook = Supabase Edge Function `supabase/functions/telegram-webhook/index.ts` (Deno, `verify_jwt = false`)
 - `migration2.sql`: `redeem_link_code()` security-definer RPC (atomic: set `telegram_chat_id` + consume code), guard trigger so users can only clear (not set) their chat id, `cleanup_expired_link_codes()`
-- App: "Telegram alerts" in the TopBar user menu → `TelegramModal.vue` generates a short-lived code, shows the `t.me/<bot>?start=<code>` deep link, polls `profiles.telegram_chat_id` every 3s, shows Connected/Disconnect
+- App: prominent **Telegram pill button in the TopBar** (green dot when linked; opens sign-in overlay if not signed in) → `TelegramModal.vue` generates a short-lived code, shows the `t.me/<bot>?start=<code>` deep link, polls `profiles.telegram_chat_id` every 3s until linked, then shows Connected/Disconnect. A "Telegram alerts" entry also lives in the TopBar user menu.
+- No manual chat-id field — the bot sets `telegram_chat_id` via the Edge Function (guarded so users can't claim chats they don't own)
 - Bot username + link TTL in `src/config.js` (`TELEGRAM_BOT_USERNAME`, `TELEGRAM_LINK_TTL_MS`)
-- **Deploy:** run `migration2.sql` → `supabase functions deploy telegram-webhook` → `supabase secrets set TELEGRAM_BOT_TOKEN=...` → Telegram `setWebhook` to the function URL
+- **Deploy:** run `migration2.sql` → `supabase functions deploy telegram-webhook` → `supabase secrets set TELEGRAM_BOT_TOKEN=...` → Telegram `setWebhook` to the function URL → set `VITE_TELEGRAM_BOT_USERNAME` in `.env`
 - Rest of Phase 8.4+ (EE service account, Python Cloud Function, end-to-end test) still pending — see Part 5 of `NDVI_Master_Roadmap.md`
 
 ---
