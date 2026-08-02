@@ -21,13 +21,22 @@
           <li><strong>Drag the slider</strong> — Move the time slider at the bottom to see NDVI/NDWI/LSWI change month by month. A scene count next to the month label shows how many cloud-free Sentinel-2 images went into that month's composite (amber dot means 1–2 scenes — lower confidence). Click <strong>&#8635;</strong> to jump to the most recent complete month.</li>
           <li><strong>Toggle basemap</strong> — Switch between Street (OSM) and Satellite (Esri World Imagery) with the button in the slider panel.</li>
           <li><strong>Search places</strong> — Type a location name in the search bar and press Enter or click Go to fly to it.</li>
-          <li><strong>Edit area of interest</strong> — Click the map icon in the slider panel to change the AOI boundaries. Changes save automatically.</li>
+          <li><strong>Choose an area</strong> — The "Areas" dropdown in the bottom panel switches between your saved areas of interest (the box Earth Engine analyzes). Use the map icon next to it to create a new one. See "Areas of interest" below.</li>
           <li><strong>Click anywhere</strong> on the map to see a detailed trend chart, stress alerts, and recent rainfall context.</li>
           <li><strong>Draw a field</strong> — Use the polygon/rectangle tools to outline a rice paddy, then name it and optionally set a planting date.</li>
           <li><strong>Check the dashboard</strong> — Click &#9776; to see your saved fields with live health status, growth stage, and area. Click an active field card to deselect it and return to the AOI-wide view.</li>
           <li><strong>Compare months</strong> — Toggle "Compare" to view two months side-by-side with synced maps.</li>
           <li><strong>Export</strong> — Click "Export" to download the trend chart as PNG or a full PDF report with chart, field info, and health summary.</li>
         </ol>
+
+        <h4>Areas of interest</h4>
+        <p>An <strong>area</strong> is a bounding box that defines where the satellite analysis runs. The active area is shown as a red dashed rectangle on the map.</p>
+        <ul>
+          <li><strong>Switch areas</strong> — Open the "Areas" dropdown in the bottom panel and pick one. The map recenters and NDVI/NDWI/LSWI are recomputed for that box.</li>
+          <li><strong>Add an area</strong> — Click the map icon (or "+ New area") to open the New Area window. Two ways to set the box: type the West/South/East/North coordinates directly, or <strong>search a place name</strong> and the box is filled automatically from the matched location.</li>
+          <li><strong>Delete an area</strong> — Hover a saved area in the dropdown and click the trash icon.</li>
+          <li><strong>Synced to your account</strong> — Areas are saved to your account (up to <strong>5</strong> per user), so they follow you across devices. The first time you sign in, a default "Battambang (default)" area is created automatically.</li>
+        </ul>
 
         <h4>Growth stages</h4>
         <p>If you set a planting date for a field, the app compares the current NDVI against expected ranges for each rice growth stage:</p>

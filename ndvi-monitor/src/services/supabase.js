@@ -46,6 +46,44 @@ export async function deleteField(id) {
   if (error) throw error
 }
 
+export function mapRowToAoi(row) {
+  return {
+    id: row.id,
+    name: row.name,
+    bounds: row.bounds,
+    createdAt: row.created_at,
+  }
+}
+
+export async function loadAois() {
+  const { data, error } = await sb
+    .from('aois')
+    .select('*')
+    .order('created_at')
+  if (error) throw error
+  return (data || []).map(mapRowToAoi)
+}
+
+export async function insertAoi({ name, bounds }) {
+  const { data, error } = await sb
+    .from('aois')
+    .insert({ name, bounds })
+    .select()
+    .single()
+  if (error) throw error
+  return mapRowToAoi(data)
+}
+
+export async function updateAoi(id, patch) {
+  const { error } = await sb.from('aois').update(patch).eq('id', id)
+  if (error) throw error
+}
+
+export async function deleteAoi(id) {
+  const { error } = await sb.from('aois').delete().eq('id', id)
+  if (error) throw error
+}
+
 export async function signInWithGoogle() {
   return sb.auth.signInWithOAuth({ provider: 'google' })
 }

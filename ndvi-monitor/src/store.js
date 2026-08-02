@@ -61,6 +61,8 @@ export const state = reactive({
   statusText: '',
   toast: null,
   aoiCoords: DEFAULT_AOI.slice(),
+  aois: [],
+  selectedAoiId: null,
 })
 
 export const currentGeometry = shallowRef(null)
@@ -136,17 +138,9 @@ export function escapeHtml(str) {
 }
 
 // ---------------------------------------------------------------------------
-// AOI
+// AOI (Supabase-backed, per-user areas)
 // ---------------------------------------------------------------------------
-export function loadAoiCoords() {
-  const saved = localStorage.getItem('ndvi_aoi')
-  state.aoiCoords = saved ? JSON.parse(saved) : DEFAULT_AOI.slice()
-}
-export function saveAoiCoords(coords) {
-  state.aoiCoords = coords
-  localStorage.setItem('ndvi_aoi', JSON.stringify(coords))
-}
-loadAoiCoords()
+export function getAois() { return state.aois }
 
 export function updateAoiRectangle() {
   if (!mapReg.map || !state.aoiCoords) return
@@ -157,18 +151,106 @@ export function updateAoiRectangle() {
   ).addTo(mapReg.map)
 }
 
-export function applyAoi(coords) {
-  saveAoiCoords(coords)
+function applyAoiBounds(coords, label) {
+  state.aoiCoords = coords && coords.length === 4 ? coords.slice() : DEFAULT_AOI.slice()
   updateAoiRectangle()
-  mapReg.map.setView([(coords[1] + coords[3]) / 2, (coords[0] + coords[2]) / 2], 14)
-  setStatus('computing', 'Reloading NDVI for new AOI...')
+  if (mapReg.map) {
+    mapReg.map.setView([(state.aoiCoords[1] + state.aoiCoords[3]) / 2, (state.aoiCoords[0] + state.aoiCoords[2]) / 2], 14)
+  }
+  setStatus('computing', 'Reloading NDVI for ' + (label || 'area') + '...')
   fetchDryMonths()
   loadIndexForMonth(state.mainMonth, null)
   if (state.compareMode) loadIndexForMonthRight(state.rightMonth)
 }
 
-export function resetAoi() {
-  applyAoi(DEFAULT_AOI.slice())
+export function selectAoi(id) {
+  const aoi = state.aois.find((a) => a.id === id)
+  if (!aoi) return
+  state.selectedAoiId = id
+  applyAoiBounds(aoi.bounds, aoi.name)
+}
+
+export async function loadAoisFromSupabase() {
+  if (!state.supabaseUser) {
+    state.aois = []
+    state.selectedAoiId = null
+    state.aoiCoords = DEFAULT_AOI.slice()
+    return
+  }
+  try {
+    state.aois = await supabase.loadAois()
+  } catch (err) {
+    showToast('Failed to load areas: ' + err.message)
+    return
+  }
+  if (state.aois.length === 0) {
+    try {
+      const def = await supabase.insertAoi({ name: 'Battambang (default)', bounds: DEFAULT_AOI.slice() })
+      state.aois.push(def)
+    } catch (err) {
+      showToast('Failed to create default area: ' + err.message)
+    }
+  }
+  const first = state.aois[0]
+  if (first) {
+    state.selectedAoiId = first.id
+    applyAoiBounds(first.bounds, first.name)
+  }
+}
+
+export async function createAoi(name, bounds) {
+  if (!state.supabaseUser) { showToast('Sign in to save areas'); return null }
+  if (state.aois.length >= 5) { showToast('Limit of 5 areas reached'); return null }
+  try {
+    const aoi = await supabase.insertAoi({ name, bounds })
+    state.aois.push(aoi)
+    selectAoi(aoi.id)
+    return aoi
+  } catch (err) {
+    const msg = /limit|exceeded|maximum|violates|cap/i.test(err.message || '')
+      ? 'Limit of 5 areas reached'
+      : err.message
+    showToast('Failed to save area: ' + msg)
+    return null
+  }
+}
+
+export async function updateAoi(id, patch) {
+  if (!state.supabaseUser) { showToast('Sign in to update areas'); return }
+  try {
+    await supabase.updateAoi(id, patch)
+    const aoi = state.aois.find((a) => a.id === id)
+    if (aoi) {
+      if ('name' in patch) aoi.name = patch.name
+      if ('bounds' in patch) aoi.bounds = patch.bounds
+      if (id === state.selectedAoiId) applyAoiBounds(aoi.bounds, aoi.name)
+    }
+  } catch (err) {
+    showToast('Failed to update area: ' + err.message)
+  }
+}
+
+export async function deleteAoi(id) {
+  if (!state.supabaseUser) { showToast('Sign in to manage areas'); return }
+  try {
+    await supabase.deleteAoi(id)
+    state.aois = state.aois.filter((a) => a.id !== id)
+    if (id === state.selectedAoiId) {
+      state.selectedAoiId = null
+      if (state.aois.length > 0) {
+        selectAoi(state.aois[0].id)
+      } else {
+        state.aoiCoords = DEFAULT_AOI.slice()
+        updateAoiRectangle()
+        setStatus('computing', 'Reloading NDVI over the default area...')
+        fetchDryMonths()
+        loadIndexForMonth(state.mainMonth, null)
+        if (state.compareMode) loadIndexForMonthRight(state.rightMonth)
+      }
+    }
+  } catch (err) {
+    showToast('Failed to delete area: ' + err.message)
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -425,7 +507,7 @@ export function initializeEE() {
     state.eeReady = true
     state.authOverlayVisible = false
     mapReg.map.invalidateSize()
-    mapReg.map.setView(MAP_CENTER, MAP_ZOOM)
+    mapReg.map.setView([(state.aoiCoords[1] + state.aoiCoords[3]) / 2, (state.aoiCoords[0] + state.aoiCoords[2]) / 2], MAP_ZOOM)
     fetchDryMonths()
     refreshAllFieldStatuses()
     refreshAllFieldTrends()
@@ -479,12 +561,20 @@ sb.auth.onAuthStateChange((event, session) => {
   if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
     if (session) {
       loadFieldsFromSupabase()
+      loadAoisFromSupabase()
       if (localStorage.getItem('ndvi_fields') && !localStorage.getItem('ndvi_import_skipped')) {
         importLocalFieldsIfAny()
       }
     }
   } else if (event === 'SIGNED_OUT') {
     state.fields = []
+    state.aois = []
+    state.selectedAoiId = null
+    state.aoiCoords = DEFAULT_AOI.slice()
+    if (mapReg.aoiRectangle) {
+      if (mapReg.map) mapReg.map.removeLayer(mapReg.aoiRectangle)
+      mapReg.aoiRectangle = null
+    }
     state.authOverlayVisible = true
   }
 })
