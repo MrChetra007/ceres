@@ -57,7 +57,7 @@ async function callGemini(prompt: string): Promise<string | null> {
           contents: [{ parts: [{ text: prompt }] }],
           generationConfig: {
             thinkingConfig: { thinkingLevel: "low" },
-            maxOutputTokens: 500,
+            maxOutputTokens: 800,
           },
         }),
       },
