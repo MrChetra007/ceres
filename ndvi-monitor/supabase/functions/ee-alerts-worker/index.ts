@@ -61,35 +61,45 @@ function statusFromNdvi(
   return { status: "healthy", stage: stage.name };
 }
 
-function getNdviForGeometry(geojson: any): Promise<number> {
+function toEeGeometry(geojson: any) {
+  const geometry = geojson && geojson.type === "Feature"
+    ? geojson.geometry
+    : geojson;
+  return ee.Geometry(geometry);
+}
+
+function getNdviForGeometry(geojson: any): Promise<number | null> {
   return new Promise((resolve, reject) => {
-    const geom = ee.Geometry(geojson);
+    const geom = toEeGeometry(geojson);
     const end = ee.Date(Date.now());
     const start = end.advance(-30, "day");
-    const img = ee
+    const collection = ee
       .ImageCollection("COPERNICUS/S2_SR_HARMONIZED")
       .filterBounds(geom)
       .filterDate(start, end)
-      .filter(ee.Filter.lt("CLOUDY_PIXEL_PERCENTAGE", 40))
-      .median()
-      .normalizedDifference(["B8", "B4"]);
-    img
-      .reduceRegion({
-        reducer: ee.Reducer.mean(),
-        geometry: geom,
-        scale: 10,
-        maxPixels: 1e9,
-      })
-      .evaluate((result: any, err: string) => {
-        if (err) reject(new Error(err));
-        else resolve(result?.nd ?? 0);
-      });
+      .filter(ee.Filter.lt("CLOUDY_PIXEL_PERCENTAGE", 40));
+    collection.size().evaluate((count: number, err: string) => {
+      if (err) return reject(new Error(err));
+      if (!count) return resolve(null);
+      const img = collection.median().normalizedDifference(["B8", "B4"]);
+      img
+        .reduceRegion({
+          reducer: ee.Reducer.mean(),
+          geometry: geom,
+          scale: 10,
+          maxPixels: 1e9,
+        })
+        .evaluate((result: any, e: string) => {
+          if (e) reject(new Error(e));
+          else resolve(result?.nd ?? 0);
+        });
+    });
   });
 }
 
-function getRainfallMm(geojson: any): Promise<number> {
+function getRainfallMm(geojson: any): Promise<number | null> {
   return new Promise((resolve, reject) => {
-    const geom = ee.Geometry(geojson);
+    const geom = toEeGeometry(geojson);
     const end = ee.Date(Date.now());
     const start = end.advance(-21, "day");
     ee.ImageCollection("UCSB-CHG/CHIRPS/DAILY")
@@ -141,6 +151,17 @@ Deno.serve(async (_req) => {
       if (!chatId) continue;
 
       const ndvi = await getNdviForGeometry(field.geojson);
+      if (ndvi === null) {
+        await supabase.from("alerts_log").insert({
+          field_id: field.id,
+          status: "no_data",
+          ndvi_value: null,
+          message: null,
+          chat_id: chatId,
+        });
+        results.push({ field: field.name, status: "no_data", sent: false });
+        continue;
+      }
       const { status, stage } = statusFromNdvi(ndvi, field.planting_date);
 
       const { data: lastAlert } = await supabase
@@ -161,7 +182,8 @@ Deno.serve(async (_req) => {
       let message = null;
       if (changed && worse) {
         const rainfall = await getRainfallMm(field.geojson);
-        message = `${field.name}: ${status.replace("_", " ")}${stage ? ` (${stage})` : ""} — NDVI ${ndvi.toFixed(2)}, ${rainfall.toFixed(0)}mm rain (21d)`;
+        const rainText = rainfall === null ? "n/a" : `${rainfall.toFixed(0)}mm`;
+        message = `${field.name}: ${status.replace("_", " ")}${stage ? ` (${stage})` : ""} — NDVI ${ndvi.toFixed(2)}, ${rainText} rain (21d)`;
         await sendTelegram(chatId, message);
       }
 
