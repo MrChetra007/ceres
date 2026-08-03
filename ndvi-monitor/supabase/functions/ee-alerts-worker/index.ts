@@ -69,10 +69,12 @@ function toEeGeometry(geojson: any) {
 }
 
 function getNdviForGeometry(geojson: any): Promise<number | null> {
+  // 90-day window (wider than the app's 30-day so rainy-season fields with
+  // sporadic cloud-free scenes still yield a real NDVI for the status check).
   return new Promise((resolve, reject) => {
     const geom = toEeGeometry(geojson);
     const end = ee.Date(Date.now());
-    const start = end.advance(-30, "day");
+    const start = end.advance(-90, "day");
     const collection = ee
       .ImageCollection("COPERNICUS/S2_SR_HARMONIZED")
       .filterBounds(geom)
@@ -127,6 +129,7 @@ async function sendTelegram(chatId: string, text: string) {
 }
 
 const SEVERITY: Record<string, number> = {
+  no_data: -1,
   healthy: 0,
   below_expected: 1,
   stressed: 2,

@@ -319,10 +319,15 @@ client (`@google/earthengine`) was confirmed working in Deno (see 8.4/8.5 — th
 - **Worker = `ee-alerts-worker` Edge Function** (Deno, `npm:@google/earthengine@0.1.395` + `@supabase/supabase-js`):
   1. Authenticates Earth Engine with the service-account key (`authenticateViaPrivateKey`)
   2. Queries Supabase (via `service_role`) for all fields where the owner has a `telegram_chat_id` set
-  3. For each field: recomputes NDVI (30-day Sentinel-2 median, `.normalizedDifference(['B8','B4'])`) +
-     growth-stage-aware status — a port of the app's 6-stage phenology thresholds and flat fallback
+  3. For each field: recomputes NDVI (90-day Sentinel-2 median, `.normalizedDifference(['B8','B4'])`) +
+     growth-stage-aware status — a port of the app's 6-stage phenology thresholds and flat fallback.
+     The 90-day window (was 30) keeps rainy-season fields with sporadic cloud-free scenes from
+     returning `no_data` every run; the `<40` cloud-cover filter is deliberately **not** loosened
+     so residual cloud can't bias NDVI downward into false "stress". On an empty collection the
+     worker logs `status = 'no_data'` (no message, no crash).
   4. Compares new status to the _last logged_ status in `alerts_log` (dedup) — sends Telegram only on
-     a genuine change **for the worse** (or first non-healthy result)
+     a genuine change **for the worse** (or first non-healthy result). `SEVERITY` includes
+     `no_data: -1` so any transition *from* no-data to a real status is treated as a worsening.
   5. Inserts an `alerts_log` row every run (history) with the message text; calls Telegram `sendMessage`
      with `chat_id` when a message was warranted (includes 21-day CHIRPS rainfall context)
 - **Build the alert text as a template function, not an inline string** —
