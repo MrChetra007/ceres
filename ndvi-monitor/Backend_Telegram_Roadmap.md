@@ -56,7 +56,7 @@ not a Deno one). Phases 8.4–8.5 are built and user-confirmed working.
 - `updateFieldStatus()` guarded by `eeReady` so dashboard renders before EE init
 - **Checkpoint:** draw a field, refresh the page (or open on a different device, same login) — field persists via Supabase, not the browser
 
-## Phase 8.3 — Telegram bot + account linking ✅ (implemented in the repo; needs deployment)
+## Phase 8.3 — Telegram bot + account linking ✅ Complete (deployed & user-confirmed)
 - Create the bot via **@BotFather** in Telegram → get bot token → store as a secret (Supabase
   Vault or Cloud Function env var, never in client code)
 - In-app: "Telegram alerts" entry in the top-right user menu opens a modal that generates a
@@ -113,13 +113,15 @@ not a Deno one). Phases 8.4–8.5 are built and user-confirmed working.
 - **Checkpoint:** the daily job (or a manual trigger) produces a Telegram message for a field that's
   deliberately stressed, and an `alerts_log` row every run ✅ (user-confirmed working)
 
-## Phase 8.6 — End-to-end test 🚧 In progress
+## Phase 8.6 — End-to-end test ✅ Complete
 - Let the scheduled job run for a few real days on your own test field
 - Confirm: no duplicate alerts, no missed alerts, dedup logic holds up, Telegram message content is
   legible in Khmer/English as needed
 - **Checkpoint:** a real stress event on your test field produces exactly one Telegram message, not
-  zero and not five — the worker delivering messages is user-confirmed; sustained multi-day dedup
-  validation is the remaining confirmation
+  zero and not five — **user-confirmed complete**. The dedup contract holds: `no_data` logs without
+  sending, `healthy→stressed` sends exactly one, repeated `stressed` runs send nothing. Two worker
+  bugs surfaced and fixed during validation (GeoJSON Feature unwrap, 30→90-day window + `no_data`
+  severity). Test harness: `trigger-alerts-worker` Edge Function + `validation-86.sql`.
 
 ---
 
@@ -146,12 +148,12 @@ season's alert log" during a pitch) while only pinging Telegram on genuine chang
 
 1. Supabase schema + auth — done ✅
 2. Migrate app CRUD off localStorage — done ✅
-3. Telegram bot + linking flow — implemented ✅ (needs deployment: `migration2.sql`, function deploy, token secret, webhook registration)
+3. Telegram bot + linking flow — done ✅ (deployed: `migration2.sql` applied, function deployed, token secret set, webhook registered)
 4. Earth Engine service account — done ✅ (secret `EE_SERVICE_ACCOUNT_KEY`, verified in Deno via `ee-spike`)
 5. Scheduled worker — done ✅ (`ee-alerts-worker` Edge Function + `migration3.sql` pg_cron/Vault daily job, user-confirmed working)
-6. End-to-end test + dedup tuning — in progress 🚧 (sustained multi-day dedup validation)
+6. End-to-end test + dedup tuning — complete ✅ (dedup contract verified, worker bugs fixed)
 
-**Backend Phase 8 is effectively complete except the sustained end-to-end confirmation.**
+**Backend Phase 8 is complete.**
 
 ## Known risks to plan around
 - **EE noncommercial fee-for-service restriction** — fine for now, becomes a real line item the

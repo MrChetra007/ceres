@@ -96,13 +96,13 @@ A single-page web app that shows a satellite map of rice-growing areas in Battam
 - One-time import: `importLocalFieldsIfAny()` uploads legacy `ndvi_fields` localStorage to Supabase on first login, then clears it
 - Root `.gitignore` added so `.env` (and the future `service_role` key) stays out of git
 
-### 8.3 Telegram bot + account linking ✅ Implemented (needs deployment)
+### 8.3 Telegram bot + account linking ✅ Complete (deployed & user-confirmed)
 - Bot webhook = Supabase Edge Function `supabase/functions/telegram-webhook/index.ts` (Deno, `verify_jwt = false`)
 - `migration2.sql`: `redeem_link_code()` security-definer RPC (atomic: set `telegram_chat_id` + consume code), guard trigger so users can only clear (not set) their chat id, `cleanup_expired_link_codes()`
 - App: prominent **Telegram pill button in the TopBar** (green dot when linked; opens sign-in overlay if not signed in) → `TelegramModal.vue` generates a short-lived code, shows the `t.me/<bot>?start=<code>` deep link, polls `profiles.telegram_chat_id` every 3s until linked, then shows Connected/Disconnect. A "Telegram alerts" entry also lives in the TopBar user menu.
 - No manual chat-id field — the bot sets `telegram_chat_id` via the Edge Function (guarded so users can't claim chats they don't own)
 - Bot username + link TTL in `src/config.js` (`TELEGRAM_BOT_USERNAME`, `TELEGRAM_LINK_TTL_MS`)
-- **Deploy:** run `migration2.sql` → `supabase functions deploy telegram-webhook` → `supabase secrets set TELEGRAM_BOT_TOKEN=...` → Telegram `setWebhook` to the function URL → set `VITE_TELEGRAM_BOT_USERNAME` in `.env`
+- **Deploy:** run `migration2.sql` → `supabase functions deploy telegram-webhook` → `supabase secrets set TELEGRAM_BOT_TOKEN=...` → Telegram `setWebhook` to the function URL → set `VITE_TELEGRAM_BOT_USERNAME` in `.env` — **all done ✅ (8.6 alert delivered via the linked chat confirms it works end-to-end)**
 
 ### 8.4 Earth Engine service account ✅ Complete (verified in Deno)
 - Service account created in GCP project `gen-lang-client-0978198347`, granted EE access; JSON key stored as the Supabase Edge Function secret `EE_SERVICE_ACCOUNT_KEY`
@@ -112,11 +112,20 @@ A single-page web app that shows a satellite map of rice-growing areas in Battam
 - **`supabase/functions/ee-alerts-worker/index.ts`** (Deno): authenticates EE with the service-account key, queries all `fields` whose owner has a `telegram_chat_id` (join through `profiles`), recomputes NDVI (90-day S2 median, B8/B4) + growth-stage-aware status (port of the app's 6-stage thresholds + flat fallback), dedups against the latest `alerts_log.status` (sends Telegram only on a change for the worse, or first non-healthy), writes an `alerts_log` row every run (with message + rainfall context), and sends via Telegram `sendMessage` when warranted
 - **`migration3.sql`**: enables `pg_cron` + `pg_net`, stores the `service_role` key in **Supabase Vault**, schedules `ndvi-alerts-daily` (daily 23:00 UTC = 06:00 Cambodia) to `net.http_post` the worker with a Vault-signed Bearer token
 - **Checkpoint:** worker runs and delivers Telegram messages for stressed fields; `alerts_log` rows written every run ✅
-- Rest of Phase 8: 8.6 sustained end-to-end dedup validation remains — full detail in `Backend_Telegram_Roadmap.md`.
+- Rest of Phase 8: 8.6 sustained end-to-end dedup validation — **complete ✅** (see below). Full detail in `Backend_Telegram_Roadmap.md`.
+
+### 8.6 End-to-end dedup validation ✅ Complete
+
+- **Contract verified:** `no_data` logs without sending; `healthy→stressed` sends **exactly one** Telegram message; repeated `stressed` runs send nothing (dedup silence).
+- **Bugs surfaced & fixed in the worker** (`supabase/functions/ee-alerts-worker/index.ts`):
+  - Stored fields are GeoJSON **Features** — the worker now unwraps `geojson.geometry` via `toEeGeometry()` before `ee.Geometry` (was `Invalid GeoJSON geometry`).
+  - A 30-day Sentinel-2 window frequently returns zero cloud-free scenes in rainy season → `no_data` every run. Window widened to **90 days**; the `<40` cloud filter is deliberately kept so residual cloud can't bias NDVI into false stress. Empty collections now log `status='no_data'` gracefully instead of crashing on `normalizedDifference` over zero bands.
+  - `no_data` added to the worker's `SEVERITY` map (`no_data: -1`) so a no-data→real-status transition is treated as a worsening and alerts (was `2 > undefined === false` → silently skipped sends).
+- **Test harness:** `trigger-alerts-worker` Edge Function (relays to the worker with the auto-injected `SUPABASE_SERVICE_ROLE_KEY`, same Bearer the cron uses) + `validation-86.sql` audit queries (cron presence, `msgs_sent == worsening_transitions`, `dup_msgs_on_flat == 0`).
 
 ---
 
-## Phase 9 — Vue Migration ✅ Mostly complete (runtime smoke test of a few flows pending)
+## Phase 9 — Vue Migration ✅ Complete
 
 **Goal:** Reorganize the monolithic static app into Vue 3 components for clearer, more maintainable code structure.
 
@@ -134,7 +143,7 @@ A single-page web app that shows a satellite map of rice-growing areas in Battam
 - UI split into SFCs: `App.vue` (root: user menu, ☰ dashboard toggle, toast/status bar, help button), `LeafletMap.vue`, `SliderPanel.vue`, `InfoPanel.vue`, `Dashboard.vue`, `AuthOverlay.vue`, `PresetPanel.vue`, `HelpModal.vue`, `PresetEditor.vue`, `AoiEditor.vue`, `ChartModal.vue`, `DatePickerModal.vue`.
 - Styles ported from `style_old.css` → `src/style.css`.
 
-**Status:** ✅ `npm run build` passes, `npm run dev` serves every module with no Vite errors, and the map renders in-browser. Features verified working by the user: map renders, NDVI Trend panel opens on map click. Remaining: full end-to-end smoke test of draw/save field + Supabase sync, compare mode, and exports.
+**Status:** ✅ `npm run build` passes, `npm run dev` serves every module with no Vite errors, and the map renders in-browser. **Full end-to-end smoke test complete (user-confirmed):** draw/save field + Supabase sync, compare mode, PNG/PDF export, plus NDVI Trend panel on map click — all behaving identically to `index_old.html`.
 
 **Recent fixes during migration (this session):**
 - **Blank map on load** — the Vue app mounts into `#app`, which had no height, so `.map-container`/`#map` (100%) collapsed to 0. Added `#app { height: 100%; width: 100% }` to `src/style.css`.
@@ -251,7 +260,7 @@ panel rework) complete; polish (motion/toasts/onboarding modal) is Stage 3.
 
 ---
 
-## Phase 12 — Consult AI (AI agronomist) + multi-provider LLM fallback 🚧 Implemented (needs deploy/verify)
+## Phase 12 — Consult AI (AI agronomist) + multi-provider LLM fallback ✅ Complete (deployed & verified)
 
 **Goal:** Let a farmer get a plain-language interpretation of a field's satellite health data
 (NDVI, LSWI, 21-day rainfall, growth stage) from a server-side LLM — with a resilient
@@ -305,12 +314,12 @@ multi-provider fallback chain so a single provider's outage/quota/404 never bloc
 - RLS/session hardening (`migration5.sql`, `requireSession()`) so field/AOI inserts never hit
   "new row violates row-level security" or expired-token 401s.
 
-### Deploy steps
-1. `supabase secrets set DEEPSEEK_API_KEY="..."` and `supabase secrets set QWEN_API_KEY="..."`
-2. Apply `migration6.sql` in the Supabase SQL editor (adds `ai_explanations.model_used`)
-3. `supabase functions deploy consult-ai`
+### Deploy steps — done ✅
+1. `supabase secrets set DEEPSEEK_API_KEY="..."` and `supabase secrets set QWEN_API_KEY="..."` — set
+2. Apply `migration6.sql` in the Supabase SQL editor (adds `ai_explanations.model_used`) — applied
+3. `supabase functions deploy consult-ai` — deployed
 4. Verify: with a bad Gemini key the request falls through to DeepSeek and still returns text;
-   `supabase functions logs consult-ai` shows "AI explanation served by: deepseek-chat".
+   `supabase functions logs consult-ai` shows "AI explanation served by: deepseek-chat" — verified
 
 ---
 
@@ -458,4 +467,4 @@ multi-provider fallback chain so a single provider's outage/quota/404 never bloc
 
 ## Status
 
-All phases complete except Phase 8.6 (sustained end-to-end dedup validation of the scheduled worker) and Phase 10 (design-system redesign — Stages 1–2 done, Stage 3 polish pending), plus the final end-to-end smoke test of Phase 9 (Vue migration). Phase 8.1 (schema + auth), 8.2 (fields migrated off localStorage), 8.3 (Telegram bot + account linking — Edge Function + app UI implemented, awaiting deployment), 8.4 (EE service account — verified in Deno), and 8.5 (scheduled worker — `ee-alerts-worker` Edge Function + `migration3.sql` pg_cron/Vault daily job) are done, with 8.5 user-confirmed working. The static app from Phase 2–7 is preserved intact as `index_old.html` (fully working). The Vue rewrite (`index.html` + `src/`) is ported from that stable codebase: build ✅, dev server ✅, map + trend panel verified in-browser; remaining to verify by hand: draw/save field → Supabase, compare mode, PNG/PDF export. Phase 10 Stage 1 re-skinned the app to the dark design-system spec (`design.md`) — build ✅, all modules serve ✅. Stage 2 swapped the ☰ dashboard + info panel for the spec's Monitored-Fields sidebar + field-inspector detail panel (sparklines, filters, draw footer, benchmark hero, phenology, rainfall, metadata) and hardened the app: map z-index stacking fixed, leaflet controls moved below the header, polygon draw with Esc-cancel + sign-in gate, proper toast styling, "Jump to:" preset panel removed, month-only chart ticks with year title, and Compare mode now fully decoupled with a draggable divider and proper teardown on close — build ✅, dev serves ✅. **Phase 11 is complete:** Supabase auth is now Google-only (email magic-link/password forms removed), the auth overlay was redesigned to the dark-glass design system, mobile stacking/overflow was fixed (TopBar user chip collapses to an icon + dropdown ≤780px, `.time-panel` z-index lowered so the Export dropdown paints above, redundant Street/Satellite toggle hidden ≤480px), and per-user multi-area support was added — `aois` table CRUD, "Areas" dropdown, New Area modal (manual coords or Nominatim place search), 5-area cap handling with toast, and a first-login "Battambang (default)" seed. **Phase 8.3 added Telegram account linking:** Supabase Edge Function webhook (`telegram-webhook`) + `TelegramModal.vue` with a "Telegram alerts" menu entry (generate code → `t.me/<bot>?start=<code>` deep link → auto-detect → Connected/Disconnect), guarded so only the bot can set `telegram_chat_id`. **Phase 12 added the Consult AI agronomist:** a "Consult AI" button in the field detail panel calls the `consult-ai` Edge Function for a plain-language explanation of NDVI/LSWI/rainfall/growth-stage data, with a Gemini → DeepSeek → Qwen fallback chain (each provider isolated + 20s timeout), daily per-user cap, an `ai_explanations` cache, and the responding model recorded server-side only (`model_used`). Also fixed: the tab-focus "Reloading NDVI…" regression (`lastLoadedUserId` guard) and the Rainfall (21-day) card now showing "Data unavailable" instead of a dash. Remaining overall: EE service account, scheduled worker (Supabase pg_cron → Edge Function), end-to-end test. The app is feature-stable with NDVI/NDWI/LSWI analysis, time slider with Latest button and scene count indicator, draw & save fields (now synced to Supabase), Monitored-Fields sidebar + field-inspector panel with growth-stage-aware health badges, resizable split-screen compare mode, PNG/PDF export, event overlays, CHIRPS rainfall context on stress alerts, per-user multi-area support (Areas dropdown + New Area modal), area recalculation on edit, satellite basemap toggle, place search, field deselection, Google sign-in, and a help panel.
+All phases complete except Phase 10 (design-system redesign — Stages 1–2 done, Stage 3 polish pending). Phase 8.1 (schema + auth), 8.2 (fields migrated off localStorage), 8.3 (Telegram bot + account linking — Edge Function + app UI deployed & user-confirmed), 8.4 (EE service account — verified in Deno), 8.5 (scheduled worker — `ee-alerts-worker` Edge Function + `migration3.sql` pg_cron/Vault daily job), and **8.6 (end-to-end dedup validation — Telegram alert delivered, dedup contract verified, worker bugs fixed)** are done, with 8.3/8.5/8.6 user-confirmed working. **Phase 12 (Consult AI) is complete and deployed** — `consult-ai` Edge Function with Gemini → DeepSeek → Qwen fallback, `ai_explanations` cache + `model_used`, per-user daily cap, `requireSession()` token refresh; DeepSeek/Qwen secrets set, `migration6.sql` applied, fallback verified in logs. The static app from Phase 2–7 is preserved intact as `index_old.html` (fully working). The Vue rewrite (`index.html` + `src/`) is ported from that stable codebase: build ✅, dev server ✅, **and the full end-to-end smoke test (draw/save field → Supabase, compare mode, PNG/PDF export) is complete — user-confirmed working.** Phase 10 Stage 1 re-skinned the app to the dark design-system spec (`design.md`) — build ✅, all modules serve ✅. Stage 2 swapped the ☰ dashboard + info panel for the spec's Monitored-Fields sidebar + field-inspector detail panel (sparklines, filters, draw footer, benchmark hero, phenology, rainfall, metadata) and hardened the app: map z-index stacking fixed, leaflet controls moved below the header, polygon draw with Esc-cancel + sign-in gate, proper toast styling, "Jump to:" preset panel removed, month-only chart ticks with year title, and Compare mode now fully decoupled with a draggable divider and proper teardown on close — build ✅, dev serves ✅. **Phase 11 is complete:** Supabase auth is now Google-only (email magic-link/password forms removed), the auth overlay was redesigned to the dark-glass design system, mobile stacking/overflow was fixed (TopBar user chip collapses to an icon + dropdown ≤780px, `.time-panel` z-index lowered so the Export dropdown paints above, redundant Street/Satellite toggle hidden ≤480px), and per-user multi-area support was added — `aois` table CRUD, "Areas" dropdown, New Area modal (manual coords or Nominatim place search), 5-area cap handling with toast, and a first-login "Battambang (default)" seed. **Phase 8.3 added Telegram account linking:** Supabase Edge Function webhook (`telegram-webhook`) + `TelegramModal.vue` with a "Telegram alerts" menu entry (generate code → `t.me/<bot>?start=<code>` deep link → auto-detect → Connected/Disconnect), guarded so only the bot can set `telegram_chat_id`. **Phase 12 added the Consult AI agronomist:** a "Consult AI" button in the field detail panel calls the `consult-ai` Edge Function for a plain-language explanation of NDVI/LSWI/rainfall/growth-stage data, with a Gemini → DeepSeek → Qwen fallback chain (each provider isolated + 20s timeout), daily per-user cap, an `ai_explanations` cache, and the responding model recorded server-side only (`model_used`). Also fixed: the tab-focus "Reloading NDVI…" regression (`lastLoadedUserId` guard) and the Rainfall (21-day) card now showing "Data unavailable" instead of a dash. Remaining overall: EE service account, scheduled worker (Supabase pg_cron → Edge Function), end-to-end test. The app is feature-stable with NDVI/NDWI/LSWI analysis, time slider with Latest button and scene count indicator, draw & save fields (now synced to Supabase), Monitored-Fields sidebar + field-inspector panel with growth-stage-aware health badges, resizable split-screen compare mode, PNG/PDF export, event overlays, CHIRPS rainfall context on stress alerts, per-user multi-area support (Areas dropdown + New Area modal), area recalculation on edit, satellite basemap toggle, place search, field deselection, Google sign-in, and a help panel.

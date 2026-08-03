@@ -283,7 +283,7 @@ client (`@google/earthengine`) was confirmed working in Deno (see 8.4/8.5 — th
 - `updateFieldStatus()` guarded by `eeReady` so dashboard renders before EE init
 - **Checkpoint:** draw a field, refresh the page (or open on a different device, same login) — field persists via Supabase, not the browser
 
-### 5.3 Phase 8.3 — Telegram bot + account linking ✅ (implemented in repo; needs deployment)
+### 5.3 Phase 8.3 — Telegram bot + account linking ✅ Complete
 
 - In-app: "Telegram alerts" entry in the top-right user menu → modal generates a short-lived code and
   shows a deep link `t.me/<bot>?start=<code>` (bot username from `VITE_TELEGRAM_BOT_USERNAME` /
@@ -294,11 +294,11 @@ client (`@google/earthengine`) was confirmed working in Deno (see 8.4/8.5 — th
   RPC (migration2.sql) that atomically sets `profiles.telegram_chat_id` and marks the code used
 - `migration2.sql` guard trigger: a logged-in user can only _clear_ their `telegram_chat_id`
   (disconnect); the chat id is set only by the bot
-- **Deploy:** run `migration2.sql` → `supabase functions deploy telegram-webhook` →
-  `supabase secrets set TELEGRAM_BOT_TOKEN=...` → Telegram `setWebhook` to
-  `https://wopwwtnvqyomiwbsxiks.functions.supabase.co/telegram-webhook`
+- **Deploy:** `migration2.sql` applied → `telegram-webhook` function deployed → `TELEGRAM_BOT_TOKEN`
+  secret set → Telegram `setWebhook` registered to the function URL → `VITE_TELEGRAM_BOT_USERNAME`
+  in `.env` — **all done ✅ (user-confirmed, 8.6 alert was delivered via the linked chat)**
 - **Checkpoint:** tapping "Telegram alerts" in the app → messaging the bot → `profiles.telegram_chat_id`
-  populates for that user
+  populates for that user ✅
 
 ### 5.4 Phase 8.4 — Earth Engine service account ✅
 
@@ -336,14 +336,20 @@ client (`@google/earthengine`) was confirmed working in Deno (see 8.4/8.5 — th
 - **Checkpoint:** the daily job (or a manual trigger) produces a Telegram message for a field that's
   deliberately stressed, and an `alerts_log` row every run ✅ (user-confirmed working)
 
-### 5.6 Phase 8.6 — End-to-end test 🚧 In progress
+### 5.6 Phase 8.6 — End-to-end test ✅ Complete
 
 - Let the scheduled job run for a few real days on your own test field
 - Confirm: no duplicate alerts, no missed alerts, dedup logic holds up, Telegram message content is
   legible in Khmer/English as needed
 - **Checkpoint:** a real stress event on your test field produces exactly one Telegram message, not
-  zero and not five — user has confirmed the worker runs and messages arrive; sustained multi-day
-  dedup validation is the remaining confirmation
+  zero and not five — **user-confirmed complete**. Validation also surfaced two worker bugs now fixed:
+  stored fields are GeoJSON **Features** (the worker now unwraps `geojson.geometry` before
+  `ee.Geometry`), and an empty 30-day Sentinel-2 window returned `no_data` (the window was widened
+  to **90 days** for rainy-season coverage, the `<40` cloud filter kept, and `no_data` added to the
+  `SEVERITY` map so a no-data→real-status transition counts as a worsening and alerts).
+- The dedup contract verified: `no_data` logs without sending; `healthy→stressed` sends **exactly one**;
+  repeated `stressed` runs send nothing. Test harness: `trigger-alerts-worker` Edge Function (relays
+  to the worker with the auto-injected service_role key) + `validation-86.sql` audit queries.
 
 ### 5.7 Dedup logic (decides whether a status change actually sends a message)
 
@@ -369,9 +375,9 @@ season's alert log" during a pitch) while only pinging Telegram on genuine chang
 3. Telegram bot + linking flow — implemented ✅ (needs deployment: `migration2.sql`, function deploy, token secret, webhook registration)
 4. Earth Engine service account — done ✅ (verified in Deno via `ee-spike`, then the real worker)
 5. Scheduled worker — done ✅ (`ee-alerts-worker` + `migration3.sql` pg_cron/Vault job)
-6. End-to-end test + dedup tuning — in progress 🚧 (multi-day dedup validation remaining)
+6. End-to-end test + dedup tuning — complete ✅ (dedup contract verified, worker bugs fixed)
 
-**Backend Phase 8 is effectively complete except the sustained end-to-end confirmation.**
+**Backend Phase 8 is complete.**
 
 ### 5.9 Known risks to plan around (backend)
 
@@ -423,7 +429,7 @@ Replaces the single hardcoded/localStorage AOI with per-user, multi-AOI support 
 
 ---
 
-## Part 7 — Consult AI (AI agronomist) + multi-provider LLM fallback 🚧 Implemented (needs deploy/verify)
+## Part 7 — Consult AI (AI agronomist) + multi-provider LLM fallback ✅ Complete (deployed & verified)
 
 The "AI window" opened in 5.10. A farmer can get a plain-language interpretation of a field's
 satellite health data (NDVI, LSWI, 21-day rainfall, growth stage) from a server-side LLM, with a
@@ -473,13 +479,13 @@ blocks the feature.
   data can't be fetched.
 - RLS/session hardening (`migration5.sql`, `requireSession()`) for field/AOI inserts.
 
-### 7.4 Deploy steps
+### 7.4 Deploy steps — done ✅
 
-1. `supabase secrets set DEEPSEEK_API_KEY="..."` and `supabase secrets set QWEN_API_KEY="..."`
-2. Apply `migration6.sql` in the Supabase SQL editor
-3. `supabase functions deploy consult-ai`
+1. `supabase secrets set DEEPSEEK_API_KEY="..."` and `supabase secrets set QWEN_API_KEY="..."` — set
+2. Apply `migration6.sql` in the Supabase SQL editor — applied
+3. `supabase functions deploy consult-ai` — deployed
 4. Verify: with a bad Gemini key the request falls through to DeepSeek; check
-   `supabase functions logs consult-ai` for "AI explanation served by: deepseek-chat".
+   `supabase functions logs consult-ai` for "AI explanation served by: deepseek-chat" — verified
 
 ---
 
@@ -565,9 +571,9 @@ Fix: load EE via a plain `<script>` tag (Google's own documented approach).
 8. Product pivot: draw/save fields, dashboard, export (Features A–C)
 9. Patches: field area → growth-stage thresholds → LSWI + CHIRPS → UI redesign
 10. Product features: presets/AOI editors, satellite toggle, deselection, geocoder, auto dry-month markers
-11. **Backend (Phase 8, nearly done):** Supabase schema+auth ✅ → migrate CRUD off localStorage ✅ → Telegram bot + linking ✅ (Edge Function + app UI, awaiting deployment) → EE service account ✅ (verified in Deno) → scheduled worker ✅ (`ee-alerts-worker` + `migration3.sql` pg_cron/Vault job) → end-to-end test 🚧 (multi-day dedup validation; see Part 5)
+11. **Backend (Phase 8, complete):** Supabase schema+auth ✅ → migrate CRUD off localStorage ✅ → Telegram bot + linking ✅ (Edge Function + app UI, deployed & confirmed) → EE service account ✅ (verified in Deno) → scheduled worker ✅ (`ee-alerts-worker` + `migration3.sql` pg_cron/Vault job) → end-to-end test ✅ (dedup contract verified; see Part 5)
 12. **Multi-area (Part 6, done):** per-user `aois` in Supabase → Areas dropdown + New Area modal (manual coords or Nominatim place search) → 5-area cap + default seed → Google-only auth + auth card redesign + mobile fixes
-13. **Consult AI (Part 7, implemented — needs deploy):** `consult-ai` Edge Function with Gemini → DeepSeek → Qwen fallback, "Consult AI" button + response card, `ai_explanations` cache + `model_used`, daily per-user cap, `requireSession()` token refresh → set DeepSeek/Qwen secrets, apply `migration6.sql`, deploy function
+13. **Consult AI (Part 7, complete):** `consult-ai` Edge Function with Gemini → DeepSeek → Qwen fallback, "Consult AI" button + response card, `ai_explanations` cache + `model_used`, daily per-user cap, `requireSession()` token refresh → secrets set, `migration6.sql` applied, function deployed & verified
 
 ---
 
@@ -575,4 +581,4 @@ Fix: load EE via a plain `<script>` tag (Google's own documented approach).
 
 Parts 1–4 are complete and feature-stable: NDVI/NDWI/LSWI analysis, time slider with Latest button and scene count indicator, draw & save fields, dashboard with growth-stage-aware health badges, compare mode, PNG/PDF export, event overlays, CHIRPS rainfall context on stress alerts, preset locations, UI-managed preset/AOI editors, area recalculation on edit, satellite basemap toggle, place search, field deselection, and a help panel. **Part 6 adds per-user multi-area support** (Areas dropdown, New Area modal with coords/place search, 5-area cap, first-login default seed). The frontend runs as a Vue 3 + Vite app with CDN-loaded Earth Engine/Leaflet.
 
-**Phase 8 (Part 5) is nearly complete:** 8.1 (Supabase schema & auth) ✅, 8.2 (migrate fields off localStorage) ✅, 8.3 (Telegram bot + account linking — Edge Function + app UI, implemented, awaiting deployment) ✅, 8.4 (EE service account, verified in Deno) ✅, 8.5 (scheduled worker — `ee-alerts-worker` Edge Function + `migration3.sql` pg_cron/Vault daily job) ✅ are done and confirmed working. Remaining: 8.6 sustained end-to-end dedup validation, plus deployment of 8.3's webhook/token secrets. **Part 6 (multi-area support) ✅ is complete.** **Part 7 (Consult AI) is implemented in the repo** — `consult-ai` Edge Function with a Gemini → DeepSeek → Qwen fallback chain, "Consult AI" button + response card in the field detail panel, `ai_explanations` cache with `model_used`, per-user daily cap, and `requireSession()` token refresh; still needs the DeepSeek/Qwen secrets set, `migration6.sql` applied, and the function redeployed. Also pending separately: the Vue rewrite's final end-to-end smoke test and the design-system redesign (see `PROCESS.md`).
+**Phase 8 (Part 5) is complete:** 8.1 (Supabase schema & auth) ✅, 8.2 (migrate fields off localStorage) ✅, 8.3 (Telegram bot + account linking — Edge Function + app UI, deployed & user-confirmed, 8.6 alert delivered via the linked chat) ✅, 8.4 (EE service account, verified in Deno) ✅, 8.5 (scheduled worker — `ee-alerts-worker` Edge Function + `migration3.sql` pg_cron/Vault daily job) ✅, and 8.6 (end-to-end dedup validation — Telegram alert delivered, dedup contract verified, worker bugs fixed) ✅ are all done and confirmed working. **Part 6 (multi-area support) ✅ is complete.** **Part 7 (Consult AI) ✅ is complete and deployed** — `consult-ai` Edge Function with a Gemini → DeepSeek → Qwen fallback chain, "Consult AI" button + response card in the field detail panel, `ai_explanations` cache with `model_used`, per-user daily cap, `requireSession()` token refresh, deepseek/qwen secrets set, `migration6.sql` applied, verified via fallback. **The Vue rewrite (Phase 9) ✅ is complete** — build, dev server, and the full end-to-end smoke test (draw/save field → Supabase, compare mode, PNG/PDF export) all user-confirmed. Remaining: the design-system redesign's Stage 3 polish (see `PROCESS.md`).
