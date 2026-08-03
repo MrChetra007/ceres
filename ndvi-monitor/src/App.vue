@@ -20,7 +20,15 @@
   <DatePickerModal />
   <TelegramModal />
 
-  <div id="toast" class="toast" :class="{ show: !!state.toast }">{{ state.toast }}</div>
+  <div id="toast-stack" class="toast-stack">
+    <transition-group name="toast">
+      <div
+        v-for="t in state.toasts"
+        :key="t.id"
+        class="toast"
+      >{{ t.msg }}</div>
+    </transition-group>
+  </div>
 </template>
 
 <script setup>

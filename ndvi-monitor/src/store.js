@@ -60,7 +60,7 @@ export const state = reactive({
   loading: false,
   statusState: 'idle',
   statusText: '',
-  toast: null,
+  toasts: [],
   aoiCoords: DEFAULT_AOI.slice(),
   aois: [],
   selectedAoiId: null,
@@ -75,7 +75,7 @@ export const fieldTrends = reactive({})
 export const datePicker = reactive({ visible: false, currentDate: null })
 let infoChart = null
 let loadingCount = 0
-let toastTimer = null
+const toastTimers = new Map()
 let pendingDateCallback = null
 
 // ---------------------------------------------------------------------------
@@ -90,10 +90,21 @@ export function setStatus(s, text) {
   state.statusText = text
 }
 
-export function showToast(msg) {
-  state.toast = msg
-  clearTimeout(toastTimer)
-  toastTimer = setTimeout(() => { state.toast = null }, 3000)
+export function showToast(msg, duration = 3000) {
+  const id = crypto.randomUUID()
+  state.toasts.push({ id, msg })
+  if (state.toasts.length > 3) {
+    const dropped = state.toasts.shift()
+    clearTimeout(toastTimers.get(dropped.id))
+    toastTimers.delete(dropped.id)
+  }
+  toastTimers.set(
+    id,
+    setTimeout(() => {
+      state.toasts = state.toasts.filter((t) => t.id !== id)
+      toastTimers.delete(id)
+    }, duration),
+  )
 }
 
 // A request reached Supabase without a valid user JWT (stale/expired session).

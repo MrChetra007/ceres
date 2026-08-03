@@ -48,6 +48,11 @@
           ></div>
         </div>
       </div>
+      <div class="event-legend">
+        <span class="ev-key"><i class="ev-dot flood"></i>Flood</span>
+        <span class="ev-key"><i class="ev-dot drought"></i>Dry spell</span>
+        <span class="ev-key"><i class="ev-dot dry-auto"></i>Low rainfall (CHIRPS)</span>
+      </div>
       <div class="scrubber-ticks">
         <span>{{ MONTHS[0].label }}</span>
         <span>{{ MONTHS[MONTHS.length - 1].label }}</span>
