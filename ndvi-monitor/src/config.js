@@ -5,7 +5,7 @@ export const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'https://wopwwt
 export const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndvcHd3dG52cXlvbWl3YnN4aWtzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk1NjAyMzcsImV4cCI6MjA5NTEzNjIzN30.2Wl7erPZYi5iuqrF-4UvMObDEYMmt6M86Pg3p89YGeU'
 
 // Telegram alerts (Phase 8.3)
-export const TELEGRAM_BOT_USERNAME = import.meta.env.VITE_TELEGRAM_BOT_USERNAME || 'YOUR_TELEGRAM_BOT'
+export const TELEGRAM_BOT_USERNAME = import.meta.env.VITE_TELEGRAM_BOT_USERNAME || 'ndvi_monitor_bot'
 export const TELEGRAM_LINK_TTL_MS = 10 * 60 * 1000
 
 // AI agronomist (Consult AI) — Supabase Edge Function, requires a logged-in JWT
