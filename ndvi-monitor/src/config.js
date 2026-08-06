@@ -1,6 +1,6 @@
 export const EE_PROJECT_ID = 'trim-array-479621-s8'
-export const CLIENT_ID = '664594611570-ilb4bdotp585c63t5cil4d1gslhk3hfi.apps.googleusercontent.com'
-
+export const CLIENT_ID = import.meta.env.VITE_EE_CLIENT_ID || '664594611570-ilb4bdotp585c63t5cil4d1gslhk3hfi.apps.googleusercontent.com'
+;
 export const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'https://wopwwtnvqyomiwbsxiks.supabase.co'
 export const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndvcHd3dG52cXlvbWl3YnN4aWtzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk1NjAyMzcsImV4cCI6MjA5NTEzNjIzN30.2Wl7erPZYi5iuqrF-4UvMObDEYMmt6M86Pg3p89YGeU'
 
