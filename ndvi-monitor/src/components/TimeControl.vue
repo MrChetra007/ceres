@@ -10,6 +10,7 @@
       </div>
       <div class="time-pills">
         <span v-if="state.loading" class="pill">loading&hellip;</span>
+        <span v-else-if="state.cloudBlock.main" class="pill cloud-blocked" :title="cloudTooltip(state.cloudBlock.main)">☁️ cloud-blocked</span>
         <span v-else class="pill" :class="scenePillClass">{{ mainSceneText || 'no scenes' }}</span>
         <button class="latest-btn" title="Jump to latest complete month" @click="goLatest">
           <i class="ti ti-last"></i>
@@ -61,7 +62,9 @@
 
     <div v-if="state.compareMode" class="scrubber compare">
       <div class="scrubber-row">
-        <span class="pill">{{ rightSceneText || 'no scenes' }}</span>
+        <span v-if="state.cloudBlock.right" class="pill cloud-blocked" :title="cloudTooltip(state.cloudBlock.right)">☁️ cloud-blocked</span>
+        <span v-else class="pill">{{ rightSceneText || 'no scenes' }}</span>
+        <ConfidenceBadge v-if="!state.loading && rightConf.tier" :tier="rightConf.tier" :reason="rightConf.reason" class="scrubber-conf" />
         <span class="month-label right-label">{{ rightMonthLabel }}</span>
       </div>
       <input
@@ -101,6 +104,7 @@ import { ref, computed, onBeforeUnmount } from 'vue'
 import { state } from '../store'
 import * as store from '../store'
 import { MONTHS, EVENT_COLORS } from '../config'
+import ConfidenceBadge from './ConfidenceBadge.vue'
 
 const playing = ref(false)
 let playTimer = null
@@ -126,6 +130,15 @@ const scenePillClass = computed(() => {
   const c = state.sceneCount.main
   return c > 0 && c <= 2 ? 'low' : ''
 })
+
+const rightConf = computed(() => store.viewConfidence('right'))
+
+function cloudTooltip(block) {
+  if (!block) return ''
+  const pct = block.cloudPct != null ? Math.round(block.cloudPct) + '% cloud' : 'cloud-covered'
+  const last = block.lastValidDate ? 'Last valid reading: ' + block.lastValidDate : 'No cloud-free imagery available in the last 90 days.'
+  return 'Cloud-covered on ' + block.month + ' (' + pct + ') \u2014 true-color shown. ' + last
+}
 
 function sceneText(count) {
   if (count === 0) return ''
@@ -170,10 +183,10 @@ function startPlay() {
   playTimer = setInterval(() => {
     const next = (state.mainMonth + 1) % MONTHS.length
     state.mainMonth = next
-    store.loadIndexForMonth(next, null)
+    store.loadIndexForMonth(next, null, true)
     if (state.compareMode) {
       state.rightMonth = next
-      store.loadIndexForMonthRight(next)
+      store.loadIndexForMonthRight(next, true)
     }
   }, 900)
 }

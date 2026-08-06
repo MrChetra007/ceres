@@ -37,7 +37,10 @@
             <p class="field-card-name">{{ f.name }}</p>
             <p class="field-card-meta mono">{{ formatHectares(getOrComputeArea(f)).toUpperCase() }} · {{ stageLine(f) }}</p>
           </div>
-          <span class="status-badge" :class="badgeClass(f)">{{ status(f) ? status(f).badgeText : '\u2014' }}</span>
+          <div class="field-card-badges">
+            <span class="status-badge" :class="badgeClass(f)">{{ status(f) ? status(f).badgeText : '\u2014' }}</span>
+            <ConfidenceBadge v-if="conf(f)" :tier="conf(f).tier" :reason="conf(f).reason" class="card-conf" />
+          </div>
         </div>
 
         <div class="field-card-row">
@@ -73,7 +76,8 @@
 import { ref, computed } from 'vue'
 import { state, fieldStatus, fieldTrends } from '../store'
 import * as store from '../store'
-import { getOrComputeArea, formatHectares, getAreaWarning } from '../store'
+import { getOrComputeArea, formatHectares, getAreaWarning, fieldConfidence } from '../store'
+import ConfidenceBadge from './ConfidenceBadge.vue'
 
 const open = ref(false)
 const query = ref('')
@@ -107,6 +111,11 @@ const filtered = computed(() => {
 
 function status(f) {
   return fieldStatus[f.id] || null
+}
+
+function conf(f) {
+  const c = fieldConfidence(f)
+  return c && c.tier ? c : null
 }
 
 function badgeClass(f) {

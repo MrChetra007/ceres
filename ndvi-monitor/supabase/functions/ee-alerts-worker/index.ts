@@ -154,18 +154,6 @@ Deno.serve(async (_req) => {
       if (!chatId) continue;
 
       const ndvi = await getNdviForGeometry(field.geojson);
-      if (ndvi === null) {
-        await supabase.from("alerts_log").insert({
-          field_id: field.id,
-          status: "no_data",
-          ndvi_value: null,
-          message: null,
-          chat_id: chatId,
-        });
-        results.push({ field: field.name, status: "no_data", sent: false });
-        continue;
-      }
-      const { status, stage } = statusFromNdvi(ndvi, field.planting_date);
 
       const { data: lastAlert } = await supabase
         .from("alerts_log")
@@ -176,6 +164,29 @@ Deno.serve(async (_req) => {
         .maybeSingle();
 
       const lastStatus = lastAlert?.status ?? null;
+
+      if (ndvi === null) {
+        // Cloud-blocked / no usable clean scenes (the <40% gate filtered out
+        // everything). Log a no_data row every run, but send exactly one
+        // "can't monitor" Telegram message on the transition INTO extended
+        // no_data (from any other status), never on every run — matches the
+        // alert-fatigue guidance in the Data Trust Layer spec.
+        const sendNoDataMsg = lastStatus !== "no_data";
+        const message = sendNoDataMsg
+          ? `${field.name}: We haven't had a clear satellite view of your field in over 3 weeks, so we can't confirm its current health.`
+          : null;
+        if (sendNoDataMsg) await sendTelegram(chatId, message);
+        await supabase.from("alerts_log").insert({
+          field_id: field.id,
+          status: "no_data",
+          ndvi_value: null,
+          message,
+          chat_id: chatId,
+        });
+        results.push({ field: field.name, status: "no_data", sent: sendNoDataMsg });
+        continue;
+      }
+      const { status, stage } = statusFromNdvi(ndvi, field.planting_date);
       const changed = status !== lastStatus;
       const worse =
         lastStatus === null

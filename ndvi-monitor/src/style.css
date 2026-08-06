@@ -1817,6 +1817,12 @@ body {
 
 .pill.low { background: var(--amber-dim); color: var(--amber); }
 .pill.error { background: var(--red-dim); color: var(--red); }
+.pill.cloud-blocked { background: rgba(125, 180, 255, 0.14); color: #8ab6ff; }
+
+.scrubber-conf {
+  font-size: 9px;
+  padding: 2px 7px;
+}
 
 .scrubber { position: relative; padding-top: 4px; }
 .scrubber.compare { margin-top: 8px; border-top: 0.5px solid var(--panel-border); padding-top: 8px; }
@@ -2069,6 +2075,55 @@ body {
   white-space: nowrap;
 }
 
+/* ---- Confidence badge (Data Trust Layer, Part B) ---- */
+.conf-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 0.5px solid transparent;
+  white-space: nowrap;
+  text-transform: uppercase;
+}
+
+.conf-badge .conf-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+}
+
+.conf-badge.conf-high { background: var(--accent-dim); color: var(--accent); border-color: rgba(34, 201, 142, 0.25); }
+.conf-badge.conf-medium { background: var(--amber-dim); color: var(--amber); border-color: rgba(245, 166, 35, 0.25); }
+.conf-badge.conf-low { background: var(--red-dim); color: var(--red); border-color: rgba(239, 91, 91, 0.25); }
+
+.conf-badge.conf-high .conf-dot { background: var(--accent); }
+.conf-badge.conf-medium .conf-dot { background: var(--amber); }
+.conf-badge.conf-low .conf-dot { background: var(--red); }
+
+.conf-badge .conf-reason {
+  text-transform: none;
+  font-weight: 400;
+  font-size: 10px;
+  color: var(--text-dim);
+  border-left: 0.5px solid rgba(255, 255, 255, 0.14);
+  padding-left: 8px;
+}
+
+.legend-conf {
+  margin-top: 7px;
+  font-size: 9px;
+  display: flex;
+}
+
+.legend-conf .conf-reason {
+  display: none;
+}
+
 /* ---- Map loading transition (spec 4.7) ---- */
 .map-loading {
   position: fixed;
@@ -2174,6 +2229,18 @@ body {
 }
 
 .field-card-stats .ti { color: var(--text-faint); }
+
+.field-card-badges {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+
+.card-conf {
+  font-size: 8.5px;
+  padding: 2px 6px;
+}
 
 .field-area-warning {
   background: var(--amber-dim);
@@ -2973,6 +3040,11 @@ body {
   height: 8px;
   border-radius: 50%;
   background: var(--blue);
+}
+
+.detail-conf {
+  margin-top: 10px;
+  font-size: 10px;
 }
 
 /* Stage */

@@ -19,6 +19,7 @@
           <span class="bench-dot"></span> AOI benchmark
           <b class="mono">{{ benchmarkText }}</b>
         </div>
+        <ConfidenceBadge v-if="conf && conf.tier" :tier="conf.tier" :reason="conf.reason" showReason class="detail-conf" />
       </div>
 
       <div class="detail-section stage-card">
@@ -82,9 +83,10 @@
 <script setup>
 import { ref, computed, watch } from 'vue'
 import Chart from 'chart.js/auto'
-import { state, fieldStatus, fieldTrends, setInfoChart, getStageAtDate } from '../store'
+import { state, fieldStatus, fieldTrends, setInfoChart, getStageAtDate, fieldConfidence } from '../store'
 import * as store from '../store'
 import { getOrComputeArea, formatHectares } from '../store'
+import ConfidenceBadge from './ConfidenceBadge.vue'
 import { buildChartConfig } from '../services/chart'
 import { INDICES, MONTHS, CONSULT_AI_URL, CONSULT_AI_LANG } from '../config'
 import { sb, requireSession } from '../services/supabase'
@@ -99,6 +101,10 @@ const currentField = computed(() => state.fields.find((f) => f.id === state.curr
 const isField = computed(() => !!currentField.value)
 const status = computed(() => fieldStatus[state.currentFieldId] || null)
 const trend = computed(() => fieldTrends[state.currentFieldId] || null)
+const conf = computed(() => {
+  if (!currentField.value) return null
+  return fieldConfidence(currentField.value)
+})
 // Mirrors the time slider's "no scenes" badge: no scenes for the selected month
 // AND no request currently in flight (so it's permanently unavailable, not loading).
 const noSceneData = computed(() => !state.loading && state.sceneCount.main === 0)
@@ -239,6 +245,7 @@ async function consultAi() {
     }
   }
   const healthStatus = status.value ? status.value.badgeText : ''
+  const confidence = conf.value && conf.value.tier ? conf.value : null
 
   let token
   try {
@@ -262,6 +269,8 @@ async function consultAi() {
         status: healthStatus,
         growthStage,
         dayCount,
+        confidenceTier: confidence ? confidence.tier : null,
+        confidenceReason: confidence ? confidence.reason : '',
         lang: CONSULT_AI_LANG,
       }),
     })

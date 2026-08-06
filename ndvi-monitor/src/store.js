@@ -54,6 +54,7 @@ export const state = reactive({
   presets: [],
   dryMonthSet: new Set(),
   sceneCount: { main: 0, right: 0 },
+  cloudBlock: { main: null, right: null },
   rainfallMm: null,
   benchmarkValue: null,
   isDrawing: false,
@@ -428,53 +429,78 @@ export function updateSceneCount(count, isRight) {
   state.sceneCount[isRight ? 'right' : 'main'] = count
 }
 
-export function loadIndexForMonth(idx, geometry) {
+function applyTileLayer(map, layer, url, opacity) {
+  if (layer) map.removeLayer(layer)
+  return window.L.tileLayer(url, {
+    attribution: 'Sentinel-2 / Google Earth Engine',
+    opacity: opacity || 0.8,
+  }).addTo(map)
+}
+
+export function loadIndexForMonth(idx, geometry, silent) {
   const m = MONTHS[idx]
   if (!m || !state.eeReady) return
   const cfg = INDICES[state.currentIndex]
   state.mainMonth = idx
   state.sceneCount.main = 0
+  state.cloudBlock.main = null
   beginLoading()
   const geom = geometry || window.ee.Geometry.Rectangle(state.aoiCoords)
   ee.loadIndexTile(m, state.currentIndex, geom, (res) => {
     state.sceneCount.main = res.count
-    if (!res.url) {
+    if (res.mode === 'cloud_blocked') {
+      endLoading()
+      if (res.url) mapReg.ndviLayer = applyTileLayer(mapReg.map, mapReg.ndviLayer, res.url, 1)
+      else if (mapReg.ndviLayer) { mapReg.map.removeLayer(mapReg.ndviLayer); mapReg.ndviLayer = null }
+      state.cloudBlock.main = { month: m.label, cloudPct: res.cloudPct, lastValidDate: res.lastValidDate }
+      if (!silent) {
+        const pctText = res.cloudPct != null ? Math.round(res.cloudPct) + '%' : 'high'
+        const lastText = res.lastValidDate
+          ? 'Last valid reading: ' + res.lastValidDate
+          : 'No cloud-free imagery available in the last 90 days.'
+        showToast('\u2601\uFE0F Cloud-covered on ' + m.label + ' (' + pctText + ' cloud) \u2014 showing true-color image. NDVI can\u2019t be reliably calculated. ' + lastText, 6000)
+      }
+      setStatus('ready', 'Cloud-blocked ' + m.label + ' \u2014 true-color shown')
+      return
+    }
+    if (res.mode === 'no_data' || !res.url) {
       endLoading()
       if (mapReg.ndviLayer) { mapReg.map.removeLayer(mapReg.ndviLayer); mapReg.ndviLayer = null }
       setStatus('error', 'No cloud-free imagery yet for ' + m.label + ' \u2014 check back later in the month')
       return
     }
-    if (mapReg.ndviLayer) mapReg.map.removeLayer(mapReg.ndviLayer)
-    mapReg.ndviLayer = window.L.tileLayer(res.url, {
-      attribution: 'Sentinel-2 / Google Earth Engine',
-      opacity: 0.8,
-    }).addTo(mapReg.map)
+    mapReg.ndviLayer = applyTileLayer(mapReg.map, mapReg.ndviLayer, res.url)
     endLoading()
     setStatus('ready', cfg.name + ' layer loaded \u2014 ' + m.label)
   })
 }
 
-export function loadIndexForMonthRight(idx) {
+export function loadIndexForMonthRight(idx, silent) {
   const m = MONTHS[idx]
   if (!m || !state.eeReady || !mapReg.mapRight) return
   const cfg = INDICES[state.currentIndex]
   state.rightMonth = idx
   state.sceneCount.right = 0
+  state.cloudBlock.right = null
   beginLoading()
   const geom = getGeometry()
   ee.loadIndexTile(m, state.currentIndex, geom, (res) => {
     if (!mapReg.mapRight) { endLoading(); return }
     state.sceneCount.right = res.count
-    if (!res.url) {
+    if (res.mode === 'cloud_blocked') {
+      endLoading()
+      if (res.url) mapReg.ndviLayerRight = applyTileLayer(mapReg.mapRight, mapReg.ndviLayerRight, res.url, 1)
+      else if (mapReg.ndviLayerRight) { mapReg.mapRight.removeLayer(mapReg.ndviLayerRight); mapReg.ndviLayerRight = null }
+      state.cloudBlock.right = { month: m.label, cloudPct: res.cloudPct, lastValidDate: res.lastValidDate }
+      if (!silent) showToast('\u2601\uFE0F Compare view cloud-covered on ' + m.label + ' \u2014 showing true-color image', 4000)
+      return
+    }
+    if (res.mode === 'no_data' || !res.url) {
       endLoading()
       if (mapReg.ndviLayerRight) { mapReg.mapRight.removeLayer(mapReg.ndviLayerRight); mapReg.ndviLayerRight = null }
       return
     }
-    if (mapReg.ndviLayerRight) mapReg.mapRight.removeLayer(mapReg.ndviLayerRight)
-    mapReg.ndviLayerRight = window.L.tileLayer(res.url, {
-      attribution: 'Sentinel-2 / Google Earth Engine',
-      opacity: 0.8,
-    }).addTo(mapReg.mapRight)
+    mapReg.ndviLayerRight = applyTileLayer(mapReg.mapRight, mapReg.ndviLayerRight, res.url)
     endLoading()
   })
 }
@@ -768,6 +794,7 @@ export async function saveField(name, geojson, plantingDate) {
       geojson,
       area_ha: getFieldAreaHectares(geojson),
       planting_date: plantingDate || null,
+      planting_date_source: 'manual',
     })
     state.fields.push(field)
     loadFieldTrend(field)
@@ -788,6 +815,7 @@ export async function updateField(id, patch) {
       if ('geojson' in patch) state.fields[idx].geojson = patch.geojson
       if ('area_ha' in patch) state.fields[idx].areaHectares = patch.area_ha
       if ('planting_date' in patch) state.fields[idx].plantingDate = patch.planting_date
+      if ('planting_date_source' in patch) state.fields[idx].plantingDateSource = patch.planting_date_source
       if ('name' in patch) state.fields[idx].name = patch.name
     }
   } catch (err) {
@@ -996,6 +1024,71 @@ export function buildStatusObject(field, value, index) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Confidence tiers (Part B — Data Trust Layer)
+// ---------------------------------------------------------------------------
+export const CONFIDENCE_STALE_DAYS = 21
+
+export function getConfidenceTier(signals) {
+  const cloudBlocked = !!signals.cloudBlocked
+  const sceneCount = signals.sceneCount
+  const plantingDateSource = signals.plantingDateSource
+  const lastValidDate = signals.lastValidDate
+
+  if (cloudBlocked) {
+    return { tier: 'low', reason: 'Cloud-covered \u2014 latest satellite view unavailable' }
+  }
+  if (sceneCount === 0) {
+    return { tier: 'low', reason: 'No cloud-free imagery available' }
+  }
+  if (lastValidDate) {
+    const ageDays = Math.floor((Date.now() - new Date(lastValidDate).getTime()) / 86400000)
+    if (ageDays > CONFIDENCE_STALE_DAYS) {
+      return { tier: 'low', reason: 'Last valid reading is ' + ageDays + ' days old' }
+    }
+  }
+  if (sceneCount != null && sceneCount > 0 && sceneCount <= 2) {
+    return { tier: 'medium', reason: 'Only ' + sceneCount + ' cloud-free scene' + (sceneCount === 1 ? '' : 's') + ' this period' }
+  }
+  if (plantingDateSource === 'estimated') {
+    return { tier: 'medium', reason: 'Planting date estimated from satellite data' }
+  }
+  return { tier: 'high', reason: '' }
+}
+
+export function fieldConfidence(field) {
+  const s = fieldStatus[field.id]
+  if (!s) return null
+  return getConfidenceTier({
+    cloudBlocked: s.cloudBlocked,
+    sceneCount: s.count,
+    plantingDateSource: field.plantingDateSource || 'manual',
+    lastValidDate: s.date,
+  })
+}
+
+export function viewConfidence(side) {
+  // When a field is active on the main map, the view IS the field — use the
+  // same signals as the dashboard/detail panel so the badge never disagrees.
+  if (side === 'main' && state.currentFieldId) {
+    const field = state.fields.find((f) => f.id === state.currentFieldId)
+    if (field) {
+      // A cloud-blocked current view always dominates the field's own signals.
+      if (state.cloudBlock.main) {
+        return { tier: 'low', reason: 'Cloud-covered \u2014 showing true-color imagery' }
+      }
+      return fieldConfidence(field)
+    }
+  }
+  const block = state.cloudBlock[side]
+  return getConfidenceTier({
+    cloudBlocked: !!block,
+    sceneCount: state.sceneCount[side],
+    plantingDateSource: 'manual',
+    lastValidDate: block ? block.lastValidDate : null,
+  })
+}
+
 const STATUS_COLORS = {
   healthy: '#22c98e',
   moderate: '#f5a623',
@@ -1020,13 +1113,19 @@ export function updateFieldStatus(field) {
   const geom = field.geojson && (field.geojson.geometry || field.geojson)
   if (!geom || !geom.coordinates) return
   const geometry = window.ee.Geometry.Polygon(geom.coordinates)
-  ee.getRecentIndexValue(geometry, state.currentIndex, ({ count, value }) => {
+  ee.getRecentIndexValue(geometry, state.currentIndex, ({ count, value, date, cloudBlocked }) => {
     if (count === 0 || value == null) {
-      fieldStatus[field.id] = { badgeText: '\u2014', badgeClass: '', stageLabel: 'No recent data', value: null }
+      fieldStatus[field.id] = {
+        badgeText: '\u2014', badgeClass: '', stageLabel: 'No recent data',
+        value: null, count: 0, date: date || null, cloudBlocked: !!cloudBlocked,
+      }
       if (field.id === state.currentFieldId) applyFieldStyle()
       return
     }
-    fieldStatus[field.id] = { ...buildStatusObject(field, value, state.currentIndex), value }
+    fieldStatus[field.id] = {
+      ...buildStatusObject(field, value, state.currentIndex),
+      value, count, date: date || null, cloudBlocked: !!cloudBlocked,
+    }
     if (field.id === state.currentFieldId) applyFieldStyle()
   })
 }

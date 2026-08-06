@@ -31,18 +31,61 @@ function s2Collection(geom, start, end) {
     .filter(ee().Filter.lt('CLOUDY_PIXEL_PERCENTAGE', 40))
 }
 
+function getCloudPctAndTrueColor(scene, geometry, monthStart, cb) {
+  const e = ee()
+  scene.get('CLOUDY_PIXEL_PERCENTAGE').evaluate((cloudPct) => {
+    const vis = { bands: ['B4', 'B3', 'B2'], min: 0, max: 3000 }
+    scene.getMap(vis, (mapId, err) => {
+      if (err || !mapId || !mapId.urlFormat) {
+        cb({ url: null, cloudPct, lastValidDate: null, err })
+        return
+      }
+      getLastValidDate(geometry, monthStart, (lastValidDate) => {
+        cb({ url: mapId.urlFormat, cloudPct, lastValidDate, err: null })
+      })
+    })
+  })
+}
+
+function getLastValidDate(geometry, monthStart, cb) {
+  const e = ee()
+  const lookback = monthStart.advance(-90, 'day')
+  const prior = s2Collection(geometry, lookback, monthStart).sort('system:time_start', false)
+  prior.size().evaluate((n) => {
+    if (n === 0) { cb(null); return }
+    prior.first().get('system:time_start').evaluate((ts) => {
+      if (ts == null) { cb(null); return }
+      cb(new Date(ts).toISOString().slice(0, 10))
+    })
+  })
+}
+
 export function loadIndexTile(month, index, geometry, cb) {
   const e = ee()
   const cfg = INDICES[index] || INDICES.ndvi
   const start = e.Date.fromYMD(month.year, month.month, 1)
   const end = start.advance(1, 'month')
-  const collection = s2Collection(geometry, start, end)
-  collection.size().evaluate((count) => {
-    if (count === 0) { cb({ count, url: null, err: 'none' }); return }
-    const composite = collection.median().clip(geometry).normalizedDifference(cfg.bands).rename(cfg.name)
+  const rawCollection = e.ImageCollection('COPERNICUS/S2_SR_HARMONIZED')
+    .filterBounds(geometry)
+    .filterDate(start, end)
+  const cleanCollection = rawCollection.filter(e.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', 40))
+  cleanCollection.size().evaluate((count) => {
+    if (count === 0) {
+      // No clean scenes — check whether any scenes exist at all this month.
+      rawCollection.size().evaluate((rawCount) => {
+        if (rawCount === 0) { cb({ mode: 'no_data', count: 0, url: null, err: 'none' }); return }
+        // Cloud-blocked: pick the least-cloudy scene for the true-color fallback.
+        const bestScene = rawCollection.sort('CLOUDY_PIXEL_PERCENTAGE').first()
+        getCloudPctAndTrueColor(bestScene, geometry, start, (res) => {
+          cb({ mode: 'cloud_blocked', count: 0, url: res.url, cloudPct: res.cloudPct, lastValidDate: res.lastValidDate, err: res.err })
+        })
+      })
+      return
+    }
+    const composite = cleanCollection.median().clip(geometry).normalizedDifference(cfg.bands).rename(cfg.name)
     composite.getMap(cfg.vis, (mapId, err) => {
-      if (err || !mapId || !mapId.urlFormat) { cb({ count, url: null, err }); return }
-      cb({ count, url: mapId.urlFormat })
+      if (err || !mapId || !mapId.urlFormat) { cb({ mode: 'index', count, url: null, err }); return }
+      cb({ mode: 'index', count, url: mapId.urlFormat })
     })
   })
 }
@@ -115,24 +158,49 @@ export function getRecentIndexValue(geometry, index, cb) {
   // report the most recent available value, consistent with the chart's last point.
   const start = e.Date(Date.now()).advance(-14, 'month')
   const end = e.Date(Date.now())
-  const collection = s2Collection(geometry, start, end).sort('system:time_start', false)
-  collection.size().evaluate((count) => {
-    if (count === 0) { cb({ count: 0, value: null }); return }
-    const recent = collection.first().normalizedDifference(cfg.bands).rename(cfg.name)
-    recent.reduceRegion({ reducer: e.Reducer.mean(), geometry, scale: 10, maxPixels: 1e9 })
-      .evaluate(
-        (result) => {
-          const value = result && result[cfg.name]
-          cb({ count, value: value == null || value === undefined ? null : value })
-        },
-        (err) => {
-          console.error('getRecentIndexValue.reduceRegion failed:', err)
-          cb({ count: 0, value: null })
-        },
-      )
+  const all = e.ImageCollection('COPERNICUS/S2_SR_HARMONIZED')
+    .filterBounds(geometry)
+    .filterDate(start, end)
+    .sort('system:time_start', false)
+  all.size().evaluate((totalCount) => {
+    if (totalCount === 0) { cb({ count: 0, value: null, date: null, cloudBlocked: false }); return }
+    // Is the freshest scene itself cloud-blocked? If so the last valid reading
+    // is older than the freshest imagery — the data is effectively masked.
+    all.first().get('CLOUDY_PIXEL_PERCENTAGE').evaluate((cloudPct) => {
+      const cloudBlocked = cloudPct != null && cloudPct >= 40
+      const clean = all.filter(e.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', 40))
+      clean.size().evaluate((count) => {
+        if (count === 0) { cb({ count: 0, value: null, date: null, cloudBlocked }); return }
+        const recent = clean.first()
+        const idxImg = recent.normalizedDifference(cfg.bands).rename(cfg.name)
+        recent.get('system:time_start').evaluate((ts) => {
+          const date = ts == null ? null : new Date(ts).toISOString().slice(0, 10)
+          idxImg.reduceRegion({ reducer: e.Reducer.mean(), geometry, scale: 10, maxPixels: 1e9 })
+            .evaluate(
+              (result) => {
+                const value = result && result[cfg.name]
+                cb({ count, value: value == null || value === undefined ? null : value, date, cloudBlocked })
+              },
+              (err) => {
+                console.error('getRecentIndexValue.reduceRegion failed:', err)
+                cb({ count: 0, value: null, date, cloudBlocked })
+              },
+            )
+        }, (err) => {
+          console.error('getRecentIndexValue.time_start failed:', err)
+          cb({ count: 0, value: null, date: null, cloudBlocked })
+        })
+      }, (err) => {
+        console.error('getRecentIndexValue.size failed:', err)
+        cb({ count: 0, value: null, date: null, cloudBlocked })
+      })
+    }, (err) => {
+      console.error('getRecentIndexValue.cloud failed:', err)
+      cb({ count: 0, value: null, date: null, cloudBlocked: false })
+    })
   }, (err) => {
     console.error('getRecentIndexValue.size failed:', err)
-    cb({ count: 0, value: null })
+    cb({ count: 0, value: null, date: null, cloudBlocked: false })
   })
 }
 

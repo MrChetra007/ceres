@@ -91,6 +91,7 @@ function destroyRightMap() {
   mapReg.baseLayerRight = null
   mapReg.ndviLayerRight = null
   state.sceneCount.right = 0
+  state.cloudBlock.right = null
 }
 
 function startResize(e) {

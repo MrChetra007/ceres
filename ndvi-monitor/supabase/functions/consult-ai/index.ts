@@ -195,6 +195,8 @@ Deno.serve(async (req) => {
       status,
       growthStage,
       dayCount,
+      confidenceTier,
+      confidenceReason,
       lang,
     } = await req.json();
 
@@ -242,8 +244,16 @@ Deno.serve(async (req) => {
         ? "Reply in plain, simple Khmer a rural farmer would understand."
         : "Reply in plain, simple English.";
 
+    const confidenceLine =
+      confidenceTier === "low"
+        ? `Data confidence is LOW (${confidenceReason || "stale or cloud-covered data"}). Be explicit that the satellite data is stale or uncertain and you cannot confirm current field health — frame everything as best-effort with low certainty.`
+        : confidenceTier === "medium"
+          ? `Data confidence is MEDIUM (${confidenceReason || "limited cloud-free imagery"}). Hedge your advice — note the uncertainty and avoid over-confident statements.`
+          : "";
+
     const prompt = `You are explaining satellite crop health data to a rice farmer in Battambang, Cambodia.
 Data: NDVI ${ndviValue.toFixed(2)}, LSWI (moisture) ${lswiValue?.toFixed(2) ?? "n/a"}, rainfall (21d) ${rainfallMm != null ? rainfallMm.toFixed(0) : "n/a"}mm, status: ${status}, growth stage: ${growthStage ?? "unknown"}, day ${dayCount ?? "?"} since planting.
+${confidenceLine}
 ${langLine}
 In 2-3 short sentences: describe what the numbers suggest, and name 1-2 possible causes as possibilities to check — never state a single cause as certain. End with one practical next step. Do not use technical jargon like "NDVI" or "LSWI" in the reply itself.`;
 

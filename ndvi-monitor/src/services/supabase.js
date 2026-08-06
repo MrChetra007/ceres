@@ -12,6 +12,7 @@ export function mapRowToField(row) {
     geojson: row.geojson,
     areaHectares: row.area_ha,
     plantingDate: row.planting_date,
+    plantingDateSource: row.planting_date_source || 'manual',
     notes: row.notes,
     createdAt: row.created_at,
   }
@@ -48,11 +49,15 @@ export async function loadFields() {
   return (data || []).map(mapRowToField)
 }
 
-export async function insertField({ name, geojson, area_ha, planting_date }) {
+export async function insertField({ name, geojson, area_ha, planting_date, planting_date_source }) {
   const session = await requireSession()
   const { data, error } = await sb
     .from('fields')
-    .insert({ name, geojson, area_ha, planting_date, owner_id: session.user.id })
+    .insert({
+      name, geojson, area_ha, planting_date,
+      planting_date_source: planting_date_source || 'manual',
+      owner_id: session.user.id,
+    })
     .select()
     .single()
   if (error) throw error
