@@ -1,7 +1,7 @@
 # NDVI Rice Crop Health Monitor — Build Process
 
 ## Project goal
-A single-page web app that shows a satellite map of rice-growing areas in Battambang, Cambodia, colored by NDVI (vegetation health). Visitors can drag a time slider to see health change over a season and click any spot for a mini trend chart + stress alert. No visitor login — developer authenticates once. (Phase 8 adds Supabase-backed field sync with **Google sign-in** for saved fields, plus scheduled Telegram alerts; Phase 11 adds per-user multi-area support.)
+A single-page web app that shows a satellite map of rice-growing areas in Battambang, Cambodia, colored by NDVI (vegetation health). Visitors can drag a time slider to see health change over a season and click any spot for a mini trend chart + stress alert. No visitor login — developer authenticates once. (Phase 8 adds Supabase-backed field sync with **Google sign-in** for saved fields, plus scheduled Telegram alerts; Phase 11 adds per-user multi-area support; Phase 13 adds cloud-blocked true-color fallback + a unified confidence badge.)
 
 ---
 
@@ -76,7 +76,7 @@ A single-page web app that shows a satellite map of rice-growing areas in Battam
 
 ---
 
-## Phase 8 — Supabase Backend + Telegram Alerts 🚧 In progress (see Part 5 of `NDVI_Master_Roadmap.md`; original doc folded in)
+## Phase 8 — Supabase Backend + Telegram Alerts ✅ Complete (see Part 5 of `NDVI_Master_Roadmap.md`; original doc folded in)
 
 ### 8.1 Supabase schema & auth ✅ Complete
 - Supabase project: `https://wopwwtnvqyomiwbsxiks.supabase.co`
@@ -109,7 +109,7 @@ A single-page web app that shows a satellite map of rice-growing areas in Battam
 - **Verified in Deno** with the throwaway `ee-spike` function: `npm:@google/earthengine@0.1.395` imports and authenticates via `authenticateViaPrivateKey` inside a Supabase Edge Function — clears the key risk that originally motivated the Python plan. `ee-spike` can be deleted.
 
 ### 8.5 Scheduled worker ✅ Complete (Supabase pg_cron → Edge Function, user-confirmed working)
-- **`supabase/functions/ee-alerts-worker/index.ts`** (Deno): authenticates EE with the service-account key, queries all `fields` whose owner has a `telegram_chat_id` (join through `profiles`), recomputes NDVI (90-day S2 median, B8/B4) + growth-stage-aware status (port of the app's 6-stage thresholds + flat fallback), dedups against the latest `alerts_log.status` (sends Telegram only on a change for the worse, or first non-healthy), writes an `alerts_log` row every run (with message + rainfall context), and sends via Telegram `sendMessage` when warranted
+- **`supabase/functions/ee-alerts-worker/index.ts`** (Deno): authenticates EE with the service-account key, queries all `fields` whose owner has a `telegram_chat_id` (join through `profiles`), recomputes NDVI (90-day S2 median, B8/B4) + growth-stage-aware status (port of the app's 6-stage thresholds + flat fallback), dedups against the latest `alerts_log.status` (sends Telegram only on a change for the worse, or first non-healthy), writes an `alerts_log` row every run (with message + rainfall context), and sends via Telegram `sendMessage` when warranted. **Part 8 addition:** on `ndvi === null` (no_data / cloud-blocked) it now sends exactly one "We haven't had a clear satellite view …" message on transition INTO `no_data` (`lastStatus !== 'no_data'`).
 - **`migration3.sql`**: enables `pg_cron` + `pg_net`, stores the `service_role` key in **Supabase Vault**, schedules `ndvi-alerts-daily` (daily 23:00 UTC = 06:00 Cambodia) to `net.http_post` the worker with a Vault-signed Bearer token
 - **Checkpoint:** worker runs and delivers Telegram messages for stressed fields; `alerts_log` rows written every run ✅
 - Rest of Phase 8: 8.6 sustained end-to-end dedup validation — **complete ✅** (see below). Full detail in `Backend_Telegram_Roadmap.md`.
@@ -337,6 +337,56 @@ multi-provider fallback chain so a single provider's outage/quota/404 never bloc
 
 ---
 
+## Phase 13 — Cloud-blocked scene fallback (Part A) + unified confidence badge (Part B) 🚧 Built, pending backend deploy
+
+**Goal:** make the map honest during Cambodia's rainy season and make data trust visible. Per spec
+`Cloud_Blocked_Scene_Fallback.md`. A month that's too cloudy (≥40% cloud) now shows **true-color
+imagery** instead of a misleading NDVI composite, and every place NDVI appears carries a **🟢🟡🔴
+confidence badge** computed by a single scoring function so all badges always agree.
+
+### Part A — Cloud-blocked scene fallback
+- **Cloud policy unchanged:** `<40` `CLOUDY_PIXEL_PERCENTAGE` = clean → normal NDVI composite;
+  `>=40` = cloud-blocked. Threshold deliberately **not** loosened; no per-pixel masking added.
+- **`src/services/earthEngine.js`** — `loadIndexTile()` now returns one of three modes:
+  `{ mode: 'index', count, url }` / `{ mode: 'cloud_blocked', count: 0, url, cloudPct, lastValidDate, err }`
+  (least-cloudy scene rendered true-color via `B4/B3/B2`, `{ min: 0, max: 3000 }`, opacity 1; last
+  cloud-free date from a 90-day lookback before the month start) / `{ mode: 'no_data', count: 0, url: null, err: 'none' }`.
+  `getRecentIndexValue()` also returns `cloudBlocked` (from the freshest scene's cloud %).
+- **`src/store.js`** — `state.cloudBlock = { main, right }`; `loadIndexForMonth()` /
+  `loadIndexForMonthRight()` branch on the mode: cloud-blocked swaps in the true-color layer and toasts
+  "☁️ Cloud-covered on {month} ({pct}% cloud) — showing true-color image… Last valid reading: {date}".
+  Toasts are **silent during Play/autoplay** (new `silent` flag) so the auto-advance loop can't spam.
+  `LeafletMap.vue` resets `cloudBlock.right` when Compare closes (`destroyRightMap`).
+- **`src/components/TimeControl.vue`** — main month pill becomes a **"☁️ cloud-blocked"** pill (with
+  tooltip) when cloud-blocked; the compare scrubber shows its own cloud-blocked pill.
+
+### Part B — Unified confidence badge (Data Trust Layer)
+- **`getConfidenceTier(signals)`** in `src/store.js` + `CONFIDENCE_STALE_DAYS = 21`. Tiers (worst
+  applicable wins, each with a short reason):
+  - 🟢 **High** — clean scene, ≥3 cloud-free scenes, manual planting date.
+  - 🟡 **Medium** — 1–2 scenes, or auto-estimated planting date (`planting_date_source = 'estimated'`).
+  - 🔴 **Low** — cloud-blocked, 0 scenes, or last valid reading older than 21 days.
+- **New `src/components/ConfidenceBadge.vue`** (dot + tier label + optional reason), styled by
+  `.conf-badge`/`.conf-high|medium|low` in `src/style.css`.
+- **Placement:** map legend (`viewConfidence('main')`), field cards (`fieldConfidence(f)`), field detail
+  hero card (with reason), compare scrubber (`viewConfidence('right')`). All use the same scoring
+  function. `viewConfidence('main')` prefers the active field's signals (legend/dashboard/detail agree)
+  but a cloud-blocked view always dominates → 🔴.
+- **Consult AI** (`supabase/functions/consult-ai/index.ts`) now receives `confidenceTier` +
+  `confidenceReason`; the prompt hedges explicitly on low/medium tiers.
+- **Telegram worker** — one-shot no-data transition message (see 8.5).
+- **`migration8.sql`** — `alter table fields add column planting_date_source text not null default
+  'manual'` + check constraint `('manual','estimated')`; `src/services/supabase.js` maps/inserts it
+  (default `'manual'`), `saveField` passes `'manual'`.
+
+### Deploy — pending
+1. Run `migration8.sql` in the Supabase SQL editor
+2. `supabase functions deploy consult-ai` (confidence hedging)
+3. `supabase functions deploy ee-alerts-worker` (no-data transition alert)
+4. `npm run build` — passes ✅ (verified)
+
+---
+
 ## Product Pivot Features (added during development)
 
 ### Feature A — Draw & save fields ✅ Complete
@@ -476,9 +526,9 @@ multi-provider fallback chain so a single provider's outage/quota/404 never bloc
 | Area calc | turf.js (v6) |
 | Charts | Chart.js (v4.4.7) |
 | Backend / DB | Supabase (Postgres + Auth, Google OAuth) + pg_cron/pg_net + Vault for the scheduled worker |
-| Edge Functions | `consult-ai` (LLM agronomist, multi-provider fallback), `telegram-webhook` (bot linking), `ee-alerts-worker` (daily stress check + Telegram send), `ee-spike` (throwaway Deno EE-import test) |
+| Edge Functions | `consult-ai` (LLM agronomist, multi-provider fallback, confidence-aware hedging), `telegram-webhook` (bot linking), `ee-alerts-worker` (daily stress check + Telegram send + no-data transition alert), `ee-spike` (throwaway Deno EE-import test) |
 | Storage | Supabase `fields` + `aois` + `alerts_log` + `ai_explanations` + `ai_usage` tables (primary), localStorage (EE token, presets) |
 
 ## Status
 
-All phases are complete. **Phase 8 (backend):** 8.1 (schema + auth), 8.2 (fields migrated off localStorage), 8.3 (Telegram bot + account linking — deployed & user-confirmed), 8.4 (EE service account — verified in Deno), 8.5 (scheduled worker — `ee-alerts-worker` Edge Function + `migration3.sql` pg_cron/Vault daily job), and **8.6 (end-to-end dedup validation — Telegram alert delivered, dedup contract verified, worker bugs fixed)** are done, with 8.3/8.5/8.6 user-confirmed working. **Phase 9 (Vue migration)** is complete — build ✅, dev server ✅, and the full end-to-end smoke test (draw/save field → Supabase, compare mode, PNG/PDF export) is user-confirmed. **Phase 10 (design-system redesign)** is complete — Stage 1 (tokens + dark theme + TopBar/TimeControl/BandPanel/MapLegend), Stage 2 (Monitored-Fields sidebar + field-inspector detail panel, hardened compare mode), and Stage 3 (onboarding 4-slide walkthrough, toast stack, motion timing, event-legend) — build ✅, dev serves ✅. **Phase 11 (multi-area support + auth/mobile hardening)** is complete. **Phase 12 (Consult AI)** is complete and deployed — `consult-ai` Edge Function with Gemini → DeepSeek → Qwen fallback, `ai_explanations` cache + `model_used`, per-user daily cap, `requireSession()` token refresh; DeepSeek/Qwen secrets set, `migration6.sql` applied, fallback verified in logs. The static app from Phase 2–7 is preserved intact as `index_old.html` (fully working). The app is feature-stable with NDVI/NDWI/LSWI analysis, time slider with Latest button + scene count, draw & save fields (synced to Supabase), Monitored-Fields sidebar + field-inspector panel with growth-stage-aware health badges, resizable split-screen compare mode, PNG/PDF export, event overlays with legend, CHIRPS rainfall context on stress alerts, per-user multi-area support (Areas dropdown + New Area modal), area recalculation on edit, satellite basemap toggle, place search, field deselection, Google sign-in, Telegram alerts, Consult AI, and a 4-slide onboarding help panel.
+All phases are complete. **Phase 8 (backend):** 8.1 (schema + auth), 8.2 (fields migrated off localStorage), 8.3 (Telegram bot + account linking — deployed & user-confirmed), 8.4 (EE service account — verified in Deno), 8.5 (scheduled worker — `ee-alerts-worker` Edge Function + `migration3.sql` pg_cron/Vault daily job), and **8.6 (end-to-end dedup validation — Telegram alert delivered, dedup contract verified, worker bugs fixed)** are done, with 8.3/8.5/8.6 user-confirmed working. **Phase 9 (Vue migration)** is complete — build ✅, dev server ✅, and the full end-to-end smoke test (draw/save field → Supabase, compare mode, PNG/PDF export) is user-confirmed. **Phase 10 (design-system redesign)** is complete — Stage 1 (tokens + dark theme + TopBar/TimeControl/BandPanel/MapLegend), Stage 2 (Monitored-Fields sidebar + field-inspector detail panel, hardened compare mode), and Stage 3 (onboarding 4-slide walkthrough, toast stack, motion timing, event-legend) — build ✅, dev serves ✅. **Phase 11 (multi-area support + auth/mobile hardening)** is complete. **Phase 12 (Consult AI)** is complete and deployed — `consult-ai` Edge Function with Gemini → DeepSeek → Qwen fallback, `ai_explanations` cache + `model_used`, per-user daily cap, `requireSession()` token refresh; DeepSeek/Qwen secrets set, `migration6.sql` applied, fallback verified in logs. **Phase 13 (cloud-blocked fallback + confidence badge)** is built — true-color fallback on ≥40%-cloud months, 🟢🟡🔴 confidence badge everywhere NDVI appears, `planting_date_source` (`migration8.sql`), Consult AI confidence hedging, and a one-shot no-data Telegram alert; `npm run build` passes ✅. **Pending backend deploy:** run `migration8.sql`, then `supabase functions deploy consult-ai` and `supabase functions deploy ee-alerts-worker`. The static app from Phase 2–7 is preserved intact as `index_old.html` (fully working). The app is feature-stable with NDVI/NDWI/LSWI analysis, time slider with Latest button + scene count, draw & save fields (synced to Supabase), Monitored-Fields sidebar + field-inspector panel with growth-stage-aware health badges, resizable split-screen compare mode, PNG/PDF export, event overlays with legend, CHIRPS rainfall context on stress alerts, per-user multi-area support (Areas dropdown + New Area modal), area recalculation on edit, satellite basemap toggle, place search, field deselection, Google sign-in, Telegram alerts, Consult AI, and a 4-slide onboarding help panel.

@@ -333,6 +333,9 @@ client (`@google/earthengine`) was confirmed working in Deno (see 8.4/8.5 — th
 - **Build the alert text as a template function, not an inline string** —
   `buildAlertMessage(status, ndviValue, rainfallMm, growthStage)` returns the message. This is the
   hook for the AI layer later — see "AI window" note below.
+- **No-data transition alert (Part 8):** on `ndvi === null` (no_data / cloud-blocked) the worker logs
+  a row every run but sends **exactly one** "We haven't had a clear satellite view …" Telegram message
+  when transitioning into `no_data` (`lastStatus !== 'no_data'`) — covers the alert-fatigue concern.
 - **Checkpoint:** the daily job (or a manual trigger) produces a Telegram message for a field that's
   deliberately stressed, and an `alerts_log` row every run ✅ (user-confirmed working)
 
@@ -489,6 +492,71 @@ blocks the feature.
 
 ---
 
+## Part 8 — Cloud-blocked scene fallback (Part A) + unified confidence badge (Part B) ✅ Built, pending backend deploy
+
+Spec: `Cloud_Blocked_Scene_Fallback.md`. Hardens the app against Cambodia's rainy-season cloud so the
+map never lies: a too-cloudy month now shows **true-color imagery** instead of a misleading NDVI
+composite, and every place NDVI appears now carries a **🟢🟡🔴 confidence badge** that always agrees.
+
+### 8.1 Part A — Cloud-blocked scene fallback
+
+- **Cloud policy unchanged:** `<40` `CLOUDY_PIXEL_PERCENTAGE` = clean (uses normal NDVI composite);
+  `>=40` = cloud-blocked. The threshold was deliberately **not** loosened (residual cloud can bias NDVI
+  downward into false "stress"), and no per-pixel cloud masking was added.
+- `loadIndexTile()` (`src/services/earthEngine.js`) now returns one of three modes:
+  - `{ mode: 'index', count, url }` — clean scenes exist, normal composite.
+  - `{ mode: 'cloud_blocked', count: 0, url, cloudPct, lastValidDate, err }` — raw scenes exist but all
+    ≥40% cloud; picks the **least-cloudy** scene, renders it as **true-color** (`B4/B3/B2`,
+    `{ min: 0, max: 3000 }`, opacity 1), and reports the last cloud-free reading via a **90-day
+    lookback** before the month start (`getLastValidDate()`).
+  - `{ mode: 'no_data', count: 0, url: null, err: 'none' }` — no scenes at all this month.
+- `getRecentIndexValue()` now also returns `cloudBlocked` (checked from the freshest scene's cloud %)
+  so field-level statuses know their confidence is cloud-affected.
+- `src/store.js`: new `state.cloudBlock = { main, right }` + `loadIndexForMonth()` /
+  `loadIndexForMonthRight()` branch on the mode — cloud-blocked swaps in the true-color layer and shows
+  a toast "☁️ Cloud-covered on {month} ({pct}% cloud) — showing true-color image … Last valid reading:
+  {date}". Toasts are **suppressed during Play/autoplay** (a `silent` flag) to avoid toast spam on the
+  auto-advance loop.
+- `TimeControl.vue`: the month pill becomes a **"☁️ cloud-blocked"** pill (with tooltip) when the main
+  map is cloud-blocked; the compare scrubber gets its own cloud-blocked pill + confidence badge.
+
+### 8.2 Part B — Unified confidence badge (Data Trust Layer)
+
+One scoring function, rendered identically everywhere. `getConfidenceTier(signals)` in
+`src/store.js` (with `CONFIDENCE_STALE_DAYS = 21`):
+
+- 🟢 **High** — a clean scene, ≥3 cloud-free scenes this period, planting date manually entered.
+- 🟡 **Medium** — 1–2 cloud-free scenes, **or** an auto-estimated planting date
+  (`planting_date_source = 'estimated'`; the app writes `'manual'` today — the future auto-suggested
+  planting-date feature will write `'estimated'`).
+- 🔴 **Low** — cloud-blocked, zero scenes, or the last valid reading is older than 21 days.
+- Worst applicable tier wins; every tier carries a short plain-language reason.
+
+- New `ConfidenceBadge.vue` component (dot + tier label + optional reason) styled by
+  `.conf-badge` / `.conf-high|medium|low` in `src/style.css`.
+- **Everywhere NDVI appears:** map legend (`viewConfidence('main')`), field cards
+  (`fieldConfidence(f)`), the field detail hero card (with reason), and the compare scrubber
+  (`viewConfidence('right')`). All callers use the same scoring function so badges can never disagree.
+- `viewConfidence('main')` prefers the active field's own signals (so legend/dashboard/detail agree),
+  but a cloud-blocked current view always dominates → 🔴.
+- **Consult AI** (`supabase/functions/consult-ai/index.ts`) now receives `confidenceTier` +
+  `confidenceReason`; the prompt is instructed to **hedge explicitly** on low/medium tiers
+  ("AI interpretation to guide you — not a diagnosis" framing reinforced).
+- **Telegram worker** (`supabase/functions/ee-alerts-worker/index.ts`): on `ndvi === null`
+  (no_data/cloud-blocked) it now sends exactly **one** "We haven't had a clear satellite view …" message
+  on transition INTO `no_data` (`lastStatus !== 'no_data'`), while still logging a row every run — no
+  repeat alert fatigue.
+
+### 8.3 Schema + deploy
+
+- **`migration8.sql`**: `alter table fields add column planting_date_source text not null default
+  'manual'` + check constraint `('manual','estimated')`. **Must be applied in the Supabase SQL editor.**
+- `src/services/supabase.js` maps/inserts `planting_date_source` (default `'manual'`).
+- **Pending user deployment:** run `migration8.sql`; then redeploy
+  `supabase functions deploy consult-ai` and `supabase functions deploy ee-alerts-worker`.
+
+---
+
 ## Stack notes (migration + current state)
 
 ### Why no Vite
@@ -553,7 +621,7 @@ Fix: load EE via a plain `<script>` tag (Google's own documented approach).
 ## What this sets up for later (not now)
 
 - **Harvest reminders** — days-since-planting crossing into the "Harvest" stage is a natural on-screen trigger, no backend needed
-- **Auto-suggest planting date** — LSWI spike (flooding/transplanting) when a field is first drawn could auto-fill the planting date
+- **Auto-suggest planting date** — LSWI spike (flooding/transplanting) when a field is first drawn could auto-fill the planting date. The `planting_date_source` column it needs already exists (Part 8, `migration8.sql`), and the confidence tiers already account for `'estimated'`. **Pending deploy: migration8.sql.**
 - **Drought/flood risk assessment** — rainfall + NDVI together is the natural first step, but that's a scoped feature of its own
 - **Backend path** — `localStorage` → Supabase table (`fields`: owner, geojson, name, notes) is a clean swap; Telegram alerts become straightforward once a scheduled job can iterate a database of fields. **Done — see Part 5 (Phase 8): fields migrated, pg_cron → Edge Function worker sending alerts, only the sustained E2E dedup validation remains.**
 
@@ -574,6 +642,7 @@ Fix: load EE via a plain `<script>` tag (Google's own documented approach).
 11. **Backend (Phase 8, complete):** Supabase schema+auth ✅ → migrate CRUD off localStorage ✅ → Telegram bot + linking ✅ (Edge Function + app UI, deployed & confirmed) → EE service account ✅ (verified in Deno) → scheduled worker ✅ (`ee-alerts-worker` + `migration3.sql` pg_cron/Vault job) → end-to-end test ✅ (dedup contract verified; see Part 5)
 12. **Multi-area (Part 6, done):** per-user `aois` in Supabase → Areas dropdown + New Area modal (manual coords or Nominatim place search) → 5-area cap + default seed → Google-only auth + auth card redesign + mobile fixes
 13. **Consult AI (Part 7, complete):** `consult-ai` Edge Function with Gemini → DeepSeek → Qwen fallback, "Consult AI" button + response card, `ai_explanations` cache + `model_used`, daily per-user cap, `requireSession()` token refresh → secrets set, `migration6.sql` applied, function deployed & verified
+14. **Cloud-blocked fallback + confidence badge (Part 8, built):** true-color fallback on ≥40%-cloudy months (`loadIndexTile` modes + `cloudBlock` state) → 🟢🟡🔴 `ConfidenceBadge` everywhere NDVI appears → `planting_date_source` column (`migration8.sql`) → Consult AI hedging + worker no-data transition alert → **pending backend deploy (migration8.sql, redeploy `consult-ai` + `ee-alerts-worker`)**
 
 ---
 
@@ -582,3 +651,5 @@ Fix: load EE via a plain `<script>` tag (Google's own documented approach).
 Parts 1–4 are complete and feature-stable: NDVI/NDWI/LSWI analysis, time slider with Latest button and scene count indicator, draw & save fields, dashboard with growth-stage-aware health badges, compare mode, PNG/PDF export, event overlays, CHIRPS rainfall context on stress alerts, preset locations, UI-managed preset/AOI editors, area recalculation on edit, satellite basemap toggle, place search, field deselection, and a help panel. **Part 6 adds per-user multi-area support** (Areas dropdown, New Area modal with coords/place search, 5-area cap, first-login default seed). The frontend runs as a Vue 3 + Vite app with CDN-loaded Earth Engine/Leaflet.
 
 **Phase 8 (Part 5) is complete:** 8.1 (Supabase schema & auth) ✅, 8.2 (migrate fields off localStorage) ✅, 8.3 (Telegram bot + account linking — Edge Function + app UI, deployed & user-confirmed, 8.6 alert delivered via the linked chat) ✅, 8.4 (EE service account, verified in Deno) ✅, 8.5 (scheduled worker — `ee-alerts-worker` Edge Function + `migration3.sql` pg_cron/Vault daily job) ✅, and 8.6 (end-to-end dedup validation — Telegram alert delivered, dedup contract verified, worker bugs fixed) ✅ are all done and confirmed working. **Part 6 (multi-area support) ✅ is complete.** **Part 7 (Consult AI) ✅ is complete and deployed** — `consult-ai` Edge Function with a Gemini → DeepSeek → Qwen fallback chain, "Consult AI" button + response card in the field detail panel, `ai_explanations` cache with `model_used`, per-user daily cap, `requireSession()` token refresh, deepseek/qwen secrets set, `migration6.sql` applied, verified via fallback. **The Vue rewrite (Phase 9) ✅ is complete** — build, dev server, and the full end-to-end smoke test (draw/save field → Supabase, compare mode, PNG/PDF export) all user-confirmed. **The design-system redesign (Phase 10) ✅ is complete** — dark-glass theme (Stages 1–2) plus Stage 3 polish: 4-slide onboarding walkthrough, top-right toast stack, spec-§4.7 motion timing, and the event-overlay legend (see `PROCESS.md`).
+
+**Part 8 (cloud-blocked fallback + confidence badge) ✅ is built** — true-color fallback on ≥40%-cloud months (`loadIndexTile` modes, `cloudBlock` store, cloud-blocked pills + silent autoplay toasts), a unified 🟢🟡🔴 `ConfidenceBadge` (map legend, field cards, detail hero, compare scrubber — one scoring function, `getConfidenceTier`), `planting_date_source` plumbing (`migration8.sql`), Consult AI confidence hedging, and a one-shot no-data Telegram alert. Build passes ✅. **Pending backend deploy:** run `migration8.sql` in the Supabase SQL editor, then `supabase functions deploy consult-ai` and `supabase functions deploy ee-alerts-worker`.
