@@ -129,22 +129,41 @@ export function getIndexTimeSeriesForGeometry(geometry, index, months, cb) {
 
 export function getDryMonths(months, geometry, cb) {
   const e = ee()
-  const drySet = new Set()
-  let pending = months.length
-  months.forEach((m, i) => {
-    const start = e.Date.fromYMD(m.year, m.month, 1)
+  // Batch the per-month loop into ONE server-side call — same pattern as
+  // getIndexTimeSeries: map over a FeatureCollection, single .evaluate().
+  // Each input feature carries its original month index so the caller's
+  // return shape (a Set of month indices) is preserved.
+  const monthFC = e.FeatureCollection(
+    months.map((m, i) => e.Feature(null, { idx: i, year: m.year, month: m.month }))
+  )
+  const results = monthFC.map((ft) => {
+    ft = e.Feature(ft)
+    const year = e.Number(ft.get('year'))
+    const monthNum = e.Number(ft.get('month'))
+    const start = e.Date.fromYMD(year, monthNum, 1)
     const end = start.advance(1, 'month')
-    e.ImageCollection('UCSB-CHG/CHIRPS/DAILY')
+    const totalMm = e.ImageCollection('UCSB-CHG/CHIRPS/DAILY')
       .filterDate(start, end)
       .filterBounds(geometry)
       .sum()
       .reduceRegion({ reducer: e.Reducer.mean(), geometry, scale: 5000, maxPixels: 1e9 })
-      .evaluate((result) => {
-        const mm = result && result.precipitation
-        if (mm != null && mm < DRY_MONTH_THRESHOLD) drySet.add(i)
-        pending--
-        if (pending === 0) cb(drySet)
-      })
+      // Default 1e3: `.get(..., default)` avoids the server-side
+      // "Dictionary does not contain key" crash when a month has no pixels;
+      // a high default also means "not dry" rather than a false <50 flag.
+      .get('precipitation', 1e3)
+    return ft.set('totalMm', totalMm)
+  })
+
+  results.evaluate((fc) => {
+    const drySet = new Set()
+    ;((fc && fc.features) || []).forEach((f) => {
+      const mm = f.properties.totalMm
+      if (mm != null && mm < DRY_MONTH_THRESHOLD) drySet.add(f.properties.idx)
+    })
+    cb(drySet)
+  }, (err) => {
+    console.error('getDryMonths failed:', err)
+    cb(new Set())
   })
 }
 

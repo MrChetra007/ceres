@@ -11,6 +11,15 @@ import { sb } from './services/supabase'
 import * as supabase from './services/supabase'
 
 // ---------------------------------------------------------------------------
+// Idle-time deferral — pushes non-critical background work after the map load
+// the user is actually waiting on (Earth Engine's JS client throttles calls).
+// ---------------------------------------------------------------------------
+function deferIdle(fn) {
+  if (typeof requestIdleCallback === 'function') requestIdleCallback(fn, { timeout: 3000 })
+  else setTimeout(fn, 50)
+}
+
+// ---------------------------------------------------------------------------
 // Leaflet map registry (non-reactive — Leaflet instances must not be proxied)
 // ---------------------------------------------------------------------------
 export const mapReg = {
@@ -653,12 +662,18 @@ export function initializeEE() {
     state.authOverlayVisible = false
     mapReg.map.invalidateSize()
     mapReg.map.setView([(state.aoiCoords[1] + state.aoiCoords[3]) / 2, (state.aoiCoords[0] + state.aoiCoords[2]) / 2], MAP_ZOOM)
-    fetchDryMonths()
-    refreshAllFieldStatuses()
-    refreshAllFieldTrends()
     updateDrawEditVisibility()
+    // User-visible map load first — the thing everyone is waiting on.
     setStatus('computing', 'Computing NDVI...')
     loadIndexForMonth(state.mainMonth, null)
+    // Defer the secondary background work (dry-month markers, field statuses,
+    // field trends) so it doesn't compete for the throttled Earth Engine
+    // connection with the map load. Runs after the current work at idle time.
+    deferIdle(() => {
+      fetchDryMonths()
+      refreshAllFieldStatuses()
+      refreshAllFieldTrends()
+    })
   }, (err) => {
     localStorage.removeItem('ee_auth_creds')
     state.authOverlayVisible = true
