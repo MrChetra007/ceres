@@ -6,7 +6,7 @@
       <span>0.4 {{ t('legend.moderate') }}</span>
       <span>1.0 {{ t('legend.dense_veg') }}</span>
     </div>
-    <ConfidenceBadge v-if="!state.loading && conf && conf.tier" :tier="conf.tier" :reason="conf.reason" class="legend-conf" />
+    <ConfidenceBadge v-if="!state.loading && conf && conf.tier" :tier="conf.tier" :reason="conf.reason" showReason class="legend-conf" />
   </div>
 </template>
 

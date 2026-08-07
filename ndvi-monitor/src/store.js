@@ -89,6 +89,10 @@ let infoChart = null
 let loadingCount = 0
 const toastTimers = new Map()
 let pendingDateCallback = null
+// Only surface the cloud-blocked toast ONCE per session (then rely on the
+// persistent "☁️ cloud-blocked" pill + its tooltip). Prevents toast spam when
+// the user scrubs across several cloud-heavy months.
+let cloudToastShown = false
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -481,12 +485,13 @@ export function loadIndexForMonth(idx, geometry, silent) {
       if (res.url) mapReg.ndviLayer = applyTileLayer(mapReg.map, mapReg.ndviLayer, res.url, 1)
       else if (mapReg.ndviLayer) { mapReg.map.removeLayer(mapReg.ndviLayer); mapReg.ndviLayer = null }
       state.cloudBlock.main = { month: m.label, cloudPct: res.cloudPct, lastValidDate: res.lastValidDate }
-      if (!silent) {
+      if (!silent && !cloudToastShown) {
+        cloudToastShown = true
         const pctText = res.cloudPct != null ? Math.round(res.cloudPct) + '%' : 'high'
         const lastText = res.lastValidDate
           ? 'Last valid reading: ' + res.lastValidDate
           : 'No cloud-free imagery available in the last 90 days.'
-        showToast('\u2601\uFE0F Cloud-covered on ' + m.label + ' (' + pctText + ' cloud) \u2014 showing true-color image. NDVI can\u2019t be reliably calculated. ' + lastText, 6000)
+        showToast('\u2601\uFE0F Cloud-covered on ' + m.label + ' (' + pctText + ' cloud) \u2014 showing true-color image. NDVI can\u2019t be reliably calculated. ' + lastText, 4000)
       }
       setStatus('ready', 'Cloud-blocked ' + m.label + ' \u2014 true-color shown')
       return
@@ -520,7 +525,10 @@ export function loadIndexForMonthRight(idx, silent) {
       if (res.url) mapReg.ndviLayerRight = applyTileLayer(mapReg.mapRight, mapReg.ndviLayerRight, res.url, 1)
       else if (mapReg.ndviLayerRight) { mapReg.mapRight.removeLayer(mapReg.ndviLayerRight); mapReg.ndviLayerRight = null }
       state.cloudBlock.right = { month: m.label, cloudPct: res.cloudPct, lastValidDate: res.lastValidDate }
-      if (!silent) showToast('\u2601\uFE0F Compare view cloud-covered on ' + m.label + ' \u2014 showing true-color image', 4000)
+      if (!silent && !cloudToastShown) {
+        cloudToastShown = true
+        showToast('\u2601\uFE0F Compare view cloud-covered on ' + m.label + ' \u2014 showing true-color image', 4000)
+      }
       return
     }
     if (res.mode === 'no_data' || !res.url) {
@@ -531,6 +539,24 @@ export function loadIndexForMonthRight(idx, silent) {
     mapReg.ndviLayerRight = applyTileLayer(mapReg.mapRight, mapReg.ndviLayerRight, res.url)
     endLoading()
   })
+}
+
+// Part 8 follow-up — move the time slider to the month containing the last
+// cloud-free reading, turning a cloud-obscured view into an actionable jump.
+export function jumpToLastValidReading(side = 'main') {
+  const block = state.cloudBlock[side]
+  if (!block || !block.lastValidDate) return
+  const d = new Date(block.lastValidDate)
+  if (isNaN(d.getTime())) return
+  let target = -1
+  for (let i = 0; i < MONTHS.length; i++) {
+    const start = new Date(MONTHS[i].year, MONTHS[i].month - 1, 1)
+    const end = new Date(MONTHS[i].year, MONTHS[i].month, 1)
+    if (d >= start && d < end) { target = i; break }
+  }
+  if (target < 0) return
+  if (side === 'right') loadIndexForMonthRight(target)
+  else loadIndexForMonth(target)
 }
 
 // ---------------------------------------------------------------------------
@@ -1088,7 +1114,7 @@ export function getConfidenceTier(signals) {
   const lastValidDate = signals.lastValidDate
 
   if (cloudBlocked) {
-    return { tier: 'low', reason: 'Cloud-covered \u2014 latest satellite view unavailable' }
+    return { tier: 'low', reason: 'Cloud-blocked' }
   }
   if (sceneCount === 0) {
     return { tier: 'low', reason: 'No cloud-free imagery available' }
@@ -1127,7 +1153,7 @@ export function viewConfidence(side) {
     if (field) {
       // A cloud-blocked current view always dominates the field's own signals.
       if (state.cloudBlock.main) {
-        return { tier: 'low', reason: 'Cloud-covered \u2014 showing true-color imagery' }
+        return { tier: 'low', reason: 'Cloud-blocked' }
       }
       return fieldConfidence(field)
     }

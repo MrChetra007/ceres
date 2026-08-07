@@ -37,6 +37,7 @@ export default {
   'topbar.sign_in_sync': 'ចូលដើម្បីធ្វើសមកាលកម្មវាល',
   'topbar.my_fields': 'វាលរបស់ខ្ញុំ',
   'topbar.go_to_ai': 'ពិគ្រោះ AI',
+  'topbar.settings': 'ការកំណត់',
 
   // Map legend
   'legend.soil_water': 'ដី/ទឹក',
@@ -51,6 +52,8 @@ export default {
   'band.no_areas': 'មិនទាន់មានតំបន់',
   'band.new_area': 'តំបន់ថ្មី',
   'band.areas': 'តំបន់',
+  'band.area_monitoring': 'តំបន់',
+  'band.edit_area_bounds': 'កែព្រំដែនតំបន់',
   'band.areas_cap': 'ឈានដល់ដែនកំណត់ ៥ តំបន់',
   'band.delete_confirm': 'លុបតំបន់ “{name}”?',
   'index.ndvi_title': 'NDVI — សន្ទស្សន៍សុខភាពដំណាំ។ ខ្ពស់ = រុក្ខជាតិបៃតងល្អ ទាប = ដីទទេ ទឹក ឬដំណាំប៉ះពាល់។',
@@ -62,6 +65,7 @@ export default {
   'time.playing': 'ផ្អាក',
   'time.play': 'លេងតាមខែ',
   'time.latest': 'លោតទៅខែពេញថ្មីបំផុត',
+  'time.expand_collapse': 'ពង្រីក / បង្រួម',
   'time.low_rain': 'ទឹកភ្លៀងតិច',
   'time.flood': 'ទឹកជំនន់',
   'time.dry_spell': 'គ្រោះរាំងស្ងួត',
@@ -73,6 +77,9 @@ export default {
   'time.no_cloud_free': 'មិនមានរូបភាពគ្មានពពកក្នុងរយៈពេល ៩០ ថ្ងៃចុងក្រោយ។',
   'time.cloud_covered_on': 'ពពកគ្របដណ្តប់នៅ ',
   'time.true_color': 'បង្ហាញពណ៌ពិត។',
+  'time.ndvi_unreliable': 'មិនអាចគណនា NDVI បានត្រឹមត្រូវទេ។',
+  'time.jump_last_valid': 'អានចុងក្រោយ {date}',
+  'time.jump_last_valid_tip': 'រំកិលរបារទៅកាលបរិច្ឆេទគ្មានពពកចុងក្រោយ ({date})',
 
   // Field detail / sidebar
   'field.growth_stage': 'ដំណាក់កាលលូតលាស់',
@@ -125,6 +132,7 @@ export default {
   'sidebar.tab_healthy': 'ល្អ',
   'sidebar.tab_alerts': 'ព្រមាន',
   'sidebar.area_warning': 'ធំខុសពីធម្មតាសម្រាប់វាលមួយ — សូមពិនិត្យរាងដែលបានគូស?',
+  'sidebar.ai_hint': 'ជ្រើសវាលដើម្បីទទួលសេចក្តីសង្ខេបសុខភាពពី AI',
 
   // AOI editor
   'aoi.new_area': 'តំបន់ថ្មី',

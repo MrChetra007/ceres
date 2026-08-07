@@ -1,98 +1,119 @@
 <template>
-  <div class="time-panel panel" :class="{ loading: state.loading }" v-show="state.eeReady">
+  <div class="time-panel panel" :class="{ loading: state.loading, collapsed }" v-show="state.eeReady">
     <div class="time-head">
       <button class="play-btn" :title="playing ? t('time.playing') : t('time.play')" @click="togglePlay">
         <i class="ti" :class="playing ? 'ti-player-pause' : 'ti-player-play'"></i>
       </button>
-      <div class="time-title">
+      <div class="time-title" :title="t('time.expand_collapse')" @click="toggleCollapsed">
         <span class="month-label">{{ mainMonthLabel }}</span>
         <span class="season-tag">{{ seasonTag }}</span>
       </div>
+      <button class="collapse-btn" :title="t('time.expand_collapse')" @click="toggleCollapsed">
+        <i class="ti" :class="collapsed ? 'ti-chevron-up' : 'ti-chevron-down'"></i>
+      </button>
       <div class="time-pills">
         <span v-if="state.loading" class="pill">{{ t('common.loading') }}</span>
         <span v-else-if="state.cloudBlock.main" class="pill cloud-blocked" :title="cloudTooltip(state.cloudBlock.main)">☁️ {{ t('time.cloud_blocked') }}</span>
         <span v-else class="pill" :class="scenePillClass">{{ mainSceneText || t('common.no_scenes') }}</span>
+        <button
+          v-if="!state.loading && state.cloudBlock.main && mainJumpDate"
+          class="jump-btn"
+          :title="t('time.jump_last_valid_tip', { date: mainJumpDate })"
+          @click="store.jumpToLastValidReading('main')"
+        >
+          <i class="ti ti-corner-up-right"></i> {{ t('time.jump_last_valid', { date: mainJumpDate }) }}
+        </button>
         <button class="latest-btn" :title="t('time.latest')" @click="goLatest">
           <i class="ti ti-last"></i>
         </button>
       </div>
     </div>
 
-    <div class="scrubber">
-      <input
-        type="range"
-        id="month-slider"
-        step="1"
-        :min="0"
-        :max="MONTHS.length - 1"
-        :value="state.mainMonth"
-        :style="{ background: trackBg(state.mainMonth) }"
-        @input="onMainSlider"
-      />
-      <div class="event-markers">
-        <div class="event-markers-row">
-          <div
-            v-for="(m, i) in MONTHS"
-            :key="'e' + i"
-            class="event-marker"
-            :style="{ background: eventColor(i) || 'transparent' }"
-            :title="eventLabel(i)"
-          ></div>
+    <div class="scrubber-wrap">
+      <div class="scrubber">
+        <input
+          type="range"
+          id="month-slider"
+          step="1"
+          :min="0"
+          :max="MONTHS.length - 1"
+          :value="state.mainMonth"
+          :style="{ background: trackBg(state.mainMonth) }"
+          @input="onMainSlider"
+        />
+        <div class="event-markers">
+          <div class="event-markers-row">
+            <div
+              v-for="(m, i) in MONTHS"
+              :key="'e' + i"
+              class="event-marker"
+              :style="{ background: eventColor(i) || 'transparent' }"
+              :title="eventLabel(i)"
+            ></div>
+          </div>
+          <div class="auto-markers-row">
+            <div
+              v-for="(m, i) in MONTHS"
+              :key="'a' + i"
+              class="auto-marker"
+              :class="{ 'auto-dry': state.dryMonthSet.has(i) }"
+              :title="state.dryMonthSet.has(i) ? t('time.low_rain') : ''"
+            ></div>
+          </div>
         </div>
-        <div class="auto-markers-row">
-          <div
-            v-for="(m, i) in MONTHS"
-            :key="'a' + i"
-            class="auto-marker"
-            :class="{ 'auto-dry': state.dryMonthSet.has(i) }"
-            :title="state.dryMonthSet.has(i) ? t('time.low_rain') : ''"
-          ></div>
+        <div class="event-legend">
+          <span class="ev-key"><i class="ev-dot flood"></i>{{ t('time.flood') }}</span>
+          <span class="ev-key"><i class="ev-dot drought"></i>{{ t('time.dry_spell') }}</span>
+          <span class="ev-key"><i class="ev-dot dry-auto"></i>{{ t('time.low_rain_chirps') }}</span>
+        </div>
+        <div class="scrubber-ticks">
+          <span>{{ MONTHS[0].label }}</span>
+          <span>{{ MONTHS[MONTHS.length - 1].label }}</span>
         </div>
       </div>
-      <div class="event-legend">
-        <span class="ev-key"><i class="ev-dot flood"></i>{{ t('time.flood') }}</span>
-        <span class="ev-key"><i class="ev-dot drought"></i>{{ t('time.dry_spell') }}</span>
-        <span class="ev-key"><i class="ev-dot dry-auto"></i>{{ t('time.low_rain_chirps') }}</span>
-      </div>
-      <div class="scrubber-ticks">
-        <span>{{ MONTHS[0].label }}</span>
-        <span>{{ MONTHS[MONTHS.length - 1].label }}</span>
-      </div>
-    </div>
 
-    <div v-if="state.compareMode" class="scrubber compare">
-      <div class="scrubber-row">
-        <span v-if="state.cloudBlock.right" class="pill cloud-blocked" :title="cloudTooltip(state.cloudBlock.right)">☁️ {{ t('time.cloud_blocked') }}</span>
-        <span v-else class="pill">{{ rightSceneText || t('common.no_scenes') }}</span>
-        <ConfidenceBadge v-if="!state.loading && rightConf.tier" :tier="rightConf.tier" :reason="rightConf.reason" class="scrubber-conf" />
-        <span class="month-label right-label">{{ rightMonthLabel }}</span>
-      </div>
-      <input
-        type="range"
-        id="month-slider-right"
-        step="1"
-        :min="0"
-        :max="MONTHS.length - 1"
-        :value="state.rightMonth"
-        :style="{ background: trackBg(state.rightMonth) }"
-        @input="onRightSlider"
-      />
-      <div class="event-markers">
-        <div class="event-markers-row">
-          <div
-            v-for="(m, i) in MONTHS"
-            :key="'re' + i"
-            class="event-marker"
-            :style="{ background: eventColor(i) || 'transparent' }"
-          ></div>
+      <div v-if="state.compareMode" class="scrubber compare">
+        <div class="scrubber-row">
+          <span v-if="state.cloudBlock.right" class="pill cloud-blocked" :title="cloudTooltip(state.cloudBlock.right)">☁️ {{ t('time.cloud_blocked') }}</span>
+          <span v-else class="pill">{{ rightSceneText || t('common.no_scenes') }}</span>
+          <button
+            v-if="!state.loading && state.cloudBlock.right && rightJumpDate"
+            class="jump-btn"
+            :title="t('time.jump_last_valid_tip', { date: rightJumpDate })"
+            @click="store.jumpToLastValidReading('right')"
+          >
+            <i class="ti ti-corner-up-right"></i> {{ t('time.jump_last_valid', { date: rightJumpDate }) }}
+          </button>
+          <ConfidenceBadge v-if="!state.loading && rightConf.tier" :tier="rightConf.tier" :reason="rightConf.reason" class="scrubber-conf" />
+          <span class="month-label right-label">{{ rightMonthLabel }}</span>
         </div>
-        <div class="auto-markers-row">
-          <div
-            v-for="(m, i) in MONTHS"
-            :key="'ra' + i"
-            class="auto-marker"
-            :class="{ 'auto-dry': state.dryMonthSet.has(i) }"
-          ></div>
+        <input
+          type="range"
+          id="month-slider-right"
+          step="1"
+          :min="0"
+          :max="MONTHS.length - 1"
+          :value="state.rightMonth"
+          :style="{ background: trackBg(state.rightMonth) }"
+          @input="onRightSlider"
+        />
+        <div class="event-markers">
+          <div class="event-markers-row">
+            <div
+              v-for="(m, i) in MONTHS"
+              :key="'re' + i"
+              class="event-marker"
+              :style="{ background: eventColor(i) || 'transparent' }"
+            ></div>
+          </div>
+          <div class="auto-markers-row">
+            <div
+              v-for="(m, i) in MONTHS"
+              :key="'ra' + i"
+              class="auto-marker"
+              :class="{ 'auto-dry': state.dryMonthSet.has(i) }"
+            ></div>
+          </div>
         </div>
       </div>
     </div>
@@ -109,6 +130,7 @@ import { useI18n } from '../i18n'
 
 const { t } = useI18n()
 const playing = ref(false)
+const collapsed = ref(true)
 let playTimer = null
 let debounceTimer = null
 let debounceTimerRight = null
@@ -141,11 +163,14 @@ const scenePillClass = computed(() => {
 
 const rightConf = computed(() => store.viewConfidence('right'))
 
+const mainJumpDate = computed(() => (state.cloudBlock.main && state.cloudBlock.main.lastValidDate) || '')
+const rightJumpDate = computed(() => (state.cloudBlock.right && state.cloudBlock.right.lastValidDate) || '')
+
 function cloudTooltip(block) {
   if (!block) return ''
   const pct = block.cloudPct != null ? Math.round(block.cloudPct) + '% ' + t('common.cloud') : t('common.cloud_covered')
   const last = block.lastValidDate ? t('time.last_valid_reading') + block.lastValidDate : t('time.no_cloud_free')
-  return t('time.cloud_covered_on') + block.month + ' (' + pct + ') — ' + t('time.true_color') + ' ' + last
+  return t('time.cloud_covered_on') + block.month + ' (' + pct + ') \u2014 ' + t('time.true_color') + ' ' + t('time.ndvi_unreliable') + ' ' + last
 }
 
 function sceneText(count) {
@@ -184,6 +209,10 @@ function togglePlay() {
   playing.value = !playing.value
   if (playing.value) startPlay()
   else stopPlay()
+}
+
+function toggleCollapsed() {
+  collapsed.value = !collapsed.value
 }
 
 function startPlay() {

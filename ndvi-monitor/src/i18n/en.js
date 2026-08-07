@@ -37,6 +37,7 @@ export default {
   'topbar.sign_in_sync': 'Sign in to sync fields',
   'topbar.my_fields': 'My fields',
   'topbar.go_to_ai': 'Consult AI',
+  'topbar.settings': 'Settings',
 
   // Map legend
   'legend.soil_water': 'Soil/Water',
@@ -51,6 +52,8 @@ export default {
   'band.no_areas': 'No areas yet',
   'band.new_area': 'New area',
   'band.areas': 'Areas',
+  'band.area_monitoring': 'Area',
+  'band.edit_area_bounds': 'Edit area bounds',
   'band.areas_cap': 'Limit of 5 areas reached',
   'band.delete_confirm': 'Delete area “{name}”?',
   'index.ndvi_title': 'NDVI — Vegetation Health. High = healthy green plants, low = bare soil, water, or stressed crops.',
@@ -61,6 +64,7 @@ export default {
   'time.playing': 'Pause',
   'time.play': 'Play through months',
   'time.latest': 'Jump to latest complete month',
+  'time.expand_collapse': 'Expand / collapse',
   'time.low_rain': 'Low rainfall',
   'time.flood': 'Flood',
   'time.dry_spell': 'Dry spell',
@@ -72,6 +76,9 @@ export default {
   'time.no_cloud_free': 'No cloud-free imagery available in the last 90 days.',
   'time.cloud_covered_on': 'Cloud-covered on ',
   'time.true_color': 'true-color shown.',
+  'time.ndvi_unreliable': "NDVI can't be reliably calculated.",
+  'time.jump_last_valid': 'Last reading {date}',
+  'time.jump_last_valid_tip': 'Jump the slider to the last cloud-free reading ({date})',
 
   // Field detail / sidebar
   'field.growth_stage': 'Growth stage',
@@ -124,6 +131,7 @@ export default {
   'sidebar.tab_healthy': 'Healthy',
   'sidebar.tab_alerts': 'Alerts',
   'sidebar.area_warning': 'Unusually large for one field — check the drawn shape?',
+  'sidebar.ai_hint': 'Select a field to get an AI health summary',
 
   // AOI editor
   'aoi.new_area': 'New area',

@@ -23,6 +23,16 @@
       >{{ t.label }}</button>
     </div>
 
+    <button
+      v-if="state.fields.length > 0 && !state.currentFieldId"
+      class="ai-hint"
+      :title="t('field.ai_agronomist')"
+      @click="openFirstField"
+    >
+      <i class="ti ti-sparkles"></i>
+      <span>{{ t('sidebar.ai_hint') }}</span>
+    </button>
+
     <div id="field-list" class="sidebar-list">
       <div
         v-for="f in filtered"
@@ -172,6 +182,12 @@ function onCardClick(f) {
     return
   }
   store.loadFieldById(f.id)
+}
+
+function openFirstField() {
+  if (state.fields.length > 0 && !state.currentFieldId) {
+    store.loadFieldById(state.fields[0].id)
+  }
 }
 
 function setPlantingDate(f) {

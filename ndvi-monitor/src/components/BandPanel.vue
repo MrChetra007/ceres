@@ -23,35 +23,41 @@
         >{{ b === 'street' ? t('topbar.street') : t('topbar.satellite') }}</button>
       </div>
 
-      <div class="band-areas" ref="areasWrap">
-        <button class="areas-btn" :title="t('band.switch_area')" @click="areasOpen = !areasOpen">
-          <i class="ti ti-map-pin"></i>
-          <span class="areas-btn-label">{{ selectedAoiLabel }}</span>
-          <i class="ti ti-chevron-down"></i>
-        </button>
-        <div class="areas-menu" v-show="areasOpen">
-          <div class="areas-menu-title">{{ t('band.my_areas') }}</div>
-          <button
-            v-for="a in state.aois"
-            :key="a.id"
-            class="areas-item"
-            :class="{ active: a.id === state.selectedAoiId }"
-            @click="pick(a)"
-          >
-            <span class="areas-item-name">{{ a.name }}</span>
-            <i class="ti ti-trash" :title="t('band.delete_area')" @click.stop="remove(a)"></i>
+      <div class="areas-group" ref="areasGroupWrap">
+        <span class="areas-group-label">{{ t('band.area_monitoring') }}</span>
+        <div class="band-areas" ref="areasWrap">
+          <button class="areas-btn" :class="{ active: areasOpen || state.aois.length >= 5 }" :title="t('band.switch_area')" @click="areasOpen = !areasOpen">
+            <i class="ti ti-map-pin"></i>
+            <span class="areas-btn-label">{{ selectedAoiLabel }}</span>
+            <i class="ti ti-chevron-down"></i>
+            <span class="band-btn-caption">{{ t('band.areas') }}</span>
+            <span v-if="state.aois.length >= 5" class="areas-cap-dot" :title="t('band.areas_cap')"></span>
           </button>
-          <div class="areas-empty" v-if="state.aois.length === 0">{{ t('band.no_areas') }}</div>
-          <button v-if="state.aois.length < 5" class="areas-new" @click="openNewArea">
-            <i class="ti ti-plus"></i> {{ t('band.new_area') }}
-          </button>
-          <div v-else class="areas-cap">{{ t('band.areas_cap') }}</div>
+          <div class="areas-menu" v-show="areasOpen">
+            <div class="areas-menu-title">{{ t('band.my_areas') }}</div>
+            <button
+              v-for="a in state.aois"
+              :key="a.id"
+              class="areas-item"
+              :class="{ active: a.id === state.selectedAoiId }"
+              @click="pick(a)"
+            >
+              <span class="areas-item-name">{{ a.name }}</span>
+              <i class="ti ti-trash" :title="t('band.delete_area')" @click.stop="remove(a)"></i>
+            </button>
+            <div class="areas-empty" v-if="state.aois.length === 0">{{ t('band.no_areas') }}</div>
+            <button v-if="state.aois.length < 5" class="areas-new" @click="openNewArea">
+              <i class="ti ti-plus"></i> {{ t('band.new_area') }}
+            </button>
+            <div v-else class="areas-cap">{{ t('band.areas_cap') }}</div>
+          </div>
         </div>
-      </div>
 
-      <button class="aoi-btn" :title="t('band.new_area')" @click="openNewArea">
-        <i class="ti ti-map"></i>
+        <button class="aoi-btn" :class="{ active: state.aoiEditorVisible }" :title="t('band.edit_area_bounds')" @click="openNewArea">
+        <span class="aoi-btn-icon"><i class="ti ti-map"></i></span>
+        <span class="band-btn-caption">{{ t('band.edit_area_bounds') }}</span>
       </button>
+      </div>
     </div>
     <div class="band-explainer">{{ explainerText }}</div>
   </div>
@@ -67,6 +73,7 @@ import { useI18n } from '../i18n'
 const { t } = useI18n()
 const areasOpen = ref(false)
 const areasWrap = ref(null)
+const areasGroupWrap = ref(null)
 
 const explainerText = computed(() => {
   const cfg = INDICES[state.currentIndex]
@@ -107,7 +114,7 @@ function openNewArea() {
 }
 
 function onDocClick(e) {
-  if (areasWrap.value && !areasWrap.value.contains(e.target)) {
+  if (areasGroupWrap.value && !areasGroupWrap.value.contains(e.target)) {
     areasOpen.value = false
   }
 }
