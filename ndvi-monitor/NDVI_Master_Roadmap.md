@@ -5,7 +5,8 @@
 Covers everything from `NDVI_Crop_Monitor_Roadmap.md`, `NDVI_Stack_Migration_Roadmap.md`,
 `NDVI_Product_Pivot_Roadmap.md`, `NDVI_Field_Area_Patch.md`, `NDVI_Growth_Stage_Thresholds_Patch.md`,
 `NDVI_LSWI_CHIRPS_Patch.md`, `Ndvi_ui_redesign_patch.md`, and `Backend_Telegram_Roadmap.md`
-(now folded into **Part 5**) — one place to see it all.
+(now folded into **Part 5**), plus the Phase 13 spec `Phase_13_AI_Advisory_Photo_Planting.md`
+(now **Part 9**) — one place to see it all.
 
 ---
 
@@ -404,8 +405,14 @@ logic.
 > **Update (Part 7):** the AI layer has since been built as **Consult AI** — a separate Edge
 > Function (`consult-ai`) with a **Gemini → DeepSeek → Qwen** fallback chain, called on demand from
 > the field detail panel. See Part 7. The Telegram worker's `buildAlertMessage()` remains a plain
-> template and was left untouched; it is still the future hook if alert messages should also become
-> LLM-generated.
+> template and was left untouched; it is still the future hook where alert messages should also
+> become LLM-generated.
+>
+> **Update (Part 9):** the Telegram worker's alert text **is** now LLM-generated as well — see
+> Part 9 Feature 1. `buildAlertMessage()` was kept (Khmer-aware) purely as a robust flat-template
+> fallback if the LLM call fails or returns unusable text, so alert delivery never depends on AI.
+> Consult AI and the worker now share a single LLM orchestrator in
+> `supabase/functions/_shared/llm.ts`.
 
 ---
 
@@ -618,10 +625,64 @@ Fix: load EE via a plain `<script>` tag (Google's own documented approach).
 
 ---
 
+## Part 9 — AI advisory, ground-truth photos & auto planting (Phase 13) ✅ Built, pending backend deploy
+
+Folds in `Phase_13_AI_Advisory_Photo_Planting.md`. Three features: AI-generated Telegram alert
+text with Khmer/English localization, farmer ground-truth photo attachments to fields, and
+automatic planting-date detection from a satellite LSWI spike. **All frontend builds pass.** The
+worker AI advisory, photo upload path, and photo storage are **pending backend deploy** (see Status).
+
+### Feature 1 — AI advisory + Khmer localization
+
+Replace the flat template in `ee-alerts-worker`'s `buildAlertMessage()` with a real generated
+advisory, shared with Consult AI:
+
+- New shared orchestrator `supabase/functions/_shared/llm.ts`: `generateExplanation(prompt)`
+  dispatch to the **Gemini → DeepSeek → Qwen** chain (the same fallback Consult AI already uses),
+  plus a short `languageLine(lang)` helper to steer output to English or Khmer. It never throws —
+  any failure returns the deterministic template instead.
+- `consult-ai/index.ts` refactored to import the orchestrator from `_shared/llm.ts`
+  (single source of truth; behavior unchanged).
+- `ee-alerts-worker/index.ts`: builds a rich prompt via `buildAdvisoryPrompt()` using
+  `getNdviTrendPct()` (NDVI %-change), `getLswiForGeometry()` (flooding signal) and rainfall,
+  growth stage, and the farm name; passes Khmer/English via the farmer's
+  `profiles.preferred_language`; writes the generated text to alerts with a model tag.
+  `buildAlertMessage()` (Khmer-aware) is **kept as the fallback** so a cold/missing LLM call,
+  provider outage, or `safeText()` rejection never inhibits alert delivery.
+- `migration9.sql` adds `profiles.preferred_language` (`'en'`/`'km'`, default `'en'`).
+
+### Feature 2 — Ground-truth photo attachments
+- `migration10.sql` creates a **private** `field-photos` storage bucket (public=false) and a
+  `pending_photo` table for disambiguation.
+- `telegram-webhook` now accepts photos: picks the largest variant → `getFile` → download →
+  upload to `field-photos/{owner_id}/{ts}.jpg` (service-role). Photo-to-field linking follows
+  existing chat/field rules: the owner's recent alerts (last 48h, deduped) first → single-field
+  fallback → else a `pending_photo` + inline-keyboard disambiguation (handled via
+  `callback_query`). Khmer/English confirmations included.
+- Frontend: `supabase.js` adds `loadFieldPhotos(fieldId)` + `createSignedPhotoUrl()` (1-hour
+  signed URL); `FieldDetailPanel.vue` shows a photo strip (thumbs open a lightbox via the
+  `photosLightboxIndex` store state); matching CSS.
+
+### Feature 3 — Auto-planting detection (LSWI)
+Wires up the previously-future "auto-suggest planting date" (Part 8 note): `detectPlantingDate()`
+in `src/services/earthEngine.js` reads the trailing 90 days of LSWI (`B11/B8`), finds the steepest
+positive jump (the dry→flooded/transplanting spike) → returns `{ estimatedDate, deltaMagnitude }`
+or **null** when the signal is sparse/ambiguous (never a guess). On field save, if no manual
+planting date was given and EE is ready, it runs detection and writes
+`planting_date_source = 'estimated'` with a toast; manual edits always overwrite back to
+`'manual'`. `getConfidenceTier` (Part 8) already downgrades `'estimated'` to Medium.
+
+### Part 9 — Do not (scope guard)
+- No TTS, no harvest-window prediction, no pest/disease risk mapping, no yield estimation, no
+  offline mode. Consult AI's existing behavior, dedup/severity logic, and EE/Leaflet core are
+  unchanged. Telegram field-linking flow (8.3) only extended for photos, not rewritten.
+
+---
+
 ## What this sets up for later (not now)
 
 - **Harvest reminders** — days-since-planting crossing into the "Harvest" stage is a natural on-screen trigger, no backend needed
-- **Auto-suggest planting date** — LSWI spike (flooding/transplanting) when a field is first drawn could auto-fill the planting date. The `planting_date_source` column it needs already exists (Part 8, `migration8.sql`), and the confidence tiers already account for `'estimated'`. **Pending deploy: migration8.sql.**
+- **Auto-suggest planting date** — LSWI spike (flooding/transplanting) when a field is first drawn could auto-fill the planting date. The `planting_date_source` column it needs already exists (Part 8, `migration8.sql`), and the confidence tiers already account for `'estimated'`. **Pending deploy: migration8.sql.** **Done — see Part 9 Feature 3.**
 - **Drought/flood risk assessment** — rainfall + NDVI together is the natural first step, but that's a scoped feature of its own
 - **Backend path** — `localStorage` → Supabase table (`fields`: owner, geojson, name, notes) is a clean swap; Telegram alerts become straightforward once a scheduled job can iterate a database of fields. **Done — see Part 5 (Phase 8): fields migrated, pg_cron → Edge Function worker sending alerts, only the sustained E2E dedup validation remains.**
 
@@ -643,6 +704,7 @@ Fix: load EE via a plain `<script>` tag (Google's own documented approach).
 12. **Multi-area (Part 6, done):** per-user `aois` in Supabase → Areas dropdown + New Area modal (manual coords or Nominatim place search) → 5-area cap + default seed → Google-only auth + auth card redesign + mobile fixes
 13. **Consult AI (Part 7, complete):** `consult-ai` Edge Function with Gemini → DeepSeek → Qwen fallback, "Consult AI" button + response card, `ai_explanations` cache + `model_used`, daily per-user cap, `requireSession()` token refresh → secrets set, `migration6.sql` applied, function deployed & verified
 14. **Cloud-blocked fallback + confidence badge (Part 8, built):** true-color fallback on ≥40%-cloudy months (`loadIndexTile` modes + `cloudBlock` state) → 🟢🟡🔴 `ConfidenceBadge` everywhere NDVI appears → `planting_date_source` column (`migration8.sql`) → Consult AI hedging + worker no-data transition alert → **pending backend deploy (migration8.sql, redeploy `consult-ai` + `ee-alerts-worker`)**
+15. **AI advisory, ground-truth photos & auto planting (Part 9, built):** Feature 1 — shared `_shared/llm.ts` orchestrator, `ee-alerts-worker` LLM advisory (English/Khmer via `profiles.preferred_language`, `migration9.sql`), `consult-ai` refactor → Feature 2 — photo attachments (`migration10.sql` private `field-photos` bucket + `pending_photo`, rewritten `telegram-webhook` photo/callback flow, `FieldDetailPanel` photo strip + lightbox) → Feature 3 — LSWI auto-planting (`detectPlantingDate`, `planting_date_source='estimated'` on save) → **pending backend deploy (migration8/9/10.sql, redeploy `consult-ai` + `ee-alerts-worker` + `telegram-webhook`)**
 
 ---
 
@@ -653,3 +715,5 @@ Parts 1–4 are complete and feature-stable: NDVI/NDWI/LSWI analysis, time slide
 **Phase 8 (Part 5) is complete:** 8.1 (Supabase schema & auth) ✅, 8.2 (migrate fields off localStorage) ✅, 8.3 (Telegram bot + account linking — Edge Function + app UI, deployed & user-confirmed, 8.6 alert delivered via the linked chat) ✅, 8.4 (EE service account, verified in Deno) ✅, 8.5 (scheduled worker — `ee-alerts-worker` Edge Function + `migration3.sql` pg_cron/Vault daily job) ✅, and 8.6 (end-to-end dedup validation — Telegram alert delivered, dedup contract verified, worker bugs fixed) ✅ are all done and confirmed working. **Part 6 (multi-area support) ✅ is complete.** **Part 7 (Consult AI) ✅ is complete and deployed** — `consult-ai` Edge Function with a Gemini → DeepSeek → Qwen fallback chain, "Consult AI" button + response card in the field detail panel, `ai_explanations` cache with `model_used`, per-user daily cap, `requireSession()` token refresh, deepseek/qwen secrets set, `migration6.sql` applied, verified via fallback. **The Vue rewrite (Phase 9) ✅ is complete** — build, dev server, and the full end-to-end smoke test (draw/save field → Supabase, compare mode, PNG/PDF export) all user-confirmed. **The design-system redesign (Phase 10) ✅ is complete** — dark-glass theme (Stages 1–2) plus Stage 3 polish: 4-slide onboarding walkthrough, top-right toast stack, spec-§4.7 motion timing, and the event-overlay legend (see `PROCESS.md`).
 
 **Part 8 (cloud-blocked fallback + confidence badge) ✅ is built** — true-color fallback on ≥40%-cloud months (`loadIndexTile` modes, `cloudBlock` store, cloud-blocked pills + silent autoplay toasts), a unified 🟢🟡🔴 `ConfidenceBadge` (map legend, field cards, detail hero, compare scrubber — one scoring function, `getConfidenceTier`), `planting_date_source` plumbing (`migration8.sql`), Consult AI confidence hedging, and a one-shot no-data Telegram alert. Build passes ✅. **Pending backend deploy:** run `migration8.sql` in the Supabase SQL editor, then `supabase functions deploy consult-ai` and `supabase functions deploy ee-alerts-worker`.
+
+**Part 9 (AI advisory, ground-truth photos & auto planting) ✅ is built** — Feature 1: shared LLM orchestrator `_shared/llm.ts`, `ee-alerts-worker` LLM-generated English/Khmer advisories (`buildAdvisoryPrompt` + `generateExplanation`, `buildAlertMessage` kept as robust template fallback), `consult-ai` refactored onto the orchestrator, `migration9.sql` adds `profiles.preferred_language`. Feature 2: `migration10.sql` (private `field-photos` bucket + `pending_photo`), rewritten `telegram-webhook` photo upload + callback disambiguation flow (Khmer/English confirmations), `FieldDetailPanel` photo strip + lightbox. Feature 3: LSWI auto-planting (`detectPlantingDate` → `planting_date_source='estimated'`, toast, manual overwrite). Frontend builds pass. **Pending backend deploy:** run `migration8.sql`, `migration9.sql`, `migration10.sql` in the Supabase SQL editor, then `supabase functions deploy consult-ai`, `supabase functions deploy ee-alerts-worker`, and `supabase functions deploy telegram-webhook`.
