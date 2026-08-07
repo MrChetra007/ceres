@@ -13,24 +13,24 @@
         >{{ idx.toUpperCase() }}</button>
       </div>
       <div class="band-divider"></div>
-      <div class="band-base segmented" role="group" aria-label="Base layer">
+      <div class="band-base segmented" role="group" :aria-label="t('band.base_layer')">
         <button
           v-for="b in ['street', 'satellite']"
           :key="b"
           class="segmented-btn"
           :class="{ active: state.currentBase === b }"
           @click="store.setBaseLayer(b)"
-        >{{ b === 'street' ? 'Street' : 'Satellite' }}</button>
+        >{{ b === 'street' ? t('topbar.street') : t('topbar.satellite') }}</button>
       </div>
 
       <div class="band-areas" ref="areasWrap">
-        <button class="areas-btn" title="Switch area" @click="areasOpen = !areasOpen">
+        <button class="areas-btn" :title="t('band.switch_area')" @click="areasOpen = !areasOpen">
           <i class="ti ti-map-pin"></i>
           <span class="areas-btn-label">{{ selectedAoiLabel }}</span>
           <i class="ti ti-chevron-down"></i>
         </button>
         <div class="areas-menu" v-show="areasOpen">
-          <div class="areas-menu-title">My areas</div>
+          <div class="areas-menu-title">{{ t('band.my_areas') }}</div>
           <button
             v-for="a in state.aois"
             :key="a.id"
@@ -39,17 +39,17 @@
             @click="pick(a)"
           >
             <span class="areas-item-name">{{ a.name }}</span>
-            <i class="ti ti-trash" title="Delete area" @click.stop="remove(a)"></i>
+            <i class="ti ti-trash" :title="t('band.delete_area')" @click.stop="remove(a)"></i>
           </button>
-          <div class="areas-empty" v-if="state.aois.length === 0">No areas yet</div>
+          <div class="areas-empty" v-if="state.aois.length === 0">{{ t('band.no_areas') }}</div>
           <button v-if="state.aois.length < 5" class="areas-new" @click="openNewArea">
-            <i class="ti ti-plus"></i> New area
+            <i class="ti ti-plus"></i> {{ t('band.new_area') }}
           </button>
-          <div v-else class="areas-cap">Limit of 5 areas reached</div>
+          <div v-else class="areas-cap">{{ t('band.areas_cap') }}</div>
         </div>
       </div>
 
-      <button class="aoi-btn" title="New area" @click="openNewArea">
+      <button class="aoi-btn" :title="t('band.new_area')" @click="openNewArea">
         <i class="ti ti-map"></i>
       </button>
     </div>
@@ -62,26 +62,29 @@ import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { state } from '../store'
 import * as store from '../store'
 import { INDICES } from '../config'
+import { useI18n } from '../i18n'
 
+const { t } = useI18n()
 const areasOpen = ref(false)
 const areasWrap = ref(null)
 
 const explainerText = computed(() => {
   const cfg = INDICES[state.currentIndex]
-  return cfg.name + ' \u00b7 ' + cfg.full
+  return cfg.name + ' \u00b7 ' + (state.preferredLanguage === 'km' ? cfg.fullKhm : cfg.full)
 })
 
 const selectedAoiLabel = computed(() => {
   const aoi = state.aois.find((a) => a.id === state.selectedAoiId)
-  return aoi ? aoi.name : 'Areas'
+  return aoi ? aoi.name : t('band.areas')
 })
 
 function indexTitle(idx) {
-  return {
-    ndvi: 'NDVI — Vegetation Health. High = healthy green plants, low = bare soil, water, or stressed crops.',
-    ndwi: 'NDWI — Water Index. High = surface water, low = dry land.',
-    lswi: 'LSWI — Land Surface Water Index. High = moisture in soil and plant canopy, low = dry.',
-  }[idx]
+  const map = {
+    ndvi: t('index.ndvi_title'),
+    ndwi: t('index.ndwi_title'),
+    lswi: t('index.lswi_title'),
+  }
+  return map[idx]
 }
 
 function pick(a) {
@@ -90,14 +93,14 @@ function pick(a) {
 }
 
 function remove(a) {
-  if (!window.confirm('Delete area \u201c' + a.name + '\u201d?')) return
+  if (!window.confirm(t('band.delete_confirm', { name: a.name }))) return
   store.deleteAoi(a.id)
 }
 
 function openNewArea() {
   areasOpen.value = false
   if (state.aois.length >= 5) {
-    store.showToast('Limit of 5 areas reached')
+    store.showToast(t('toast.limit_areas'))
     return
   }
   state.aoiEditorVisible = true

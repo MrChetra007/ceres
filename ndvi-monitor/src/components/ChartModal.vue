@@ -18,11 +18,13 @@ import Chart from 'chart.js/auto'
 import { state, getStageAtDate } from '../store'
 import { buildChartConfig } from '../services/chart'
 import { INDICES, MONTHS } from '../config'
+import { useI18n } from '../i18n'
 
+const { t } = useI18n()
 const largeCanvas = ref(null)
 let chart = null
 
-const title = computed(() => INDICES[state.chartIndex].name + ' Trend')
+const title = computed(() => INDICES[state.chartIndex].name + ' ' + t('field.trend'))
 
 function render(data) {
   const ctx = largeCanvas.value.getContext('2d')

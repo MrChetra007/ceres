@@ -2,20 +2,20 @@
   <div id="sidebar" class="sidebar" v-show="open">
     <div class="sidebar-header">
       <div>
-        <h3>Monitored Fields</h3>
-        <span class="sidebar-count mono">{{ state.fields.length }} parcels · {{ totalHa }} ha</span>
+        <h3>{{ t('sidebar.monitored_fields') }}</h3>
+        <span class="sidebar-count mono">{{ state.fields.length }} {{ t('sidebar.parcels') }} · {{ totalHa }} ha</span>
       </div>
       <button class="close-btn" @click="open = false">&times;</button>
     </div>
 
     <div class="sidebar-search">
       <i class="ti ti-search"></i>
-      <input type="text" v-model="query" placeholder="Search fields..." />
+      <input type="text" v-model="query" :placeholder="t('sidebar.search')" />
     </div>
 
     <div class="filter-tabs">
       <button
-        v-for="t in tabs"
+        v-for="t in tabsLabeled"
         :key="t.key"
         class="filter-tab"
         :class="{ active: filter === t.key }"
@@ -50,23 +50,23 @@
           </svg>
           <div class="field-card-stats">
             <span class="mono">{{ valueLine(f) }}</span>
-            <button class="plant-date-btn" :title="'Set planting date'" @click.stop="setPlantingDate(f)"><i class="ti ti-edit"></i></button>
+            <button class="plant-date-btn" :title="t('sidebar.set_planting_date')" @click.stop="setPlantingDate(f)"><i class="ti ti-edit"></i></button>
           </div>
         </div>
 
         <div v-if="areaWarning(f)" class="field-area-warning">{{ areaWarning(f) }}</div>
-        <button class="delete-btn" @click.stop="store.deleteField(f.id)" title="Delete field">&#10005;</button>
+        <button class="delete-btn" @click.stop="store.deleteField(f.id)" :title="t('sidebar.delete_field')">&#10005;</button>
       </div>
 
-      <p v-if="state.fields.length === 0" class="sidebar-hint">No fields yet — draw a rectangle or polygon on the map to add your first one.</p>
-      <p v-else-if="filtered.length === 0" class="sidebar-hint">No fields match this filter.</p>
+      <p v-if="state.fields.length === 0" class="sidebar-hint">{{ t('sidebar.no_fields') }}</p>
+      <p v-else-if="filtered.length === 0" class="sidebar-hint">{{ t('sidebar.no_match') }}</p>
     </div>
 
     <div class="sidebar-footer">
       <button class="draw-btn" :class="{ drawing: state.isDrawing }" @click="store.startDraw()">
         <i class="ti ti-plus"></i>
-        <template v-if="state.isDrawing">Cancel drawing (Esc)</template>
-        <template v-else>Draw / Add New Field Boundary</template>
+        <template v-if="state.isDrawing">{{ t('sidebar.cancel_draw') }}</template>
+        <template v-else>{{ t('sidebar.add_field') }}</template>
       </button>
     </div>
   </div>
@@ -78,7 +78,9 @@ import { state, fieldStatus, fieldTrends } from '../store'
 import * as store from '../store'
 import { getOrComputeArea, formatHectares, getAreaWarning, fieldConfidence } from '../store'
 import ConfidenceBadge from './ConfidenceBadge.vue'
+import { useI18n } from '../i18n'
 
+const { t } = useI18n()
 const open = ref(false)
 const query = ref('')
 const filter = ref('all')
@@ -88,6 +90,11 @@ const tabs = [
   { key: 'healthy', label: 'Healthy' },
   { key: 'alerts', label: 'Alerts' },
 ]
+const tAbs = (en, kh) => (state.preferredLanguage === 'km' ? kh : en)
+const tabsLabeled = computed(() => tabs.map((x) => ({
+  key: x.key,
+  label: tAbs(x.label, { all: 'ទាំងអស់', healthy: 'ល្អ', alerts: 'ព្រមាន' }[x.key]),
+})))
 
 const totalHa = computed(() => {
   let ha = 0
@@ -156,7 +163,7 @@ function sparkClass(f) {
 }
 
 function areaWarning(f) {
-  return getAreaWarning(getOrComputeArea(f))
+  return getAreaWarning(getOrComputeArea(f), state.preferredLanguage)
 }
 
 function onCardClick(f) {

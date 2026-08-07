@@ -1,34 +1,34 @@
 <template>
   <div id="aoi-editor" class="aoi-editor-overlay" v-show="state.aoiEditorVisible" @click.self="close">
     <div class="aoi-editor-modal">
-      <h3>New area</h3>
-      <p class="aoi-editor-desc">Define a bounding box for satellite analysis. Type coordinates or search for a place.</p>
+      <h3>{{ t('aoi.new_area') }}</h3>
+      <p class="aoi-editor-desc">{{ t('aoi.desc') }}</p>
 
       <div class="aoi-editor-field">
-        <label class="aoi-editor-label" for="ae-name">Name</label>
-        <input id="ae-name" type="text" v-model="name" placeholder="e.g. Battambang (default)" />
+        <label class="aoi-editor-label" for="ae-name">{{ t('aoi.name') }}</label>
+        <input id="ae-name" type="text" v-model="name" :placeholder="t('aoi.name_example')" />
       </div>
 
       <div class="aoi-editor-field">
-        <label class="aoi-editor-label" for="ae-query">Find a place</label>
+        <label class="aoi-editor-label" for="ae-query">{{ t('aoi.find_place') }}</label>
         <div class="aoi-search-row">
-          <input id="ae-query" type="text" v-model="query" placeholder="Search place name..." @keydown.enter="doSearch" />
-          <button class="aoi-search-btn" @click="doSearch">Search</button>
+          <input id="ae-query" type="text" v-model="query" :placeholder="t('aoi.search_place')" @keydown.enter="doSearch" />
+          <button class="aoi-search-btn" @click="doSearch">{{ t('common.search') }}</button>
         </div>
         <p v-if="searchInfo" class="aoi-editor-hint">{{ searchInfo }}</p>
       </div>
 
       <div class="aoi-editor-grid">
-        <label>West (lng): <input type="number" step="0.001" v-model.number="w" /></label>
-        <label>South (lat): <input type="number" step="0.001" v-model.number="s" /></label>
-        <label>East (lng): <input type="number" step="0.001" v-model.number="e" /></label>
-        <label>North (lat): <input type="number" step="0.001" v-model.number="n" /></label>
+        <label>{{ t('aoi.west') }}: <input type="number" step="0.001" v-model.number="w" /></label>
+        <label>{{ t('aoi.south') }}: <input type="number" step="0.001" v-model.number="s" /></label>
+        <label>{{ t('aoi.east') }}: <input type="number" step="0.001" v-model.number="e" /></label>
+        <label>{{ t('aoi.north') }}: <input type="number" step="0.001" v-model.number="n" /></label>
       </div>
-      <div class="aoi-editor-hint">The map shows the active area as a red dashed rectangle.</div>
+      <div class="aoi-editor-hint">{{ t('aoi.hint_rect') }}</div>
 
       <div class="aoi-editor-footer">
-        <button id="ae-cancel" @click="close">Cancel</button>
-        <button class="ae-apply-btn" :disabled="creating" @click="create">{{ creating ? 'Creating...' : 'Create' }}</button>
+        <button id="ae-cancel" @click="close">{{ t('common.cancel') }}</button>
+        <button class="ae-apply-btn" :disabled="creating" @click="create">{{ creating ? t('aoi.creating') : t('aoi.create') }}</button>
       </div>
     </div>
   </div>
@@ -38,7 +38,9 @@
 import { ref, watch } from 'vue'
 import { state } from '../store'
 import * as store from '../store'
+import { useI18n } from '../i18n'
 
+const { t } = useI18n()
 const name = ref('')
 const query = ref('')
 const searchInfo = ref('')
@@ -71,7 +73,7 @@ function doSearch() {
   fetch('https://nominatim.openstreetmap.org/search?format=json&q=' + encodeURIComponent(q))
     .then((r) => r.json())
     .then((data) => {
-      if (!data || data.length === 0) { searchInfo.value = 'Location not found'; return }
+      if (!data || data.length === 0) { searchInfo.value = t('aoi.not_found'); return }
       const loc = data[0]
       if (loc.boundingbox && loc.boundingbox.length === 4) {
         w.value = parseFloat(loc.boundingbox[2])
@@ -87,18 +89,18 @@ function doSearch() {
         e.value = lon + d
         n.value = lat + d
       }
-      searchInfo.value = 'Filled bounds from \u201c' + loc.display_name.split(',')[0] + '\u201d'
+      searchInfo.value = (state.preferredLanguage === 'km' ? 'បំពេញព្រំដែនពី \u201c' : 'Filled bounds from \u201c') + loc.display_name.split(',')[0] + '\u201d'
     })
-    .catch(() => { searchInfo.value = 'Search failed \u2014 check your connection' })
+    .catch(() => { searchInfo.value = t('aoi.search_failed') })
 }
 
 async function create() {
   if (!name.value.trim()) {
-    store.showToast('Give this area a name first')
+    store.showToast(t('toast.area_name_first'))
     return
   }
   if ([w.value, s.value, e.value, n.value].some((v) => isNaN(v))) {
-    store.showToast('All four coordinates must be valid numbers')
+    store.showToast(t('toast.valid_coords'))
     return
   }
   creating.value = true

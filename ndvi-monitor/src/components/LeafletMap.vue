@@ -4,7 +4,7 @@
     <template v-if="state.compareMode">
       <div
         class="map-divider"
-        title="Drag to resize — double-click to reset"
+        :title="t('map.resize')"
         @mousedown="startResize"
         @dblclick="resetSplit"
       ></div>
@@ -21,8 +21,10 @@ import {
   showToast,
 } from '../store'
 import { MAP_CENTER, MAP_ZOOM } from '../config'
+import { useI18n } from '../i18n'
 
 const L = window.L
+const { t } = useI18n()
 const mapEl = ref(null)
 const mapRightEl = ref(null)
 const containerEl = ref(null)
@@ -56,7 +58,7 @@ function makeMainMap() {
   map.on(L.Draw.Event.EDITED, () => onFieldEdited())
   map.on(L.Draw.Event.EDITSTART, () => {
     if (drawnItems.getLayers().length === 0) {
-      showToast('Draw a field on the map first, then edit')
+      showToast(t('toast.draw_first'))
       if (drawControl._toolbars && drawControl._toolbars.edit) drawControl._toolbars.edit.disable()
     }
   })

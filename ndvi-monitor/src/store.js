@@ -166,8 +166,11 @@ function getOrComputeArea(field) {
   return getFieldAreaHectares(field.geojson)
 }
 
-function getAreaWarning(hectares) {
-  if (hectares > 50) return 'Unusually large for one field \u2014 check the drawn shape?'
+function getAreaWarning(hectares, lang) {
+  if (hectares > 50) {
+    if (lang === 'km') return 'ធំខុសពីធម្មតាសម្រាប់វាលមួយ — សូមពិនិត្យរាងដែលបានគូស?'
+    return 'Unusually large for one field \u2014 check the drawn shape?'
+  }
   return null
 }
 

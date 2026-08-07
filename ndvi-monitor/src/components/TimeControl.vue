@@ -1,7 +1,7 @@
 <template>
   <div class="time-panel panel" :class="{ loading: state.loading }" v-show="state.eeReady">
     <div class="time-head">
-      <button class="play-btn" :title="playing ? 'Pause' : 'Play through months'" @click="togglePlay">
+      <button class="play-btn" :title="playing ? t('time.playing') : t('time.play')" @click="togglePlay">
         <i class="ti" :class="playing ? 'ti-player-pause' : 'ti-player-play'"></i>
       </button>
       <div class="time-title">
@@ -9,10 +9,10 @@
         <span class="season-tag">{{ seasonTag }}</span>
       </div>
       <div class="time-pills">
-        <span v-if="state.loading" class="pill">loading&hellip;</span>
-        <span v-else-if="state.cloudBlock.main" class="pill cloud-blocked" :title="cloudTooltip(state.cloudBlock.main)">☁️ cloud-blocked</span>
-        <span v-else class="pill" :class="scenePillClass">{{ mainSceneText || 'no scenes' }}</span>
-        <button class="latest-btn" title="Jump to latest complete month" @click="goLatest">
+        <span v-if="state.loading" class="pill">{{ t('common.loading') }}</span>
+        <span v-else-if="state.cloudBlock.main" class="pill cloud-blocked" :title="cloudTooltip(state.cloudBlock.main)">☁️ {{ t('time.cloud_blocked') }}</span>
+        <span v-else class="pill" :class="scenePillClass">{{ mainSceneText || t('common.no_scenes') }}</span>
+        <button class="latest-btn" :title="t('time.latest')" @click="goLatest">
           <i class="ti ti-last"></i>
         </button>
       </div>
@@ -45,14 +45,14 @@
             :key="'a' + i"
             class="auto-marker"
             :class="{ 'auto-dry': state.dryMonthSet.has(i) }"
-            :title="state.dryMonthSet.has(i) ? 'Low rainfall' : ''"
+            :title="state.dryMonthSet.has(i) ? t('time.low_rain') : ''"
           ></div>
         </div>
       </div>
       <div class="event-legend">
-        <span class="ev-key"><i class="ev-dot flood"></i>Flood</span>
-        <span class="ev-key"><i class="ev-dot drought"></i>Dry spell</span>
-        <span class="ev-key"><i class="ev-dot dry-auto"></i>Low rainfall (CHIRPS)</span>
+        <span class="ev-key"><i class="ev-dot flood"></i>{{ t('time.flood') }}</span>
+        <span class="ev-key"><i class="ev-dot drought"></i>{{ t('time.dry_spell') }}</span>
+        <span class="ev-key"><i class="ev-dot dry-auto"></i>{{ t('time.low_rain_chirps') }}</span>
       </div>
       <div class="scrubber-ticks">
         <span>{{ MONTHS[0].label }}</span>
@@ -62,8 +62,8 @@
 
     <div v-if="state.compareMode" class="scrubber compare">
       <div class="scrubber-row">
-        <span v-if="state.cloudBlock.right" class="pill cloud-blocked" :title="cloudTooltip(state.cloudBlock.right)">☁️ cloud-blocked</span>
-        <span v-else class="pill">{{ rightSceneText || 'no scenes' }}</span>
+        <span v-if="state.cloudBlock.right" class="pill cloud-blocked" :title="cloudTooltip(state.cloudBlock.right)">☁️ {{ t('time.cloud_blocked') }}</span>
+        <span v-else class="pill">{{ rightSceneText || t('common.no_scenes') }}</span>
         <ConfidenceBadge v-if="!state.loading && rightConf.tier" :tier="rightConf.tier" :reason="rightConf.reason" class="scrubber-conf" />
         <span class="month-label right-label">{{ rightMonthLabel }}</span>
       </div>
@@ -105,7 +105,9 @@ import { state } from '../store'
 import * as store from '../store'
 import { MONTHS, EVENT_COLORS } from '../config'
 import ConfidenceBadge from './ConfidenceBadge.vue'
+import { useI18n } from '../i18n'
 
+const { t } = useI18n()
 const playing = ref(false)
 let playTimer = null
 let debounceTimer = null
@@ -115,13 +117,19 @@ const mainMonthLabel = computed(() => fullLabel(MONTHS[state.mainMonth]))
 const rightMonthLabel = computed(() => fullLabel(MONTHS[state.rightMonth]))
 
 function fullLabel(m) {
-  return new Date(m.year, m.month - 1, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+  const d = new Date(m.year, m.month - 1, 1)
+  if (state.preferredLanguage === 'km') {
+    return d.toLocaleDateString('km-KH', { month: 'long', year: 'numeric' })
+  }
+  return d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
 }
 
 const seasonTag = computed(() => seasonForMonth(MONTHS[state.mainMonth].month))
 
 function seasonForMonth(month) {
-  return month >= 5 && month <= 10 ? 'Wet Season (Rainfed)' : 'Dry Season (Irrigated)'
+  return month >= 5 && month <= 10
+    ? t('time.wet_season')
+    : t('time.dry_season')
 }
 
 const mainSceneText = computed(() => sceneText(state.sceneCount.main))
@@ -135,15 +143,15 @@ const rightConf = computed(() => store.viewConfidence('right'))
 
 function cloudTooltip(block) {
   if (!block) return ''
-  const pct = block.cloudPct != null ? Math.round(block.cloudPct) + '% cloud' : 'cloud-covered'
-  const last = block.lastValidDate ? 'Last valid reading: ' + block.lastValidDate : 'No cloud-free imagery available in the last 90 days.'
-  return 'Cloud-covered on ' + block.month + ' (' + pct + ') \u2014 true-color shown. ' + last
+  const pct = block.cloudPct != null ? Math.round(block.cloudPct) + '% ' + t('common.cloud') : t('common.cloud_covered')
+  const last = block.lastValidDate ? t('time.last_valid_reading') + block.lastValidDate : t('time.no_cloud_free')
+  return t('time.cloud_covered_on') + block.month + ' (' + pct + ') — ' + t('time.true_color') + ' ' + last
 }
 
 function sceneText(count) {
   if (count === 0) return ''
   const dot = count <= 2 ? '\u25CF ' : ''
-  return dot + count + ' scene' + (count !== 1 ? 's' : '')
+  return dot + count + ' ' + (count !== 1 ? t('common.scenes') : t('common.scene'))
 }
 
 function trackBg(idx) {

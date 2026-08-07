@@ -8,6 +8,7 @@
 
 <script setup>
 import { computed } from 'vue'
+import { state } from '../store'
 
 const props = defineProps({
   tier: { type: String, default: 'high' },
@@ -16,5 +17,8 @@ const props = defineProps({
 })
 
 const labels = { high: 'High confidence', medium: 'Medium confidence', low: 'Low confidence' }
-const label = computed(() => labels[props.tier] || '')
+const label = computed(() => {
+  if (state.preferredLanguage !== 'km') return labels[props.tier] || ''
+  return { high: 'ទំនុកចិត្តខ្ពស់', medium: 'ទំនុកចិត្តមធ្យម', low: 'ទំនុកចិត្តទាប' }[props.tier] || ''
+})
 </script>

@@ -1,10 +1,10 @@
 <template>
   <div id="preset-editor" class="preset-editor-overlay" v-show="state.presetEditorVisible" @click.self="state.presetEditorVisible = false">
     <div class="preset-editor-modal">
-      <h3>Manage Locations</h3>
+      <h3>{{ t('preset.manage') }}</h3>
       <div id="preset-editor-list">
         <div v-for="(p, i) in draft" :key="i" class="preset-editor-row">
-          <input class="pe-name" v-model="p.label" placeholder="Label" />
+          <input class="pe-name" v-model="p.label" :placeholder="t('preset.label')" />
           <input class="pe-lat" type="number" step="0.0001" v-model.number="p.lat" placeholder="Lat" />
           <input class="pe-lng" type="number" step="0.0001" v-model.number="p.lng" placeholder="Lng" />
           <input class="pe-zoom" type="number" min="1" max="19" v-model.number="p.zoom" placeholder="Zoom" />
@@ -12,12 +12,12 @@
         </div>
       </div>
       <div class="preset-editor-actions">
-        <button @click="addCurrent"><i class="ti ti-plus"></i> Add current view</button>
-        <button @click="resetDefaults"><i class="ti ti-refresh"></i> Reset defaults</button>
+        <button @click="addCurrent"><i class="ti ti-plus"></i> {{ t('preset.add_current') }}</button>
+        <button @click="resetDefaults"><i class="ti ti-refresh"></i> {{ t('preset.reset') }}</button>
       </div>
       <div class="preset-editor-footer">
-        <button id="pe-cancel" @click="state.presetEditorVisible = false">Cancel</button>
-        <button class="pe-save-btn" @click="save">Save</button>
+        <button id="pe-cancel" @click="state.presetEditorVisible = false">{{ t('common.cancel') }}</button>
+        <button class="pe-save-btn" @click="save">{{ t('common.save') }}</button>
       </div>
     </div>
   </div>
@@ -27,7 +27,9 @@
 import { ref, watch } from 'vue'
 import { state, mapReg } from '../store'
 import * as store from '../store'
+import { useI18n } from '../i18n'
 
+const { t } = useI18n()
 const draft = ref([])
 
 function clone() {
@@ -40,7 +42,7 @@ watch(() => state.presetEditorVisible, (open) => {
 
 function addCurrent() {
   const c = mapReg.map.getCenter()
-  draft.value.push({ label: 'New location', lat: c.lat, lng: c.lng, zoom: mapReg.map.getZoom() })
+  draft.value.push({ label: t('preset.new_location'), lat: c.lat, lng: c.lng, zoom: mapReg.map.getZoom() })
 }
 
 function resetDefaults() {

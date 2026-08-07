@@ -25,19 +25,25 @@ export const INDICES = {
     name: 'NDVI', bands: ['B8', 'B4'], vis: NDVI_VIS, label: 'Vegetation',
     color: '#22c55e',
     full: 'Vegetation Health Index',
+    fullKhm: 'សន្ទស្សន៍សុខភាពដំណាំ',
     explain: 'High values (green) mean dense, healthy vegetation. Low values (red) mean bare soil, water, or stressed crops.',
+    explainKhm: 'តម្លៃខ្ពស់ (បៃតង) មានន័យថារុក្ខជាតិក្រាស់និងល្អ។ តម្លៃទាប (ក្រហម) ជាដីទទេ ទឹក ឬដំណាំប៉ះពាល់។',
   },
   ndwi: {
     name: 'NDWI', bands: ['B3', 'B8'], vis: NDWI_VIS, label: 'Water',
     color: '#3b82f6',
     full: 'Water Index',
+    fullKhm: 'សន្ទស្សន៍ទឹក',
     explain: 'High values (blue) mean standing surface water, such as flooded paddies. Low values (brown) mean dry land with little or no water.',
+    explainKhm: 'តម្លៃខ្ពស់ (ខៀវ) ជាផ្ទៃទឹកដូចជាស្រែជន់លិច។ តម្លៃទាប (ត្នោត) ជាដីស្ងួតដែលមិនសូវមានទឹក។',
   },
   lswi: {
     name: 'LSWI', bands: ['B8', 'B11'], vis: LSWI_VIS, label: 'Water/Moisture',
     color: '#0ea5e9',
     full: 'Land Surface Water Index',
+    fullKhm: 'សន្ទស្សន៍ទឹកលើផ្ទៃដី',
     explain: 'High values (dark blue) mean moist soil and water-saturated plant canopies. Low values (tan) mean dry soil and dry vegetation.',
+    explainKhm: 'តម្លៃខ្ពស់ (ខៀវចាស់) ជាដីមានសំណើម និងរុក្កជាតិដែលឆ្អែតដោយទឹក។ តម្លៃទាប (ត្នោតស្រាល) ជាដីនិងរុក្កជាតិស្ងួត។',
   },
 }
 

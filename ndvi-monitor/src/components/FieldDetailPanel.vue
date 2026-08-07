@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div id="field-detail" class="panel detail-panel" v-show="state.infoPanelVisible">
     <div class="detail-header">
       <div class="detail-heading">
@@ -16,14 +16,14 @@
         </div>
         <div class="hero-sub mono">{{ stageText }}</div>
         <div class="hero-bench">
-          <span class="bench-dot"></span> AOI benchmark
+          <span class="bench-dot"></span> {{ t('field.aoi_benchmark') }}
           <b class="mono">{{ benchmarkText }}</b>
         </div>
         <ConfidenceBadge v-if="conf && conf.tier" :tier="conf.tier" :reason="conf.reason" showReason class="detail-conf" />
       </div>
 
       <div class="detail-section stage-card">
-        <p class="detail-card-label">{{ t('Growth stage', 'ដំណាក់កាលលូតលាស់') }}</p>
+        <p class="detail-card-label">{{ t('field.growth_stage') }}</p>
         <p class="stage-name">{{ stageName }}</p>
         <div class="stage-bar">
           <span class="stage-fill" :style="{ width: stagePct + '%' }"></span>
@@ -32,7 +32,7 @@
       </div>
 
       <div class="detail-section stress-card" :class="stressTone">
-        <p class="detail-card-label">{{ t('Stress alert', 'សញ្ញាព្រមានស្ត្រេស') }}</p>
+        <p class="detail-card-label">{{ t('field.stress_alert') }}</p>
         <p class="stress-msg">{{ stressMsg }}</p>
       </div>
 
@@ -40,45 +40,45 @@
         <button class="ai-consult-btn" :disabled="consultingAi || noSceneData" @click="consultAi">
           <span v-if="consultingAi" class="ai-spinner"></span>
           <i v-else class="ti ti-sparkles"></i>
-          {{ consultingAi ? t('Consulting AI...', 'កំពុងពិគ្រោះ AI...') : t('Consult AI', 'ពិគ្រោះជាមួយ AI') }}
+          {{ consultingAi ? t('field.consulting_ai') : t('field.consult_ai') }}
         </button>
-        <p v-if="noSceneData" class="ai-note no-scene-note">{{ t('No satellite data for this month — try a recent month with data.', 'មិនមានទិន្នន័យផ្កាយរណបសម្រាប់ខែនេះ — សូមជ្រើសរើសខែថ្មីដែលមានទិន្នន័យ។') }}</p>
+        <p v-if="noSceneData" class="ai-note no-scene-note">{{ t('field.no_scene_note') }}</p>
         <div v-if="aiExplanation" class="ai-answer">
-          <p class="detail-card-label">{{ t('AI agronomist', 'អ្នកជំនាញកសិកម្ម AI') }}</p>
+          <p class="detail-card-label">{{ t('field.ai_agronomist') }}</p>
           <p class="ai-text">{{ aiExplanation }}</p>
-          <p class="ai-note">{{ t('AI-generated interpretation to guide you — not a diagnosis.', 'ការបកស្រាយដោយ AI ដើម្បីណែនាំអ្នក — មិនមែនជាការធ្វើរោគវិនិច្ឆ័យទេ។') }}</p>
+          <p class="ai-note">{{ t('field.ai_generated') }}</p>
         </div>
       </div>
     </template>
 
     <div v-if="state.stressAlert" class="detail-section stress-card alert-msg">
-      <p class="detail-card-label">Rainfall watch</p>
+      <p class="detail-card-label">{{ t('field.rainfall_watch') }}</p>
       <p class="stress-msg">{{ state.stressAlert }}</p>
     </div>
 
     <div class="detail-section chart-card">
       <div class="chart-card-header">
         <span class="chart-card-title">{{ title }}</span>
-        <button class="icon-btn" title="Enlarge chart" @click="state.chartModalVisible = true"><i class="ti ti-arrows-maximize"></i></button>
+        <button class="icon-btn" :title="t('field.enlarge_chart')" @click="state.chartModalVisible = true"><i class="ti ti-arrows-maximize"></i></button>
       </div>
       <canvas id="trend-chart" ref="chartCanvas"></canvas>
     </div>
 
     <div class="detail-section rain-card">
-      <p class="detail-card-label">{{ t('Rainfall', 'ទឹកភ្លៀង') }} <span class="mono">(21-day)</span></p>
+      <p class="detail-card-label">{{ t('field.rainfall') }} <span class="mono">({{ t('field.days_21') }})</span></p>
       <p class="rain-value mono" :class="{ 'rain-unavailable': state.rainfallMm == null }">{{ rainText }}</p>
     </div>
 
-<template v-if="isField">
+    <template v-if="isField">
       <div class="detail-section meta-card">
-        <p class="detail-card-label">{{ t('Field metadata', 'ព័ត៌មានវាល') }}</p>
-        <div class="meta-row"><span>{{ t('Planting date', 'កាលបរិច្ឆេទដាំ') }}</span><b class="mono">{{ plantingText }}</b></div>
-        <div class="meta-row"><span>{{ t('Area', 'ផ្ទៃដី') }}</span><b class="mono">{{ formatHectares(areaHa).toUpperCase() }}</b></div>
-        <div class="meta-row"><span>{{ t('Added', 'បានបន្ថែម') }}</span><b class="mono">{{ addedText }}</b></div>
+        <p class="detail-card-label">{{ t('field.metadata') }}</p>
+        <div class="meta-row"><span>{{ t('field.planting_date') }}</span><b class="mono">{{ plantingText }}</b></div>
+        <div class="meta-row"><span>{{ t('field.area') }}</span><b class="mono">{{ formatHectares(areaHa).toUpperCase() }}</b></div>
+        <div class="meta-row"><span>{{ t('field.added') }}</span><b class="mono">{{ addedText }}</b></div>
       </div>
 
       <div class="detail-section photo-card" v-if="currentField">
-        <p class="detail-card-label">{{ t('Field photos', 'រូបថតវាល') }} <span v-if="photos.length" class="mono">{{ photos.length }}</span></p>
+        <p class="detail-card-label">{{ t('field.photos') }} <span v-if="photos.length" class="mono">{{ photos.length }}</span></p>
         <div class="photo-strip" v-if="photos.length">
           <button
             v-for="(p, i) in photos"
@@ -87,15 +87,15 @@
             :class="{ 'inhale': p.loading }"
             @click="openPhoto(i)"
           >
-            <img v-if="p.url" :src="p.url" alt="Field photo" loading="lazy" />
+            <img v-if="p.url" :src="p.url" :alt="t('field.photo')" loading="lazy" />
           </button>
         </div>
-        <p v-else class="photo-empty">{{ t('No photos yet — send a photo of this field to the Telegram bot.', 'មិនទាន់មានរូបថត — សូមផ្ញើរូបថតវាលនេះទៅបូត Telegram។') }}</p>
+        <p v-else class="photo-empty">{{ t('field.no_photos') }}</p>
       </div>
     </template>
 
     <div v-if="state.photosLightboxIndex != null" class="photo-lightbox" @click.self="closePhoto">
-      <img :src="photos[state.photosLightboxIndex].url" alt="Field photo" />
+      <img :src="photos[state.photosLightboxIndex].url" :alt="t('field.photo')" />
       <button class="lightbox-close" @click="closePhoto">&times;</button>
     </div>
   </div>
@@ -113,6 +113,7 @@ import { INDICES, MONTHS, CONSULT_AI_URL } from '../config'
 import { sb, requireSession } from '../services/supabase'
 import { loadFieldPhotos, createSignedPhotoUrl } from '../services/supabase'
 import { getRecentIndexValue, getRainfallMm } from '../services/earthEngine'
+import { useI18n } from '../i18n'
 
 const chartCanvas = ref(null)
 const consultingAi = ref(false)
@@ -122,19 +123,16 @@ let chart = null
 
 const currentField = computed(() => state.fields.find((f) => f.id === state.currentFieldId) || null)
 const isField = computed(() => !!currentField.value)
-const km = computed(() => state.preferredLanguage === 'km')
-const t = (en, kh) => (km.value ? kh : en)
+const { km, t } = useI18n()
 const status = computed(() => fieldStatus[state.currentFieldId] || null)
 const trend = computed(() => fieldTrends[state.currentFieldId] || null)
 const conf = computed(() => {
   if (!currentField.value) return null
   return fieldConfidence(currentField.value)
 })
-// Mirrors the time slider's "no scenes" badge: no scenes for the selected month
-// AND no request currently in flight (so it's permanently unavailable, not loading).
 const noSceneData = computed(() => !state.loading && state.sceneCount.main === 0)
 
-const title = computed(() => (isField.value ? currentField.value.name : INDICES[state.chartIndex].name + ' Trend'))
+const title = computed(() => (isField.value ? currentField.value.name : INDICES[state.chartIndex].name + ' ' + t('index.trend')))
 const statusText = computed(() => (status.value && status.value.badgeText) || '\u2014')
 const statusTone = computed(() => (status.value && status.value.badgeClass) || 'healthy')
 const stageText = computed(() => (status.value && status.value.stageLabel) || '')
@@ -143,14 +141,14 @@ const heroValue = computed(() => (status.value && status.value.value != null ? s
 
 const stageName = computed(() => {
   const s = status.value
-  if (!s || !s.stageLabel) return t('No planting date', 'មិនមានកាលបរិច្ឆេទដាំ')
+  if (!s || !s.stageLabel) return t('field.no_planting_date')
   return s.stageLabel.split('\u00b7')[0].trim()
 })
 const stageDaysText = computed(() => {
   const s = status.value
   if (!s || !s.stageLabel) return '\u2014'
   const m = s.stageLabel.match(/Day (\d+)/)
-  return m ? t('Day ' + m[1] + ' since planting', 'ថ្ងៃទី ' + m[1] + ' ចាប់តាំងពីដាំ') : '\u2014'
+  return m ? t('field.day_since_planting', { day: m[1] }) : '\u2014'
 })
 const stagePct = computed(() => {
   const s = status.value
@@ -166,30 +164,21 @@ const stressTone = computed(() => {
 })
 const stressMsg = computed(() => {
   const cls = status.value && status.value.badgeClass
-  if (cls === 'stressed') return t(
-    'Below expected range for this growth stage \u2014 consider checking irrigation.',
-    'ទាបជាងកម្រិតដែលគួរមានសម្រាប់ដំណាក់កាលលូតលាស់នេះ \u2014 សូមពិនិត្យប្រព័ន្ធស្រោចស្រព។',
-  )
-  if (cls === 'moderate') return t(
-    'Slightly below expected for this stage \u2014 monitor over the coming weeks.',
-    'ទាបជាងកម្រិតបន្តិចសម្រាប់ដំណាក់កាលនេះ \u2014 សូមតាមដានក្នុងសប្តាហ៍ខាងមុខ។',
-  )
-  return t(
-    'Within the expected NDVI range for this growth stage.',
-    'ស្ថិតក្នុងកម្រិត NDVI ដែលគួរមានសម្រាប់ដំណាក់កាលលូតលាស់នេះ។',
-  )
+  if (cls === 'stressed') return t('field.stress_high')
+  if (cls === 'moderate') return t('field.stress_moderate')
+  return t('field.stress_healthy')
 })
 
 const rainText = computed(() => {
   if (state.rainfallMm != null) return state.rainfallMm.toFixed(0) + ' mm'
-  if (!state.eeReady) return 'Loading\u2026'
-  return 'Data unavailable'
+  if (!state.eeReady) return t('field.loading')
+  return t('field.data_unavailable')
 })
 
 const plantingText = computed(() => {
   const f = currentField.value
   if (!f || !f.plantingDate) return '\u2014'
-  if (f.plantingDateSource === 'estimated') return f.plantingDate + ' (estimated from satellite data)'
+  if (f.plantingDateSource === 'estimated') return f.plantingDate + ' (' + t('field.estimated_from_sat') + ')'
   return f.plantingDate
 })
 const addedText = computed(() => (currentField.value && currentField.value.createdAt ? new Date(currentField.value.createdAt).toLocaleDateString() : '\u2014'))
@@ -224,8 +213,6 @@ async function loadPhotos() {
   try {
     const rows = await loadFieldPhotos(field.id)
     photos.value = rows.map((r) => ({ ...r, url: null, loading: true }))
-    // Signed URLs are short-lived (1h) and only fetched when the panel opens
-    // for a field that actually has photos — never eagerly for all fields.
     rows.forEach(async (r, i) => {
       try {
         const url = await createSignedPhotoUrl(r.storage_path)
@@ -266,20 +253,20 @@ async function consultAi() {
   const field = currentField.value
   if (!field) return
   if (!state.supabaseUser) {
-    store.showToast('Sign in to consult the AI agronomist')
+    store.showToast(t('toast.sign_in_consult'))
     return
   }
   if (!state.eeReady) {
-    store.showToast('Satellite data is still loading \u2014 try again in a moment')
+    store.showToast(t('toast.ee_loading'))
     return
   }
   if (noSceneData.value) {
-    store.showToast('No satellite data for this month \u2014 try a recent month with data.')
+    store.showToast(t('toast.no_scene'))
     return
   }
   const geom = field.geojson && (field.geojson.geometry || field.geojson)
   if (!geom || !geom.coordinates) {
-    store.showToast('Couldn\'t get an explanation right now \u2014 please try again.')
+    store.showToast(t('toast.cant_explain'))
     return
   }
   const geometry = window.ee.Geometry.Polygon(geom.coordinates)
@@ -296,12 +283,12 @@ async function consultAi() {
     if (rainfallMm == null) rainfallMm = await getRainfall(geometry)
     if (ndviValue == null) {
       consultingAi.value = false
-      store.showToast('No recent satellite data for this field yet \u2014 check back in a few days.')
+      store.showToast(t('toast.no_sat_data'))
       return
     }
   } catch (e) {
     consultingAi.value = false
-    store.showToast('Couldn\'t get an explanation right now \u2014 please try again.')
+    store.showToast(t('toast.explain_failed'))
     return
   }
 
@@ -323,7 +310,7 @@ async function consultAi() {
     token = session.access_token
   } catch (e) {
     consultingAi.value = false
-    store.showToast(e.message || 'Please sign in to continue')
+    store.showToast(t('toast.sign_in_continue'))
     return
   }
 
@@ -347,20 +334,20 @@ async function consultAi() {
     let body = null
     try { body = await res.json() } catch (e) {}
     if (res.status === 429 || (body && body.ok === false && body.error === 'daily_limit_reached')) {
-      store.showToast('You\'ve used today\'s AI explanations \u2014 more tomorrow.')
+      store.showToast(t('toast.daily_limit'))
       return
     }
     if (body && body.error === 'missing_data') {
-      store.showToast('No recent satellite data for this field yet \u2014 check back in a few days.')
+      store.showToast(t('toast.no_sat_data'))
       return
     }
     if (body && body.ok && body.explanation) {
       aiExplanation.value = body.explanation
     } else {
-      store.showToast('Couldn\'t get an explanation right now \u2014 please try again.')
+      store.showToast(t('toast.explain_failed'))
     }
   } catch (e) {
-    store.showToast('Couldn\'t get an explanation right now \u2014 please try again.')
+    store.showToast(t('toast.explain_failed'))
   } finally {
     consultingAi.value = false
   }

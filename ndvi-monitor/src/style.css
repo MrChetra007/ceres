@@ -1765,6 +1765,15 @@ body {
 .tg-pill-dot.on { background: var(--accent); }
 .glass-pill.active .tg-pill-dot { background: var(--accent); }
 
+.lang-pill {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.lang-pill .lang-seg {
+  margin-left: 0;
+}
+
 /* ---- Time control (top-center) ---- */
 .time-panel {
   position: fixed;
