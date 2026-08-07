@@ -69,14 +69,35 @@
       <p class="rain-value mono" :class="{ 'rain-unavailable': state.rainfallMm == null }">{{ rainText }}</p>
     </div>
 
-    <template v-if="isField">
+<template v-if="isField">
       <div class="detail-section meta-card">
         <p class="detail-card-label">{{ t('Field metadata', 'ព័ត៌មានវាល') }}</p>
         <div class="meta-row"><span>{{ t('Planting date', 'កាលបរិច្ឆេទដាំ') }}</span><b class="mono">{{ plantingText }}</b></div>
         <div class="meta-row"><span>{{ t('Area', 'ផ្ទៃដី') }}</span><b class="mono">{{ formatHectares(areaHa).toUpperCase() }}</b></div>
         <div class="meta-row"><span>{{ t('Added', 'បានបន្ថែម') }}</span><b class="mono">{{ addedText }}</b></div>
       </div>
+
+      <div class="detail-section photo-card" v-if="currentField">
+        <p class="detail-card-label">{{ t('Field photos', 'រូបថតវាល') }} <span v-if="photos.length" class="mono">{{ photos.length }}</span></p>
+        <div class="photo-strip" v-if="photos.length">
+          <button
+            v-for="(p, i) in photos"
+            :key="p.id"
+            class="photo-thumb"
+            :class="{ 'inhale': p.loading }"
+            @click="openPhoto(i)"
+          >
+            <img v-if="p.url" :src="p.url" alt="Field photo" loading="lazy" />
+          </button>
+        </div>
+        <p v-else class="photo-empty">{{ t('No photos yet — send a photo of this field to the Telegram bot.', 'មិនទាន់មានរូបថត — សូមផ្ញើរូបថតវាលនេះទៅបូត Telegram។') }}</p>
+      </div>
     </template>
+
+    <div v-if="state.photosLightboxIndex != null" class="photo-lightbox" @click.self="closePhoto">
+      <img :src="photos[state.photosLightboxIndex].url" alt="Field photo" />
+      <button class="lightbox-close" @click="closePhoto">&times;</button>
+    </div>
   </div>
 </template>
 
@@ -90,11 +111,13 @@ import ConfidenceBadge from './ConfidenceBadge.vue'
 import { buildChartConfig } from '../services/chart'
 import { INDICES, MONTHS, CONSULT_AI_URL } from '../config'
 import { sb, requireSession } from '../services/supabase'
+import { loadFieldPhotos, createSignedPhotoUrl } from '../services/supabase'
 import { getRecentIndexValue, getRainfallMm } from '../services/earthEngine'
 
 const chartCanvas = ref(null)
 const consultingAi = ref(false)
 const aiExplanation = ref('')
+const photos = ref([])
 let chart = null
 
 const currentField = computed(() => state.fields.find((f) => f.id === state.currentFieldId) || null)
@@ -193,6 +216,37 @@ function updateMarker() {
 function onClose() {
   if (isField.value) store.clearFieldSelection()
   else state.infoPanelVisible = false
+}
+
+async function loadPhotos() {
+  const field = currentField.value
+  if (!field || !state.supabaseUser) { photos.value = []; return }
+  try {
+    const rows = await loadFieldPhotos(field.id)
+    photos.value = rows.map((r) => ({ ...r, url: null, loading: true }))
+    // Signed URLs are short-lived (1h) and only fetched when the panel opens
+    // for a field that actually has photos — never eagerly for all fields.
+    rows.forEach(async (r, i) => {
+      try {
+        const url = await createSignedPhotoUrl(r.storage_path)
+        if (photos.value[i]) photos.value[i].url = url
+      } catch (e) {
+        // leave a dead thumb placeholder rather than breaking the panel
+      } finally {
+        if (photos.value[i]) photos.value[i].loading = false
+      }
+    })
+  } catch (e) {
+    photos.value = []
+  }
+}
+
+function openPhoto(i) {
+  state.photosLightboxIndex = i
+}
+
+function closePhoto() {
+  state.photosLightboxIndex = null
 }
 
 function recentValue(geometry, index) {
@@ -319,5 +373,8 @@ watch(() => state.benchmarkValue, () => {
   if (state.chartData && state.infoPanelVisible) render(state.chartData)
 })
 watch(() => state.mainMonth, () => updateMarker())
-watch(() => state.currentFieldId, () => { aiExplanation.value = '' })
+watch(() => state.currentFieldId, () => { aiExplanation.value = ''; photos.value = []; state.photosLightboxIndex = null; loadPhotos() })
+watch(() => state.infoPanelVisible, (open) => {
+  if (open && currentField.value) loadPhotos()
+})
 </script>

@@ -149,3 +149,24 @@ export async function setPreferredLanguage(lang) {
   const { error } = await sb.from('profiles').update({ preferred_language: lang })
   if (error) throw error
 }
+
+// ---------------------------------------------------------------------------
+// Ground-truth field photos (Phase 13 Feature 2)
+// ---------------------------------------------------------------------------
+export async function loadFieldPhotos(fieldId) {
+  const { data, error } = await sb
+    .from('field_photos')
+    .select('id, storage_path, caption, created_at')
+    .eq('field_id', fieldId)
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  return data || []
+}
+
+export async function createSignedPhotoUrl(storagePath, expiresIn = 3600) {
+  const { data, error } = await sb.storage
+    .from('field-photos')
+    .createSignedUrl(storagePath, expiresIn)
+  if (error) throw error
+  return data ? data.signedUrl : null
+}

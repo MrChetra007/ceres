@@ -78,6 +78,7 @@ export const state = reactive({
   telegramModalVisible: false,
   telegramLinking: false,
   preferredLanguage: 'en',
+  photosLightboxIndex: null,
 })
 
 export const currentGeometry = shallowRef(null)
