@@ -125,9 +125,9 @@ export async function signOut() {
 // Telegram linking (Phase 8.3)
 // ---------------------------------------------------------------------------
 export async function getMyProfile() {
-  const { data, error } = await sb.from('profiles').select('telegram_chat_id').maybeSingle()
+  const { data, error } = await sb.from('profiles').select('telegram_chat_id, preferred_language').maybeSingle()
   if (error) throw error
-  return data || { telegram_chat_id: null }
+  return data || { telegram_chat_id: null, preferred_language: 'en' }
 }
 
 export async function insertLinkCode(code, userId, expiresAt) {
@@ -142,5 +142,10 @@ export async function insertLinkCode(code, userId, expiresAt) {
 
 export async function clearTelegramChatId() {
   const { error } = await sb.from('profiles').update({ telegram_chat_id: null })
+  if (error) throw error
+}
+
+export async function setPreferredLanguage(lang) {
+  const { error } = await sb.from('profiles').update({ preferred_language: lang })
   if (error) throw error
 }

@@ -77,6 +77,7 @@ export const state = reactive({
   telegramChatId: null,
   telegramModalVisible: false,
   telegramLinking: false,
+  preferredLanguage: 'en',
 })
 
 export const currentGeometry = shallowRef(null)
@@ -307,8 +308,22 @@ export async function loadTelegramChatId() {
   try {
     const profile = await supabase.getMyProfile()
     state.telegramChatId = profile?.telegram_chat_id || null
+    state.preferredLanguage = profile?.preferred_language || 'en'
   } catch (err) {
     state.telegramChatId = null
+  }
+}
+
+export async function setLanguage(lang) {
+  if (!state.supabaseUser) { showToast('Sign in to change language'); return false }
+  try {
+    await supabase.setPreferredLanguage(lang)
+    state.preferredLanguage = lang
+    showToast('Language set to ' + (lang === 'km' ? 'Khmer' : 'English'))
+    return true
+  } catch (err) {
+    showToast('Failed to update language: ' + err.message)
+    return false
   }
 }
 
@@ -803,15 +818,33 @@ export async function importLocalFieldsIfAny() {
 
 export async function saveField(name, geojson, plantingDate) {
   if (!state.supabaseUser) { showToast('Sign in to save fields'); return null }
+  let planting_date = plantingDate || null
+  let planting_date_source = 'manual'
+  // Feature 3 — if the farmer didn't enter a planting date, try to estimate one
+  // from the LSWI transplant spike. Never overwrites a manual entry.
+  if (!planting_date && state.eeReady) {
+    const geom = geojson && (geojson.geometry || geojson)
+    if (geom && geom.coordinates) {
+      const geometry = window.ee.Geometry.Polygon(geom.coordinates)
+      const detected = await new Promise((resolve) => ee.detectPlantingDate(geometry, resolve))
+      if (detected && detected.estimatedDate) {
+        planting_date = detected.estimatedDate
+        planting_date_source = 'estimated'
+      }
+    }
+  }
   try {
     const field = await supabase.insertField({
       name,
       geojson,
       area_ha: getFieldAreaHectares(geojson),
-      planting_date: plantingDate || null,
-      planting_date_source: 'manual',
+      planting_date,
+      planting_date_source,
     })
     state.fields.push(field)
+    if (planting_date_source === 'estimated' && planting_date) {
+      showToast('Estimated planting date from satellite data \u2014 tap to adjust', 4000)
+    }
     loadFieldTrend(field)
     return field
   } catch (err) {

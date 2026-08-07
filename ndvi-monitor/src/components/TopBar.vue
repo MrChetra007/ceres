@@ -79,6 +79,14 @@
             Telegram alerts
             <span class="tg-status-dot" :class="{ on: state.telegramChatId }"></span>
           </button>
+          <div class="user-menu-item lang-toggle">
+            <i class="ti ti-language"></i>
+            <span>Language</span>
+            <div class="lang-seg">
+              <button :class="{ on: state.preferredLanguage === 'en' }" @click="setLang('en')">EN</button>
+              <button :class="{ on: state.preferredLanguage === 'km' }" @click="setLang('km')">ខ្មែរ</button>
+            </div>
+          </div>
           <button v-if="state.supabaseUser" class="user-menu-item sign-out" @click="doSignOut">
             <i class="ti ti-logout"></i> Sign out
           </button>
@@ -130,6 +138,11 @@ function openTelegram() {
     return
   }
   store.openTelegramModal()
+}
+
+function setLang(lang) {
+  userMenuOpen.value = false
+  store.setLanguage(lang)
 }
 
 function toggleExportMenu() {

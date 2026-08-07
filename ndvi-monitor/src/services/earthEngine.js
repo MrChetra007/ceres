@@ -127,6 +127,57 @@ export function getIndexTimeSeriesForGeometry(geometry, index, months, cb) {
   })
 }
 
+// Feature 3 — Auto-planting-date detection (LSWI spike).
+// A transplant floods the field: LSWI jumps from dry soil (~0.0–0.2) toward
+// flooded (~0.4+). Look at the trailing ~90 days of cloud-free LSWI at the
+// given field geometry, find the steepest positive scene-to-scene jump that
+// starts dry and lands flooded, and report the estimated date (midpoint of the
+// two observations) plus the jump magnitude as a rough confidence signal.
+// Returns null (never guesses) when data is too sparse or no spike is found.
+export function detectPlantingDate(geometry, cb) {
+  const e = ee()
+  const bandName = 'LSWI'
+  const end = e.Date(Date.now())
+  const start = end.advance(-90, 'day')
+  const all = s2Collection(geometry, start, end)
+  const series = all.map((img) => {
+    const lswi = img.normalizedDifference(['B8', 'B11']).rename(bandName)
+    const value = lswi.reduceRegion({ reducer: e.Reducer.mean(), geometry, scale: 10, maxPixels: 1e9 })
+    return e.Feature(null, { date: img.date().format('YYYY-MM-dd'), value: value.get(bandName) })
+  })
+  series.filter(e.Filter.notNull(['value'])).evaluate((result) => {
+    const feats = (result && result.features) || []
+    const points = feats
+      .map((f) => ({ date: f.properties.date, value: f.properties.value }))
+      .sort((a, b) => a.date.localeCompare(b.date))
+    if (points.length < 2) { cb(null); return }
+    // Steepest positive jump that plausibly reflects dry soil -> flooded field.
+    let best = null
+    for (let i = 1; i < points.length; i++) {
+      const prev = points[i - 1]
+      const cur = points[i]
+      const delta = cur.value - prev.value
+      if (delta > 0.1 && prev.value < 0.25 && cur.value >= 0.3) {
+        if (!best || delta > best.deltaMagnitude) {
+          best = {
+            estimatedDate: midpointDate(prev.date, cur.date),
+            deltaMagnitude: delta,
+          }
+        }
+      }
+    }
+    cb(best || null)
+  }, (err) => {
+    console.error('detectPlantingDate failed:', err)
+    cb(null)
+  })
+}
+
+function midpointDate(a, b) {
+  const ms = (new Date(a).getTime() + new Date(b).getTime()) / 2
+  return new Date(ms).toISOString().slice(0, 10)
+}
+
 export function getDryMonths(months, geometry, cb) {
   const e = ee()
   // Batch the per-month loop into ONE server-side call — same pattern as

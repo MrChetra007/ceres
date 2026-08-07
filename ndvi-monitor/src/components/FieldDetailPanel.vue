@@ -23,7 +23,7 @@
       </div>
 
       <div class="detail-section stage-card">
-        <p class="detail-card-label">Growth stage</p>
+        <p class="detail-card-label">{{ t('Growth stage', 'ដំណាក់កាលលូតលាស់') }}</p>
         <p class="stage-name">{{ stageName }}</p>
         <div class="stage-bar">
           <span class="stage-fill" :style="{ width: stagePct + '%' }"></span>
@@ -32,7 +32,7 @@
       </div>
 
       <div class="detail-section stress-card" :class="stressTone">
-        <p class="detail-card-label">Stress alert</p>
+        <p class="detail-card-label">{{ t('Stress alert', 'សញ្ញាព្រមានស្ត្រេស') }}</p>
         <p class="stress-msg">{{ stressMsg }}</p>
       </div>
 
@@ -40,13 +40,13 @@
         <button class="ai-consult-btn" :disabled="consultingAi || noSceneData" @click="consultAi">
           <span v-if="consultingAi" class="ai-spinner"></span>
           <i v-else class="ti ti-sparkles"></i>
-          {{ consultingAi ? 'Consulting AI...' : 'Consult AI' }}
+          {{ consultingAi ? t('Consulting AI...', 'កំពុងពិគ្រោះ AI...') : t('Consult AI', 'ពិគ្រោះជាមួយ AI') }}
         </button>
-        <p v-if="noSceneData" class="ai-note no-scene-note">No satellite data for this month — try a recent month with data.</p>
+        <p v-if="noSceneData" class="ai-note no-scene-note">{{ t('No satellite data for this month — try a recent month with data.', 'មិនមានទិន្នន័យផ្កាយរណបសម្រាប់ខែនេះ — សូមជ្រើសរើសខែថ្មីដែលមានទិន្នន័យ។') }}</p>
         <div v-if="aiExplanation" class="ai-answer">
-          <p class="detail-card-label">AI agronomist</p>
+          <p class="detail-card-label">{{ t('AI agronomist', 'អ្នកជំនាញកសិកម្ម AI') }}</p>
           <p class="ai-text">{{ aiExplanation }}</p>
-          <p class="ai-note">AI-generated interpretation to guide you — not a diagnosis.</p>
+          <p class="ai-note">{{ t('AI-generated interpretation to guide you — not a diagnosis.', 'ការបកស្រាយដោយ AI ដើម្បីណែនាំអ្នក — មិនមែនជាការធ្វើរោគវិនិច្ឆ័យទេ។') }}</p>
         </div>
       </div>
     </template>
@@ -65,16 +65,16 @@
     </div>
 
     <div class="detail-section rain-card">
-      <p class="detail-card-label">Rainfall <span class="mono">(21-day)</span></p>
+      <p class="detail-card-label">{{ t('Rainfall', 'ទឹកភ្លៀង') }} <span class="mono">(21-day)</span></p>
       <p class="rain-value mono" :class="{ 'rain-unavailable': state.rainfallMm == null }">{{ rainText }}</p>
     </div>
 
     <template v-if="isField">
       <div class="detail-section meta-card">
-        <p class="detail-card-label">Field metadata</p>
-        <div class="meta-row"><span>Planting date</span><b class="mono">{{ plantingText }}</b></div>
-        <div class="meta-row"><span>Area</span><b class="mono">{{ formatHectares(areaHa).toUpperCase() }}</b></div>
-        <div class="meta-row"><span>Added</span><b class="mono">{{ addedText }}</b></div>
+        <p class="detail-card-label">{{ t('Field metadata', 'ព័ត៌មានវាល') }}</p>
+        <div class="meta-row"><span>{{ t('Planting date', 'កាលបរិច្ឆេទដាំ') }}</span><b class="mono">{{ plantingText }}</b></div>
+        <div class="meta-row"><span>{{ t('Area', 'ផ្ទៃដី') }}</span><b class="mono">{{ formatHectares(areaHa).toUpperCase() }}</b></div>
+        <div class="meta-row"><span>{{ t('Added', 'បានបន្ថែម') }}</span><b class="mono">{{ addedText }}</b></div>
       </div>
     </template>
   </div>
@@ -88,7 +88,7 @@ import * as store from '../store'
 import { getOrComputeArea, formatHectares } from '../store'
 import ConfidenceBadge from './ConfidenceBadge.vue'
 import { buildChartConfig } from '../services/chart'
-import { INDICES, MONTHS, CONSULT_AI_URL, CONSULT_AI_LANG } from '../config'
+import { INDICES, MONTHS, CONSULT_AI_URL } from '../config'
 import { sb, requireSession } from '../services/supabase'
 import { getRecentIndexValue, getRainfallMm } from '../services/earthEngine'
 
@@ -99,6 +99,8 @@ let chart = null
 
 const currentField = computed(() => state.fields.find((f) => f.id === state.currentFieldId) || null)
 const isField = computed(() => !!currentField.value)
+const km = computed(() => state.preferredLanguage === 'km')
+const t = (en, kh) => (km.value ? kh : en)
 const status = computed(() => fieldStatus[state.currentFieldId] || null)
 const trend = computed(() => fieldTrends[state.currentFieldId] || null)
 const conf = computed(() => {
@@ -118,14 +120,14 @@ const heroValue = computed(() => (status.value && status.value.value != null ? s
 
 const stageName = computed(() => {
   const s = status.value
-  if (!s || !s.stageLabel) return 'No planting date'
+  if (!s || !s.stageLabel) return t('No planting date', 'មិនមានកាលបរិច្ឆេទដាំ')
   return s.stageLabel.split('\u00b7')[0].trim()
 })
 const stageDaysText = computed(() => {
   const s = status.value
   if (!s || !s.stageLabel) return '\u2014'
   const m = s.stageLabel.match(/Day (\d+)/)
-  return m ? 'Day ' + m[1] + ' since planting' : '\u2014'
+  return m ? t('Day ' + m[1] + ' since planting', 'ថ្ងៃទី ' + m[1] + ' ចាប់តាំងពីដាំ') : '\u2014'
 })
 const stagePct = computed(() => {
   const s = status.value
@@ -141,9 +143,18 @@ const stressTone = computed(() => {
 })
 const stressMsg = computed(() => {
   const cls = status.value && status.value.badgeClass
-  if (cls === 'stressed') return 'Below expected range for this growth stage \u2014 consider checking irrigation.'
-  if (cls === 'moderate') return 'Slightly below expected for this stage \u2014 monitor over the coming weeks.'
-  return 'Within the expected NDVI range for this growth stage.'
+  if (cls === 'stressed') return t(
+    'Below expected range for this growth stage \u2014 consider checking irrigation.',
+    'ទាបជាងកម្រិតដែលគួរមានសម្រាប់ដំណាក់កាលលូតលាស់នេះ \u2014 សូមពិនិត្យប្រព័ន្ធស្រោចស្រព។',
+  )
+  if (cls === 'moderate') return t(
+    'Slightly below expected for this stage \u2014 monitor over the coming weeks.',
+    'ទាបជាងកម្រិតបន្តិចសម្រាប់ដំណាក់កាលនេះ \u2014 សូមតាមដានក្នុងសប្តាហ៍ខាងមុខ។',
+  )
+  return t(
+    'Within the expected NDVI range for this growth stage.',
+    'ស្ថិតក្នុងកម្រិត NDVI ដែលគួរមានសម្រាប់ដំណាក់កាលលូតលាស់នេះ។',
+  )
 })
 
 const rainText = computed(() => {
@@ -152,7 +163,12 @@ const rainText = computed(() => {
   return 'Data unavailable'
 })
 
-const plantingText = computed(() => (currentField.value && currentField.value.plantingDate) || '\u2014')
+const plantingText = computed(() => {
+  const f = currentField.value
+  if (!f || !f.plantingDate) return '\u2014'
+  if (f.plantingDateSource === 'estimated') return f.plantingDate + ' (estimated from satellite data)'
+  return f.plantingDate
+})
 const addedText = computed(() => (currentField.value && currentField.value.createdAt ? new Date(currentField.value.createdAt).toLocaleDateString() : '\u2014'))
 const areaHa = computed(() => (currentField.value ? getOrComputeArea(currentField.value) : 0))
 
@@ -271,7 +287,7 @@ async function consultAi() {
         dayCount,
         confidenceTier: confidence ? confidence.tier : null,
         confidenceReason: confidence ? confidence.reason : '',
-        lang: CONSULT_AI_LANG,
+        lang: state.preferredLanguage,
       }),
     })
     let body = null

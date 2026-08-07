@@ -168,10 +168,11 @@ function onCardClick(f) {
 }
 
 function setPlantingDate(f) {
-  store.promptDate(f.plantingDate, (newDate) => {
-    if (newDate === undefined) return
-    store.updateField(f.id, { planting_date: newDate })
-  })
+store.promptDate(f.plantingDate, (newDate) => {
+      if (newDate === undefined) return
+      // A manual overwrite supersedes any satellite-estimated date.
+      store.updateField(f.id, { planting_date: newDate, planting_date_source: 'manual' })
+    })
 }
 
 defineExpose({ open })
