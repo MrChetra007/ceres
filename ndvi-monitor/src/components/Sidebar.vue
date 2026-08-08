@@ -30,6 +30,15 @@
           <i class="ti ti-check drawer-check" v-if="state.compareMode"></i>
         </button>
 
+        <div class="drawer-item lang-toggle">
+          <i class="ti ti-map"></i>
+          <span>{{ t('band.base_layer') }}</span>
+          <div class="lang-seg">
+            <button :class="{ on: state.currentBase === 'street' }" @click="store.setBaseLayer('street')">{{ t('topbar.street') }}</button>
+            <button :class="{ on: state.currentBase === 'satellite' }" @click="store.setBaseLayer('satellite')">{{ t('topbar.satellite') }}</button>
+          </div>
+        </div>
+
         <button class="drawer-item" :title="t('topbar.export_png')" @click="doExport('png')">
           <i class="ti ti-photo"></i><span>{{ t('topbar.export_png') }}</span>
         </button>
