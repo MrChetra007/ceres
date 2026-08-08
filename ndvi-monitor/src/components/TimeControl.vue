@@ -13,6 +13,7 @@
       </button>
       <div class="time-pills">
         <span v-if="state.loading" class="pill">{{ t('common.loading') }}</span>
+        <span v-else-if="state.radarFallback.main" class="pill radar-fallback" :title="radarTooltip(state.radarFallback.main)">📡 {{ t('time.radar_view') }}</span>
         <span v-else-if="state.cloudBlock.main" class="pill cloud-blocked" :title="cloudTooltip(state.cloudBlock.main)">☁️ {{ t('time.cloud_blocked') }}</span>
         <span v-else class="pill" :class="scenePillClass">{{ mainSceneText || t('common.no_scenes') }}</span>
         <button
@@ -74,7 +75,8 @@
 
       <div v-if="state.compareMode" class="scrubber compare">
         <div class="scrubber-row">
-          <span v-if="state.cloudBlock.right" class="pill cloud-blocked" :title="cloudTooltip(state.cloudBlock.right)">☁️ {{ t('time.cloud_blocked') }}</span>
+          <span v-if="state.radarFallback.right" class="pill radar-fallback" :title="radarTooltip(state.radarFallback.right)">📡 {{ t('time.radar_view') }}</span>
+          <span v-else-if="state.cloudBlock.right" class="pill cloud-blocked" :title="cloudTooltip(state.cloudBlock.right)">☁️ {{ t('time.cloud_blocked') }}</span>
           <span v-else class="pill">{{ rightSceneText || t('common.no_scenes') }}</span>
           <button
             v-if="!state.loading && state.cloudBlock.right && rightJumpDate"
@@ -171,6 +173,11 @@ function cloudTooltip(block) {
   const pct = block.cloudPct != null ? Math.round(block.cloudPct) + '% ' + t('common.cloud') : t('common.cloud_covered')
   const last = block.lastValidDate ? t('time.last_valid_reading') + block.lastValidDate : t('time.no_cloud_free')
   return t('time.cloud_covered_on') + block.month + ' (' + pct + ') \u2014 ' + t('time.true_color') + ' ' + t('time.ndvi_unreliable') + ' ' + last
+}
+
+function radarTooltip(block) {
+  if (!block) return ''
+  return t('time.radar_tooltip', { month: block.month })
 }
 
 function sceneText(count) {

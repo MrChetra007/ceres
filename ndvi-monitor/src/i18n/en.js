@@ -70,6 +70,8 @@ export default {
   'time.dry_spell': 'Dry spell',
   'time.low_rain_chirps': 'Low rainfall (CHIRPS)',
   'time.cloud_blocked': 'cloud-blocked',
+  'time.radar_view': 'Radar view (RVI)',
+  'time.radar_tooltip': 'Optical satellite blocked by cloud on {month} — showing a radar-based vegetation signal (RVI) instead. This measures a different thing than NDVI and isn\'t directly comparable — treat it as a rough structural/moisture indicator, not a health score.',
   'time.wet_season': 'Wet Season (Rainfed)',
   'time.dry_season': 'Dry Season (Irrigated)',
   'time.last_valid_reading': 'Last valid reading: ',

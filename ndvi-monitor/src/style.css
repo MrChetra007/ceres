@@ -1965,6 +1965,7 @@ body {
 .pill.low { background: var(--amber-dim); color: var(--amber); }
 .pill.error { background: var(--red-dim); color: var(--red); }
 .pill.cloud-blocked { background: rgba(125, 180, 255, 0.14); color: #8ab6ff; }
+.pill.radar-fallback { background: rgba(165, 100, 255, 0.16); color: #c39aff; }
 
 .jump-btn {
   font-family: 'JetBrains Mono', monospace;

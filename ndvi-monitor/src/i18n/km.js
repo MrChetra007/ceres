@@ -71,6 +71,8 @@ export default {
   'time.dry_spell': 'គ្រោះរាំងស្ងួត',
   'time.low_rain_chirps': 'ទឹកភ្លៀងតិច (CHIRPS)',
   'time.cloud_blocked': 'ពពកបាំង',
+  'time.radar_view': 'ទិដ្ឋភាពរ៉ាដា (RVI)',
+  'time.radar_tooltip': 'រូបភាពអុបទិកត្រូវពពកបាំងក្នុង {month} — បង្ហាញសញ្ញាបន្លែពីរ៉ាដា (RVI) វិញ។ នេះវាស់វែងខុសពី NDVI ហើយមិនអាចប្រៀបធៀបដោយផ្ទាល់បានទេ — ចាត់ទុកជាសូចនាកររចនាសម្ព័ន្ធ/សំណើមប៉ាន់ស្មាន មិនមែនជាពិន្ទុសុខភាពទេ។',
   'time.wet_season': 'រដូវវស្សា',
   'time.dry_season': 'រដូវប្រាំង',
   'time.last_valid_reading': 'ការអានត្រឹមត្រូវចុងក្រោយ៖ ',

@@ -74,11 +74,26 @@ export function loadIndexTile(month, index, geometry, cb) {
       // No clean scenes — check whether any scenes exist at all this month.
       rawCollection.size().evaluate((rawCount) => {
         if (rawCount === 0) { cb({ mode: 'no_data', count: 0, url: null, err: 'none' }); return }
-        // Cloud-blocked: pick the least-cloudy scene for the true-color fallback.
-        const bestScene = rawCollection.sort('CLOUDY_PIXEL_PERCENTAGE').first()
-        getCloudPctAndTrueColor(bestScene, geometry, start, (res) => {
-          cb({ mode: 'cloud_blocked', count: 0, url: res.url, cloudPct: res.cloudPct, lastValidDate: res.lastValidDate, err: res.err })
-        })
+        // Cloud-blocked — before falling back to true-color, try the Sentinel-1
+        // radar fallback (RVI). Radar sees through clouds, and Sentinel-1's
+        // revisit is ~6-12 days, so widen the window ±15 days around the month.
+        getRadarVegetationIndex(
+          geometry,
+          start.advance(-15, 'day'),
+          end.advance(15, 'day'),
+          (radar) => {
+            if (radar.count > 0 && radar.url) {
+              cb({ mode: 'radar_fallback', count: radar.count, url: radar.url, indexUsed: radar.indexUsed })
+              return
+            }
+            // No S1 coverage either — pick the least-cloudy scene for the
+            // original true-color fallback.
+            const bestScene = rawCollection.sort('CLOUDY_PIXEL_PERCENTAGE').first()
+            getCloudPctAndTrueColor(bestScene, geometry, start, (res) => {
+              cb({ mode: 'cloud_blocked', count: 0, url: res.url, cloudPct: res.cloudPct, lastValidDate: res.lastValidDate, err: res.err })
+            })
+          },
+        )
       })
       return
     }
@@ -87,6 +102,36 @@ export function loadIndexTile(month, index, geometry, cb) {
       if (err || !mapId || !mapId.urlFormat) { cb({ mode: 'index', count, url: null, err }); return }
       cb({ mode: 'index', count, url: mapId.urlFormat })
     })
+  })
+}
+
+// Sentinel-1 Radar Vegetation Index (RVI) fallback. Used when Sentinel-2
+// optical imagery is cloud-blocked: radar sees through clouds, so this gives a
+// real vegetation-structure signal where NDVI can't be computed. S1_GRD returns
+// backscatter in decibels (dB), a log scale — RVI MUST be computed on LINEAR
+// power, or the ratio saturates into a flat, meaningless image.
+export function getRadarVegetationIndex(geometry, startDate, endDate, cb) {
+  const e = ee()
+  const s1 = e.ImageCollection('COPERNICUS/S1_GRD')
+    .filterBounds(geometry)
+    .filterDate(startDate, endDate)
+    .filter(e.Filter.eq('instrumentMode', 'IW'))
+    .filter(e.Filter.listContains('transmitterReceiverPolarisation', 'VV'))
+    .filter(e.Filter.listContains('transmitterReceiverPolarisation', 'VH'))
+  s1.size().evaluate((count) => {
+    if (count === 0) { cb({ count: 0, url: null, indexUsed: 'RVI' }); return }
+    const composite = s1.median().clip(geometry)
+    const vvLinear = e.Image(10).pow(composite.select('VV').divide(10))
+    const vhLinear = e.Image(10).pow(composite.select('VH').divide(10))
+    const rvi = vhLinear.multiply(4).divide(vvLinear.add(vhLinear)).rename('RVI')
+    const vis = { min: 0, max: 1, palette: ['blue', 'white', 'green'] }
+    rvi.getMap(vis, (mapId, err) => {
+      if (err || !mapId || !mapId.urlFormat) { cb({ count, url: null, indexUsed: 'RVI', err }); return }
+      cb({ count, url: mapId.urlFormat, indexUsed: 'RVI' })
+    })
+  }, (err) => {
+    console.error('getRadarVegetationIndex.size failed:', err)
+    cb({ count: 0, url: null, indexUsed: 'RVI' })
   })
 }
 

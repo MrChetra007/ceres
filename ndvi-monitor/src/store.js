@@ -64,6 +64,7 @@ export const state = reactive({
   dryMonthSet: new Set(),
   sceneCount: { main: 0, right: 0 },
   cloudBlock: { main: null, right: null },
+  radarFallback: { main: null, right: null },
   rainfallMm: null,
   benchmarkValue: null,
   isDrawing: false,
@@ -476,10 +477,19 @@ export function loadIndexForMonth(idx, geometry, silent) {
   state.mainMonth = idx
   state.sceneCount.main = 0
   state.cloudBlock.main = null
+  state.radarFallback.main = null
   beginLoading()
   const geom = geometry || window.ee.Geometry.Rectangle(state.aoiCoords)
   ee.loadIndexTile(m, state.currentIndex, geom, (res) => {
     state.sceneCount.main = res.count
+    if (res.mode === 'radar_fallback') {
+      endLoading()
+      if (res.url) mapReg.ndviLayer = applyTileLayer(mapReg.map, mapReg.ndviLayer, res.url, 1)
+      else if (mapReg.ndviLayer) { mapReg.map.removeLayer(mapReg.ndviLayer); mapReg.ndviLayer = null }
+      state.radarFallback.main = { month: m.label, indexUsed: res.indexUsed || 'RVI' }
+      setStatus('ready', 'Radar view (RVI) for ' + m.label + ' \u2014 clouds blocked optical view')
+      return
+    }
     if (res.mode === 'cloud_blocked') {
       endLoading()
       if (res.url) mapReg.ndviLayer = applyTileLayer(mapReg.map, mapReg.ndviLayer, res.url, 1)
@@ -515,11 +525,19 @@ export function loadIndexForMonthRight(idx, silent) {
   state.rightMonth = idx
   state.sceneCount.right = 0
   state.cloudBlock.right = null
+  state.radarFallback.right = null
   beginLoading()
   const geom = getGeometry()
   ee.loadIndexTile(m, state.currentIndex, geom, (res) => {
     if (!mapReg.mapRight) { endLoading(); return }
     state.sceneCount.right = res.count
+    if (res.mode === 'radar_fallback') {
+      endLoading()
+      if (res.url) mapReg.ndviLayerRight = applyTileLayer(mapReg.mapRight, mapReg.ndviLayerRight, res.url, 1)
+      else if (mapReg.ndviLayerRight) { mapReg.mapRight.removeLayer(mapReg.ndviLayerRight); mapReg.ndviLayerRight = null }
+      state.radarFallback.right = { month: m.label, indexUsed: res.indexUsed || 'RVI' }
+      return
+    }
     if (res.mode === 'cloud_blocked') {
       endLoading()
       if (res.url) mapReg.ndviLayerRight = applyTileLayer(mapReg.mapRight, mapReg.ndviLayerRight, res.url, 1)
@@ -1151,12 +1169,19 @@ export function viewConfidence(side) {
   if (side === 'main' && state.currentFieldId) {
     const field = state.fields.find((f) => f.id === state.currentFieldId)
     if (field) {
-      // A cloud-blocked current view always dominates the field's own signals.
+      // A radar-fallback or cloud-blocked current view always dominates the
+      // field's own signals.
+      if (state.radarFallback.main) {
+        return { tier: 'medium', reason: 'Radar view (RVI) — optical blocked by cloud' }
+      }
       if (state.cloudBlock.main) {
         return { tier: 'low', reason: 'Cloud-blocked' }
       }
       return fieldConfidence(field)
     }
+  }
+  if (state.radarFallback[side]) {
+    return { tier: 'medium', reason: 'Radar view (RVI) — real data from Sentinel-1' }
   }
   const block = state.cloudBlock[side]
   return getConfidenceTier({
