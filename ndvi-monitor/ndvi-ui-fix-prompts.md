@@ -117,9 +117,65 @@ Show me the updated components for the confidence badge display and the Consult 
 
 ---
 
+## Step 7 — Fix redundant cloud-blocked messaging (3 places saying the same thing)
+
+```
+My NDVI app's cloud-blocked fallback (Part 8 of my roadmap: true-color fallback + unified confidence badge, threshold is >=40% cloud) currently shows the SAME information in three separate places at once when a month is heavily cloud-covered:
+
+1. A small pill next to the month label reading "☁️ cloud-blocked"
+2. A large toast/banner in the top-right corner with the full sentence: "☁️ Cloud-covered on Jul 2026 (49% cloud) — showing true-color image. NDVI can't be reliably calculated. Last valid reading: 2026-06-21"
+3. A "LOW CONFIDENCE" badge in the bottom-right legend area, which ALSO repeats "Cloud-covered — last satellite view unavailable"
+
+This is visual noise — three UI elements competing to say the same thing, and it looks broken/unpolished, especially bad for a demo where the field happens to be fully obscured by cloud (near-white true-color image with almost no useful visual content).
+
+Fix this:
+1. Consolidate into ONE clear message. Keep the small "☁️ cloud-blocked" pill next to the month label as the primary at-a-glance indicator (always visible, low-key).
+2. On hover/tap of that pill, show the full detail (cloud %, "NDVI can't be reliably calculated", last valid reading date) in a tooltip or small popover — don't auto-show a large persistent toast every time the month is cloud-blocked.
+3. The confidence badge (bottom-right) should show ONLY the tier + short reason (e.g. "🔴 Low confidence — cloud-blocked"), NOT the full repeated sentence about last valid reading — that detail already lives in the pill's tooltip from step 2.
+4. When the current view is this heavily cloud-obscured (near-100% white/cloud true-color image, little useful map content), add a small action button or link: "Jump to last valid reading (2026-06-21)" that moves the time slider to that month — turn the bad state into something actionable instead of just an apology.
+5. Auto-dismiss any toast after ~4 seconds if you keep one at all for the FIRST time a user hits a cloud-blocked month in a session, but never show it again for subsequent cloud-blocked months in the same session — rely on the persistent pill instead.
+6. Keep the underlying cloud-detection logic, thresholds, and true-color fallback rendering unchanged — this is a messaging/redundancy fix only.
+
+Show me the updated components: the month pill with tooltip, the confidence badge, and the "jump to last valid reading" action.
+```
+
+---
+
+## Step 8 — Fix mobile settings drawer overlay + overlapping time-panel labels
+
+```
+Two responsive bugs on mobile (<768px) after the Step 1 and Step 7 changes:
+
+BUG A — Settings drawer doesn't actually cover the screen:
+Tapping the hamburger opens a "Settings" header bar (title + X close button) at the top, but the drawer body/menu items are not visibly rendering, and the map + time-slider panel remain fully visible and interactive underneath/behind it. The drawer is either missing its backdrop, missing a solid background on its content area, or has a z-index/height bug that's collapsing it down to just its header row.
+
+Fix:
+1. The drawer container needs an explicit height (100vh or 100dvh) and a solid background color from the existing dark design tokens — it should NOT be see-through to the map behind it.
+2. Add a semi-transparent backdrop/scrim behind the drawer (covering the rest of the screen) that closes the drawer on tap, and ensure the backdrop sits above the map/time-slider panel in z-index but below the drawer itself.
+3. Verify the drawer's menu items (Compare, Export, Telegram alerts, Help, language switch, account email, sign out — from Step 1) are actually rendering inside the drawer body, not just the header — check whether a conditional render or v-if is failing silently.
+4. While the drawer is open, the map and time-slider panel underneath should not be scrollable, clickable, or interactable (trap focus/scroll within the drawer).
+5. Test on a real narrow viewport (375px or so), not just resizing a desktop browser window — this bug may only show up at actual mobile widths/heights.
+
+BUG B — Time-slider panel text overlapping on mobile:
+The month label "July 2026", the "cloud-blocked" pill, and a "Last reading 202..." badge are all overlapping each other and getting cut off at the screen edge on mobile. This looks broken/unpolished — text is rendering on top of other text instead of wrapping or stacking.
+
+Fix:
+1. On mobile widths, stack these elements vertically instead of trying to fit them in one horizontal row: month + season label on one line, the cloud-blocked pill and "last reading" indicator below it (either on their own line, or the last-reading detail moved entirely into the pill's tooltip/popover from Step 7 instead of being a separate always-visible badge).
+2. Make sure no element has a fixed/absolute position that ignores its siblings' widths — use flexbox with wrap or a column layout instead, so elements push each other down rather than overlapping.
+3. Add text-overflow: ellipsis or truncate + tooltip-on-tap for anything that still doesn't fit rather than letting it clip off the edge of the screen.
+4. Re-test the panel specifically in the cloud-blocked state (the worst case, most text) at 375px width and at least one narrower width (~320px) to make sure it holds up.
+5. Keep desktop layout (≥768px) as-is — this is a mobile-only layout fix.
+
+Show me the updated drawer component (with backdrop and proper stacking) and the updated time-slider panel component (mobile-responsive layout, no overlapping text).
+```
+
+---
+
 ### Notes
 
 - Run Step 3 and Step 4 in either order — they don't depend on each other, but both assume Step 1's drawer exists if you're referencing it.
 - Step 4 now assumes you'll check the codebase first (per its own instructions) rather than guessing at the orange icon's function — the roadmap confirms it's part of the Areas/AOI system, just not exactly which sub-action it maps to.
 - Step 6 is optional but worth doing before a pitch/demo — Consult AI and the confidence badges are your most technically interesting features and currently read as afterthoughts in the UI.
+- Step 7 matters most right before recording your demo video — a heavily cloud-blocked field with three overlapping messages is exactly the kind of thing that looks broken on camera. Consider picking a demo month/field you already know is clean (not cloud-blocked) as a workaround if you're recording soon and don't have time to ship this fix first.
+- Step 8 fixes real functional bugs (the drawer not blocking interaction with the map underneath it is a usability bug, not just cosmetic) — prioritize this before Step 6's polish items.
 - After each step, test at both the mobile breakpoint and desktop width before moving to the next — some of these prompts explicitly touch both.

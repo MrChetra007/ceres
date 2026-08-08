@@ -17,6 +17,7 @@ html, body {
 .map-container {
   position: relative;
   z-index: 0;
+  isolation: isolate;
   height: 100%;
   width: 100%;
   display: flex;
@@ -51,7 +52,7 @@ html, body {
 .auth-overlay {
   position: fixed;
   inset: 0;
-  z-index: 1000;
+  z-index: 1002;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -706,7 +707,7 @@ html, body {
 /* Trend chart panel */
 .info-panel {
   position: fixed;
-  top: 0;
+  top: 56px;
   right: 0;
   bottom: 0;
   width: 360px;
@@ -1470,7 +1471,7 @@ body {
   left: 0;
   right: 0;
   height: 56px;
-  z-index: 30;
+  z-index: 1001;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1505,6 +1506,13 @@ body {
   gap: 8px;
   min-width: 0;
   flex: 1 1 0;
+}
+
+.topbar-desktop-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
 }
 
 .brand-chip {
@@ -1716,12 +1724,14 @@ body {
 .tg-status-dot.on { background: var(--accent); }
 
 /* ---- Mobile drawer (Step 1) ---- */
+/* Phones only: the desktop controls and ⋮ "More" menu cover the header above
+   480px, so the hamburger drawer is reserved for the tight mobile layout. */
 .drawer-toggle { display: none; }
 
 .drawer-overlay {
   position: fixed;
   inset: 0;
-  z-index: 44;
+  z-index: 1000;
   background: rgba(0, 0, 0, 0.5);
   backdrop-filter: blur(2px);
   -webkit-backdrop-filter: blur(2px);
@@ -1732,7 +1742,7 @@ body {
   top: 0;
   right: 0;
   bottom: 0;
-  z-index: 45;
+  z-index: 1001;
   width: min(320px, 85vw);
   display: flex;
   flex-direction: column;
@@ -1843,7 +1853,6 @@ body {
   position: absolute;
   top: calc(100% + 6px);
   right: 0;
-  display: none;
   min-width: 220px;
   background: var(--panel-2);
   border: 0.5px solid var(--panel-border-strong);
@@ -2514,7 +2523,7 @@ body {
 
 /* ---- Info panel (dark) ---- */
 .info-panel {
-  z-index: 35;
+  z-index: 1000;
   background: rgba(14, 18, 24, 0.92);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
@@ -2914,10 +2923,9 @@ body {
   .brand-text { display: none; }
   .place-search { width: 120px; }
   .glass-pill span.pill-text { display: none; }
-  .topbar-desktop-controls { display: none; }
-  .topbar-center { display: none; }
-  .topbar-right > .glass-pill.icon { display: none; }
-  .drawer-toggle { display: flex; }
+  /* NOTE: only the user chip collapses here (icon + dropdown). The desktop
+     controls (My Fields, Export, Telegram, Help, Language) and Compare stay
+     visible so the header isn't gutted on zoomed/narrow desktop windows. */
   .time-panel { width: calc(100vw - 24px); }
   .collapse-btn { display: flex; }
   .time-title { cursor: pointer; }
@@ -2951,6 +2959,9 @@ body {
 
 @media (max-width: 480px) {
   .place-search { display: none; }
+  .topbar-desktop-controls { display: none; }
+  .topbar-center { display: none; }
+  .drawer-toggle { display: flex; }
   .time-panel { top: 62px; }
   .band-panel { bottom: 10px; }
   .band-base { display: none; }
@@ -2970,11 +2981,11 @@ body {
 /* ---- Sidebar (Monitored Fields) ---- */
 #sidebar {
   position: fixed;
-  top: 0;
+  top: 56px;
   left: 0;
   bottom: 0;
   width: 300px;
-  z-index: 40;
+  z-index: 1000;
   display: flex;
   flex-direction: column;
   background: rgba(14, 18, 24, 0.94);
@@ -3216,11 +3227,11 @@ body {
 /* ---- Detail panel (field inspector) ---- */
 #field-detail {
   position: fixed;
-  top: 0;
+  top: 56px;
   right: 0;
   bottom: 0;
   width: 360px;
-  z-index: 35;
+  z-index: 1000;
   display: flex;
   flex-direction: column;
   padding: 16px;
