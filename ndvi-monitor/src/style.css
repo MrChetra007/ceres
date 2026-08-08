@@ -2982,7 +2982,7 @@ body {
    push it below the panel's bottom edge on phones/tablets only. */
 @media (max-width: 767px) {
   #map .leaflet-top,
-  #map-right .leaflet-top { top: 142px; }
+  #map-right .leaflet-top { top: 172px; }
 }
 
 @media (max-width: 480px) {
@@ -3011,7 +3011,7 @@ body {
   .drawer-toggle { display: flex; }
   .time-panel { top: 104px; }
   #map .leaflet-top,
-  #map-right .leaflet-top { top: 176px; }
+  #map-right .leaflet-top { top: 206px; }
   .band-panel { bottom: 10px; }
   .band-base { display: none; }
   .band-explainer { bottom: 66px; }
