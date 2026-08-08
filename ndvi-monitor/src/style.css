@@ -1065,6 +1065,71 @@ html, body {
 .ae-apply-btn { background: #1a56db; color: #fff; }
 .ae-apply-btn:hover { background: #1648c0; }
 
+.aoi-editor-tabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 0.75rem;
+  flex-wrap: wrap;
+}
+.aoi-editor-tab {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 8px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  background: #f4f6f8;
+  color: #555;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.aoi-editor-tab:hover { background: #e9edf1; }
+.aoi-editor-tab.active {
+  background: #1a56db;
+  border-color: #1a56db;
+  color: #fff;
+}
+.aoi-field-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 180px;
+  overflow-y: auto;
+}
+.aoi-field-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid #e2e6ea;
+  border-radius: 8px;
+  background: #f9fafb;
+  cursor: pointer;
+  font-size: 0.8rem;
+  transition: background 0.15s, border-color 0.15s;
+}
+.aoi-field-item:hover { background: #eef2f6; }
+.aoi-field-item.active {
+  border-color: #1a56db;
+  background: rgba(26, 86, 219, 0.08);
+}
+.aoi-field-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #333;
+  font-weight: 600;
+}
+.aoi-field-area {
+  flex-shrink: 0;
+  color: #888;
+  font-size: 0.72rem;
+}
+
 .tg-overlay {
   position: fixed; inset: 0; z-index: 2000;
   display: flex; align-items: center; justify-content: center;
@@ -2787,6 +2852,29 @@ body {
 .tg-modal .tg-desc,
 .tg-modal .tg-muted,
 .tg-modal .tg-wait { color: var(--text-dim); }
+
+.aoi-editor-tab {
+  background: rgba(255, 255, 255, 0.05);
+  border: 0.5px solid var(--panel-border);
+  color: var(--text-dim);
+}
+.aoi-editor-tab:hover { background: rgba(255, 255, 255, 0.1); color: var(--text); }
+.aoi-editor-tab.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #0b0f14;
+}
+.aoi-field-item {
+  background: rgba(255, 255, 255, 0.05);
+  border: 0.5px solid var(--panel-border);
+}
+.aoi-field-item:hover { background: rgba(255, 255, 255, 0.1); }
+.aoi-field-item.active {
+  border-color: var(--accent);
+  background: rgba(34, 201, 142, 0.1);
+}
+.aoi-field-name { color: var(--text); }
+.aoi-field-area { color: var(--text-faint); }
 .tg-modal .tg-step { color: var(--text-dim); }
 .tg-modal .tg-step code { background: rgba(255,255,255,0.08); color: var(--accent); }
 .tg-step-num { background: var(--accent); color: #0b0f14; }

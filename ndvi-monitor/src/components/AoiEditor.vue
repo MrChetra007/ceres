@@ -9,14 +9,50 @@
         <input id="ae-name" type="text" v-model="name" :placeholder="t('aoi.name_example')" />
       </div>
 
-      <div class="aoi-editor-field">
+      <div class="aoi-editor-tabs">
+        <button
+          class="aoi-editor-tab"
+          :class="{ active: mode === 'place' }"
+          @click="mode = 'place'"
+        >{{ t('aoi.tab_place') }}</button>
+        <button
+          class="aoi-editor-tab"
+          :class="{ active: mode === 'manual' }"
+          @click="mode = 'manual'"
+        >{{ t('aoi.tab_manual') }}</button>
+        <button
+          v-if="state.fields.length > 0"
+          class="aoi-editor-tab"
+          :class="{ active: mode === 'field' }"
+          @click="mode = 'field'"
+        >{{ t('aoi.tab_field') }}</button>
+      </div>
+
+      <div v-if="mode === 'place'" class="aoi-editor-field">
         <label class="aoi-editor-label" for="ae-query">{{ t('aoi.find_place') }}</label>
         <div class="aoi-search-row">
           <input id="ae-query" type="text" v-model="query" :placeholder="t('aoi.search_place')" @keydown.enter="doSearch" />
           <button class="aoi-search-btn" @click="doSearch">{{ t('common.search') }}</button>
         </div>
-        <p v-if="searchInfo" class="aoi-editor-hint">{{ searchInfo }}</p>
       </div>
+
+      <div v-else-if="mode === 'field'" class="aoi-editor-field">
+        <label class="aoi-editor-label">{{ t('aoi.pick_field') }}</label>
+        <div class="aoi-field-list">
+          <div
+            v-for="f in state.fields"
+            :key="f.id"
+            class="aoi-field-item"
+            :class="{ active: selectedFieldId === f.id }"
+            @click="pickField(f)"
+          >
+            <span class="aoi-field-name">{{ f.name }}</span>
+            <span class="aoi-field-area">{{ fieldArea(f) }}</span>
+          </div>
+        </div>
+      </div>
+
+      <p v-if="searchInfo" class="aoi-editor-hint">{{ searchInfo }}</p>
 
       <div class="aoi-editor-grid">
         <label>{{ t('aoi.west') }}: <input type="number" step="0.001" v-model.number="w" /></label>
@@ -36,6 +72,7 @@
 
 <script setup>
 import { ref, watch } from 'vue'
+import { bbox as turfBBox } from '@turf/turf'
 import { state } from '../store'
 import * as store from '../store'
 import { useI18n } from '../i18n'
@@ -49,18 +86,42 @@ const s = ref(0)
 const e = ref(0)
 const n = ref(0)
 const creating = ref(false)
+const mode = ref('place')
+const selectedFieldId = ref(null)
 
 watch(() => state.aoiEditorVisible, (open) => {
   if (open) {
     name.value = ''
     query.value = ''
     searchInfo.value = ''
+    mode.value = 'place'
+    selectedFieldId.value = null
     w.value = state.aoiCoords[0]
     s.value = state.aoiCoords[1]
     e.value = state.aoiCoords[2]
     n.value = state.aoiCoords[3]
   }
 })
+
+function fieldArea(f) {
+  return store.formatHectares(store.getOrComputeArea(f))
+}
+
+function pickField(f) {
+  if (!f) return
+  selectedFieldId.value = f.id
+  const geom = f.geojson && (f.geojson.geometry || f.geojson)
+  if (!geom || !geom.coordinates) {
+    searchInfo.value = t('aoi.no_fields_left')
+    return
+  }
+  const b = turfBBox(geom)
+  w.value = b[0]
+  s.value = b[1]
+  e.value = b[2]
+  n.value = b[3]
+  searchInfo.value = t('aoi.filled_field', { name: f.name })
+}
 
 function close() {
   state.aoiEditorVisible = false
@@ -89,7 +150,7 @@ function doSearch() {
         e.value = lon + d
         n.value = lat + d
       }
-      searchInfo.value = (state.preferredLanguage === 'km' ? 'បំពេញព្រំដែនពី \u201c' : 'Filled bounds from \u201c') + loc.display_name.split(',')[0] + '\u201d'
+      searchInfo.value = t('aoi.filled_place', { name: loc.display_name.split(',')[0] })
     })
     .catch(() => { searchInfo.value = t('aoi.search_failed') })
 }

@@ -201,6 +201,15 @@ export function updateAoiRectangle() {
   ).addTo(mapReg.map)
 }
 
+// A selected field clips rendering to its own polygon — the broad AOI
+// rectangle should not linger as a visual overlay once a field is active.
+function hideAoiRectangle() {
+  if (mapReg.aoiRectangle) {
+    if (mapReg.map) mapReg.map.removeLayer(mapReg.aoiRectangle)
+    mapReg.aoiRectangle = null
+  }
+}
+
 function applyAoiBounds(coords, label) {
   state.aoiCoords = coords && coords.length === 4 ? coords.slice() : DEFAULT_AOI.slice()
   updateAoiRectangle()
@@ -952,6 +961,7 @@ export function loadField(field) {
     return
   }
   currentGeometry.value = window.ee.Geometry.Polygon(geom.coordinates)
+  hideAoiRectangle()
   state.infoPanelVisible = true
   state.chartSubtitle = field.name
   loadIndexForMonth(state.mainMonth, currentGeometry.value)
@@ -976,6 +986,7 @@ export function clearFieldSelection() {
   mapReg.drawnItems.clearLayers()
   updateDrawEditVisibility()
   setBaseLayer(state.currentBase)
+  updateAoiRectangle()
   loadIndexForMonth(state.mainMonth, null)
   if (state.compareMode) loadIndexForMonthRight(state.rightMonth)
   setStatus('ready', 'Field deselected \u2014 showing full AOI')
