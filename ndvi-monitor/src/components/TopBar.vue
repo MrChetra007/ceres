@@ -77,85 +77,10 @@
         </div>
       </span>
 
-      <button class="glass-pill drawer-toggle" :title="t('topbar.settings')" @click="drawerOpen = true" aria-label="Menu">
+      <button class="glass-pill drawer-toggle" :title="t('topbar.settings')" @click="$emit('menu')" aria-label="Menu">
         <i class="ti ti-menu-2"></i>
       </button>
     </div>
-
-    <transition name="drawer-fade">
-      <div
-        v-if="drawerOpen"
-        class="drawer-overlay"
-        @click="drawerOpen = false"
-      ></div>
-    </transition>
-
-    <transition name="drawer-slide">
-      <aside class="topbar-drawer" v-show="drawerOpen" aria-label="Menu">
-        <div class="drawer-header">
-          <span class="drawer-title"><i class="ti ti-tools"></i>{{ t('topbar.settings') }}</span>
-          <button class="drawer-close" @click="drawerOpen = false" :aria-label="t('common.close')">&times;</button>
-        </div>
-
-        <div class="drawer-account">
-          <i class="ti ti-user"></i>
-          <span>{{ userLabel }}</span>
-        </div>
-
-        <div class="drawer-body">
-          <button class="drawer-item" :title="t('topbar.my_fields')" @click="$emit('menu'); drawerOpen = false">
-            <i class="ti ti-list-details"></i><span>{{ t('topbar.my_fields') }}</span>
-          </button>
-
-          <button
-            class="drawer-item"
-            :class="{ on: state.compareMode }"
-            :title="t('topbar.compare_title')"
-            @click="compareFromDrawer"
-          >
-            <i class="ti ti-columns-3"></i><span>{{ t('topbar.compare') }}</span>
-            <i class="ti ti-check drawer-check" v-if="state.compareMode"></i>
-          </button>
-
-          <button class="drawer-item" :title="t('topbar.export_png')" @click="chooseExport('png')">
-            <i class="ti ti-photo"></i><span>{{ t('topbar.export_png') }}</span>
-          </button>
-          <button class="drawer-item" :title="t('topbar.export_pdf')" @click="chooseExport('pdf')">
-            <i class="ti ti-file-text"></i><span>{{ t('topbar.export_pdf') }}</span>
-          </button>
-
-          <button
-            class="drawer-item"
-            :class="{ on: state.telegramChatId }"
-            :title="t('common.telegram_alerts')"
-            @click="telegramFromDrawer"
-          >
-            <i class="ti ti-brand-telegram"></i><span>{{ t('common.telegram_alerts') }}</span>
-            <span class="tg-status-dot" :class="{ on: state.telegramChatId }"></span>
-          </button>
-
-          <button class="drawer-item" :title="t('topbar.how_this_works')" @click="state.helpVisible = true; drawerOpen = false">
-            <i class="ti ti-help"></i><span>{{ t('topbar.help') }}</span>
-          </button>
-
-          <div class="drawer-item lang-toggle">
-            <i class="ti ti-language"></i>
-            <span>{{ t('common.language') }}</span>
-            <div class="lang-seg">
-              <button :class="{ on: state.preferredLanguage === 'en' }" @click="setLang('en')">EN</button>
-              <button :class="{ on: state.preferredLanguage === 'km' }" @click="setLang('km')">ខ្មែរ</button>
-            </div>
-          </div>
-
-          <button v-if="state.supabaseUser" class="drawer-item sign-out" @click="doSignOut">
-            <i class="ti ti-logout"></i><span>{{ t('common.sign_out') }}</span>
-          </button>
-          <button v-if="!state.supabaseUser" class="drawer-item" @click="signInFromDrawer">
-            <i class="ti ti-login"></i><span>{{ t('topbar.sign_in') }}</span>
-          </button>
-        </div>
-      </aside>
-    </transition>
   </div>
 </template>
 
@@ -176,7 +101,6 @@ const fieldCountLabel = computed(() => {
 })
 
 const settingsOpen = ref(false)
-const drawerOpen = ref(false)
 const settingsWrap = ref(null)
 const userWrap = ref(null)
 const userMenuOpen = ref(false)
@@ -202,7 +126,6 @@ function doSignOut() {
 }
 
 function openTelegram() {
-  drawerOpen.value = false
   userMenuOpen.value = false
   settingsOpen.value = false
   if (!state.supabaseUser) {
@@ -210,21 +133,6 @@ function openTelegram() {
     return
   }
   store.openTelegramModal()
-}
-
-function compareFromDrawer() {
-  state.compareMode = !state.compareMode
-  drawerOpen.value = false
-}
-
-function telegramFromDrawer() {
-  drawerOpen.value = false
-  openTelegram()
-}
-
-function signInFromDrawer() {
-  drawerOpen.value = false
-  store.showAuthOverlay()
 }
 
 function setLang(lang) {
@@ -257,16 +165,10 @@ function onDocClick(e) {
   }
 }
 
-function onKeydown(e) {
-  if (e.key === 'Escape') drawerOpen.value = false
-}
-
 onMounted(() => {
   document.addEventListener('click', onDocClick)
-  window.addEventListener('keydown', onKeydown)
 })
 onBeforeUnmount(() => {
   document.removeEventListener('click', onDocClick)
-  window.removeEventListener('keydown', onKeydown)
 })
 </script>

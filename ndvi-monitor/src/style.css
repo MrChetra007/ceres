@@ -2994,20 +2994,39 @@ body {
 /* ---- Sidebar (Monitored Fields) ---- */
 #sidebar {
   position: fixed;
-  top: 56px;
+  top: 0;
   left: 0;
   bottom: 0;
   width: 300px;
-  z-index: 1000;
+  z-index: 1001;
   display: flex;
   flex-direction: column;
-  background: rgba(14, 18, 24, 0.94);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  background: var(--panel);
   box-shadow: 4px 0 24px rgba(0, 0, 0, 0.4);
   border-right: 0.5px solid var(--panel-border);
   overflow: hidden;
 }
+
+/* Sidebar is now the single settings/drawer (TopBar's local drawer was
+   removed). The `.drawer-overlay` backdrop sits just below it in z-index. */
+.sidebar-backdrop { touch-action: none; }
+
+.sidebar-slide-enter-active, .sidebar-slide-leave-active { transition: transform 0.25s ease; }
+.sidebar-slide-enter-from, .sidebar-slide-leave-to { transform: translateX(-100%); }
+
+/* Fixed settings section + scrollable fields section below it. */
+.sidebar-fields {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-top: 0.5px solid var(--panel-border);
+}
+
+.drawer-header,
+.drawer-account,
+.drawer-body { flex-shrink: 0; }
 
 .sidebar-header {
   display: flex;
@@ -3505,12 +3524,12 @@ body {
 @media (max-width: 780px) {
   #sidebar {
     width: 100%;
-    height: 55%;
-    top: auto;
+    top: 0;
     bottom: 0;
+    height: 100dvh;
+    height: 100vh;
     border-right: none;
-    border-top: 0.5px solid var(--panel-border-strong);
-    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    border-radius: 0;
   }
   #field-detail {
     width: 100%;
