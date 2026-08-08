@@ -1,27 +1,50 @@
--- Phase 13 Feature 2 — Ground-truth photo attachments (webhook part).
---
--- 1. A PRIVATE Supabase Storage bucket for field photos. Photos are read via
---    signed URLs generated server-side / RLS-respecting client calls; never
---    public.
-insert into storage.buckets (id, name, public)
-values ('field-photos', 'field-photos', false)
-on conflict (id) do nothing;
-
--- When a photo arrives and the field can't be inferred unambiguously (multiple
--- recent alerts / multiple fields), the webhook parks a row here and replies
--- with an inline keyboard. The subsequent callback_query resolves which field
--- and then this row is consumed + deleted.
-create table pending_photo (
+-- 1. Create field_photos table
+create table if not exists public.field_photos (
   id uuid primary key default gen_random_uuid(),
+  field_id uuid not null references public.fields(id) on delete cascade,
   owner_id uuid not null references auth.users(id) on delete cascade,
-  chat_id text not null,
-  telegram_file_id text not null,
-  telegram_file_path text,
   storage_path text not null,
-  field_ids uuid[] not null default '{}',
-  created_at timestamptz default now()
+  caption text,
+  created_at timestamptz not null default now()
 );
 
-alter table pending_photo enable row level security;
--- service_role (from the webhook) manages these rows, so no client policy is
--- required; the bot itself acts on behalf of the logged-in owner.
+alter table public.field_photos enable row level security;
+
+-- 2. RLS on field_photos — owner can read/write their own field's photos
+drop policy if exists "field_photos_owner_select" on public.field_photos;
+create policy "field_photos_owner_select" on public.field_photos
+  for select using (owner_id = auth.uid());
+
+drop policy if exists "field_photos_owner_insert" on public.field_photos;
+create policy "field_photos_owner_insert" on public.field_photos
+  for insert with check (owner_id = auth.uid());
+
+drop policy if exists "field_photos_owner_delete" on public.field_photos;
+create policy "field_photos_owner_delete" on public.field_photos
+  for delete using (owner_id = auth.uid());
+
+-- 3. RLS on pending_photo (currently has none)
+alter table public.pending_photo enable row level security;
+
+drop policy if exists "pending_photo_owner_select" on public.pending_photo;
+create policy "pending_photo_owner_select" on public.pending_photo
+  for select using (owner_id = auth.uid());
+
+drop policy if exists "pending_photo_owner_all" on public.pending_photo;
+create policy "pending_photo_owner_all" on public.pending_photo
+  for all using (owner_id = auth.uid()) with check (owner_id = auth.uid());
+
+-- 4. Storage policies on the field-photos bucket (path convention: {owner_id}/{ts}.jpg)
+drop policy if exists "field_photos_storage_select" on storage.objects;
+create policy "field_photos_storage_select" on storage.objects
+  for select using (
+    bucket_id = 'field-photos'
+    and (storage.foldername(name))[1] = auth.uid()::text
+  );
+
+drop policy if exists "field_photos_storage_insert" on storage.objects;
+create policy "field_photos_storage_insert" on storage.objects
+  for insert with check (
+    bucket_id = 'field-photos'
+    and (storage.foldername(name))[1] = auth.uid()::text
+  );
