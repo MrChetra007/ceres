@@ -2192,9 +2192,11 @@ body {
 
 .areas-menu {
   position: absolute;
-  bottom: calc(100% + 6px);
-  left: 0;
+  bottom: calc(100% + 26px);
+  right: 0;
+  left: auto;
   min-width: 220px;
+  max-width: calc(100vw - 24px);
   background: var(--panel-2);
   border: 0.5px solid var(--panel-border-strong);
   border-radius: var(--radius-md);
