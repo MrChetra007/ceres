@@ -2496,6 +2496,8 @@ body {
   flex-direction: column;
   align-items: flex-end;
   gap: 4px;
+  flex: 0 0 auto;
+  max-width: 100%;
 }
 
 .card-conf {
@@ -3113,7 +3115,7 @@ body {
   align-items: center;
   gap: 9px;
   width: calc(100% - 32px);
-  margin: 0 16px 10px;
+  margin: 0 16px 14px;
   padding: 10px 12px;
   background: linear-gradient(90deg, var(--accent-dim), rgba(34, 201, 142, 0.05));
   border: 0.5px solid rgba(34, 201, 142, 0.3);
@@ -3146,6 +3148,7 @@ body {
   padding: 10px 12px;
   margin-bottom: 8px;
   cursor: pointer;
+  overflow: hidden;
   transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
 }
 
@@ -3158,10 +3161,17 @@ body {
 
 .field-card-header {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: flex-start;
-  gap: 8px;
+  gap: 4px 8px;
   margin-bottom: 6px;
+}
+
+/* Left text column: allow it to shrink / wrap instead of overflowing. */
+.field-card-header > div:first-child {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .field-card-name {
@@ -3178,9 +3188,12 @@ body {
   margin: 2px 0 0;
   font-size: 10px;
   color: var(--text-faint);
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  word-break: break-word;
 }
 
 .field-card-row {

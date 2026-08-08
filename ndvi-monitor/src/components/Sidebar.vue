@@ -127,7 +127,6 @@
                 <line v-else x1="0" y1="14" x2="100" y2="14" stroke-dasharray="3 3" />
               </svg>
               <div class="field-card-stats">
-                <span class="mono">{{ valueLine(f) }}</span>
                 <button class="plant-date-btn" :title="t('sidebar.set_planting_date')" @click.stop="setPlantingDate(f)"><i class="ti ti-edit"></i></button>
               </div>
             </div>
@@ -219,11 +218,6 @@ function stageLine(f) {
   if (!s) return 'Loading\u2026'
   if (s.stageLabel) return s.stageLabel
   return s.value != null ? 'NDVI ' + s.value.toFixed(2) : '\u2014'
-}
-
-function valueLine(f) {
-  const s = status(f)
-  return s && s.value != null ? 'NDVI ' + s.value.toFixed(2) : '\u2014'
 }
 
 function sparkPoints(f) {
