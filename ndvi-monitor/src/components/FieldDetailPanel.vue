@@ -203,8 +203,10 @@ function updateMarker() {
 }
 
 function onClose() {
-  if (isField.value) store.clearFieldSelection()
-  else state.infoPanelVisible = false
+  // Just hide the panel — keep the field selected/drawn so the map's edit
+  // control and the field's clip stay active. Deselect happens via the card
+  // (click again) or the sidebar delete action instead.
+  state.infoPanelVisible = false
 }
 
 async function loadPhotos() {

@@ -977,6 +977,35 @@ export function loadFieldById(id) {
   if (field) loadField(field)
 }
 
+// Edit a field's drawn boundary. Ensures the field is drawn on the map, then
+// enables leaflet-draw's edit mode on the field polygon. The detail panel is
+// hidden so the map toolbar is unobstructed while the user drags points.
+export function startFieldEdit(field) {
+  if (!mapReg.map || !mapReg.drawControl) { showToast('Map not ready'); return }
+  if (!state.supabaseUser) { state.authOverlayVisible = true; showToast('Sign in to edit fields'); return }
+  if (!field) return
+  const needsLoad = state.currentFieldId !== field.id
+  if (needsLoad) loadField(field)
+  state.infoPanelVisible = false
+  const enableEdit = () => {
+    try {
+      // leaflet-draw 1.0.4 stores the edit toolbar as `_toolbars.edit`
+      // (keyed by L.EditToolbar.TYPE), with the handler in `_modes.edit`.
+      const tm = mapReg.drawControl._toolbars
+      const editTb = tm && tm.edit
+      const mode = editTb && editTb._modes && editTb._modes.edit
+      if (mode && mode.handler && typeof mode.handler.enable === 'function') {
+        mode.handler.enable()
+        return
+      }
+    } catch (e) {}
+    const btn = document.querySelector('.leaflet-draw-edit-edit')
+    if (btn) btn.click()
+  }
+  if (needsLoad) requestAnimationFrame(enableEdit)
+  else enableEdit()
+}
+
 export function clearFieldSelection() {
   state.currentFieldId = null
   state.currentFieldName = null

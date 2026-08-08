@@ -125,6 +125,7 @@ export default {
   'sidebar.parcels': 'ដី',
   'sidebar.search': 'ស្វែងរកវាល...',
   'sidebar.set_planting_date': 'កំណត់កាលបរិច្ឆេទដាំ',
+  'sidebar.edit_field': 'កែសម្រួលព្រំដីវាល',
   'sidebar.delete_field': 'លុបវាល',
   'sidebar.no_fields': 'មិនទាន់មានវាលទេ — សូមគូសចតុកោណ ឬពហុកោណលើផែនទីដើម្បីបន្ថែមវាលដំបូងរបស់អ្នក។',
   'sidebar.no_match': 'គ្មានវាលណាត្រូវនឹងតម្រានេះទេ។',

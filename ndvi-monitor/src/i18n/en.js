@@ -124,6 +124,7 @@ export default {
   'sidebar.parcels': 'parcels',
   'sidebar.search': 'Search fields...',
   'sidebar.set_planting_date': 'Set planting date',
+  'sidebar.edit_field': 'Edit field boundary',
   'sidebar.delete_field': 'Delete field',
   'sidebar.no_fields': 'No fields yet — draw a rectangle or polygon on the map to add your first one.',
   'sidebar.no_match': 'No fields match this filter.',

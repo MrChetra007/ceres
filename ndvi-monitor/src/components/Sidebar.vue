@@ -127,7 +127,8 @@
                 <line v-else x1="0" y1="14" x2="100" y2="14" stroke-dasharray="3 3" />
               </svg>
               <div class="field-card-stats">
-                <button class="plant-date-btn" :title="t('sidebar.set_planting_date')" @click.stop="setPlantingDate(f)"><i class="ti ti-edit"></i></button>
+                <button class="plant-date-btn" :title="t('sidebar.set_planting_date')" @click.stop="setPlantingDate(f)"><i class="ti ti-calendar-plus"></i></button>
+                <button class="plant-date-btn" :title="t('sidebar.edit_field')" @click.stop="store.startFieldEdit(f)"><i class="ti ti-pencil"></i></button>
               </div>
             </div>
 
