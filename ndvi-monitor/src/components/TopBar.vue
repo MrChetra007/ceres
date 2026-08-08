@@ -150,6 +150,9 @@
           <button v-if="state.supabaseUser" class="drawer-item sign-out" @click="doSignOut">
             <i class="ti ti-logout"></i><span>{{ t('common.sign_out') }}</span>
           </button>
+          <button v-if="!state.supabaseUser" class="drawer-item" @click="signInFromDrawer">
+            <i class="ti ti-login"></i><span>{{ t('topbar.sign_in') }}</span>
+          </button>
         </div>
       </aside>
     </transition>
@@ -217,6 +220,11 @@ function compareFromDrawer() {
 function telegramFromDrawer() {
   drawerOpen.value = false
   openTelegram()
+}
+
+function signInFromDrawer() {
+  drawerOpen.value = false
+  store.showAuthOverlay()
 }
 
 function setLang(lang) {

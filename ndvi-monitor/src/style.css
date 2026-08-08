@@ -2912,6 +2912,13 @@ body {
 .band-wrap { display: contents; }
 
 /* ---- Responsive (spec section 5) ---- */
+/* Step 3: on desktop the time-slider panel is always expanded (collapse is a
+   mobile-only behavior). The `collapsed` ref may still be true from a prior
+   mobile session — force the scrubber open here so the slider is never lost. */
+@media (min-width: 781px) {
+  .time-panel.collapsed .scrubber-wrap { grid-template-rows: 1fr; }
+}
+
 @media (max-width: 1024px) {
   .map-legend { display: none; }
   .brand-loc { display: none; }
@@ -2927,6 +2934,12 @@ body {
      controls (My Fields, Export, Telegram, Help, Language) and Compare stay
      visible so the header isn't gutted on zoomed/narrow desktop windows. */
   .time-panel { width: calc(100vw - 24px); }
+  /* Step 8 BUG B: stack the time-panel header on mobile so the month label,
+     cloud-blocked pill, and "Last reading" jump badge never overlap. */
+  .time-head { flex-wrap: wrap; row-gap: 4px; }
+  .time-title { flex: 1 1 auto; min-width: 0; }
+  .time-pills { flex-basis: 100%; width: 100%; margin-left: 0; justify-content: flex-end; flex-wrap: wrap; row-gap: 4px; }
+  .month-label { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
   .collapse-btn { display: flex; }
   .time-title { cursor: pointer; }
   .topbar-right .glass-pill { padding: 6px 9px; }
