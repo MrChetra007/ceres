@@ -33,14 +33,38 @@ begin
 end;
 $$ language plpgsql security definer;
 
+create or replace function public.protect_telegram_chat_id()
+returns trigger as $$
+begin
+  if auth.uid() is not null
+     and old.telegram_chat_id is distinct from new.telegram_chat_id
+     and new.telegram_chat_id is not null then
+    raise exception 'telegram_chat_id can only be set through the Telegram bot';
+  end if;
+  return new;
+end;
+$$ language plpgsql security definer;
+
+drop trigger if exists trg_protect_telegram_chat_id on public.profiles;
+create trigger trg_protect_telegram_chat_id
+  before update on public.profiles
+  for each row
+  execute function public.protect_telegram_chat_id();
+
 -- Guard: a logged-in user must NOT be able to set/overwrite telegram_chat_id
--- directly through the normal "update own profile" policy (only the bot may set
--- it via redeem_link_code, and the app only clears it to NULL on disconnect).
+-- directly through the normal "update own profile" update (only the bot may set
+-- it via redeem_link_chat, and the app only clears it to NULL on disconnect).
 -- auth.uid() is NULL for service_role requests (the bot's edge function) and
 -- non-NULL for logged-in users, so this allows the bot but blocks the user.
+-- The `old ... is distinct from new.telegram_chat_id` check is important:
+-- a PATCH that only touches other columns (e.g. preferred_language) leaves
+-- telegram_chat_id unchanged, so NEW.telegram_chat_id still holds the linked
+-- chat id — without the distinct check every profile update would be blocked.
 create function public.prevent_direct_telegram_chat_id() returns trigger as $$
 begin
-  if new.telegram_chat_id is not null and auth.uid() is not null then
+  if auth.uid() is not null
+     and old.telegram_chat_id is distinct from new.telegram_chat_id
+     and new.telegram_chat_id is not null then
     raise exception 'telegram_chat_id can only be set through the Telegram bot';
   end if;
   return new;
@@ -64,3 +88,7 @@ begin
   return deleted;
 end;
 $$ language plpgsql security definer;
+
+
+drop trigger if exists prevent_direct_telegram_chat_id on public.profiles;
+drop function if exists prevent_direct_telegram_chat_id();

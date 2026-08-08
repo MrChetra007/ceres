@@ -141,12 +141,14 @@ export async function insertLinkCode(code, userId, expiresAt) {
 }
 
 export async function clearTelegramChatId() {
-  const { error } = await sb.from('profiles').update({ telegram_chat_id: null })
+  const session = await requireSession()
+  const { error } = await sb.from('profiles').update({ telegram_chat_id: null }).eq('id', session.user.id)
   if (error) throw error
 }
 
 export async function setPreferredLanguage(lang) {
-  const { error } = await sb.from('profiles').update({ preferred_language: lang })
+  const session = await requireSession()
+  const { error } = await sb.from('profiles').update({ preferred_language: lang }).eq('id', session.user.id)
   if (error) throw error
 }
 

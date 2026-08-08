@@ -35,6 +35,7 @@ export const mapReg = {
   syncing: false,
 }
 
+
 // ---------------------------------------------------------------------------
 // Shared state
 // ---------------------------------------------------------------------------
@@ -1082,6 +1083,8 @@ export function cancelDraw() {
   }
   state.isDrawing = false
 }
+
+
 
 export function promptSaveField(geojson) {
   const name = window.prompt('Name this field (e.g. "North paddy \u2014 Svay Cheat"):')
