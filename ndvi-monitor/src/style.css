@@ -2931,7 +2931,10 @@ body {
 }
 
 @media (max-width: 780px) {
-  .brand-text { display: none; }
+  /* BUG A: keep the app title + "BATTAMBANG · N fields" subtitle visible on
+     mobile instead of collapsing the header to a bare leaf icon. */
+  .brand-text { display: flex; }
+  .brand-loc { display: block; }
   .place-search { width: 120px; }
   .glass-pill span.pill-text { display: none; }
   /* NOTE: only the user chip collapses here (icon + dropdown). The desktop
@@ -2974,12 +2977,41 @@ body {
   .dashboard { width: 100%; }
 }
 
+/* BUG B: keep the mobile map zoom controls clear of the time-slider panel
+   (which sits across the top of the viewport). Base is top:64px (line 2887);
+   push it below the panel's bottom edge on phones/tablets only. */
+@media (max-width: 767px) {
+  #map .leaflet-top,
+  #map-right .leaflet-top { top: 142px; }
+}
+
 @media (max-width: 480px) {
-  .place-search { display: none; }
+  /* BUG A: two-row header — row 1 logo + title/subtitle + hamburger, row 2
+     full-width search input. Header grows taller, so the panels below shift. */
+  .topbar {
+    flex-wrap: wrap;
+    height: auto;
+    align-content: flex-start;
+    row-gap: 6px;
+    padding-top: 6px;
+    padding-bottom: 6px;
+  }
+  .topbar-left { flex-wrap: wrap; row-gap: 6px; }
+  .brand-text { display: flex; }
+  .brand-loc { display: block; }
+  .place-search {
+    display: flex;
+    flex: 1 1 100%;
+    order: 5;
+    width: 100%;
+    box-sizing: border-box;
+  }
   .topbar-desktop-controls { display: none; }
   .topbar-center { display: none; }
   .drawer-toggle { display: flex; }
-  .time-panel { top: 62px; }
+  .time-panel { top: 104px; }
+  #map .leaflet-top,
+  #map-right .leaflet-top { top: 176px; }
   .band-panel { bottom: 10px; }
   .band-base { display: none; }
   .band-explainer { bottom: 66px; }
