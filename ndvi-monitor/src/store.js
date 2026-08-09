@@ -1339,7 +1339,7 @@ export function cancelDate() {
 // ---------------------------------------------------------------------------
 // Field status / dashboard
 // ---------------------------------------------------------------------------
-export function buildStatusObject(field, value, index) {
+export function buildStatusObject(field, value, index, asOfDate) {
   index = index || 'ndvi'
   if (index !== 'ndvi') {
     if (index === 'ndwi') {
@@ -1359,7 +1359,8 @@ export function buildStatusObject(field, value, index) {
     else { cls2 = 'stressed'; lbl2 = 'Stressed' }
     return { badgeClass: cls2, badgeText: lbl2, stageLabel: 'NDVI ' + value.toFixed(2) }
   }
-  const daysSincePlanting = Math.floor((Date.now() - new Date(field.plantingDate).getTime()) / 86400000)
+  const asOf = asOfDate ? new Date(asOfDate).getTime() : Date.now()
+  const daysSincePlanting = Math.floor((asOf - new Date(field.plantingDate).getTime()) / 86400000)
   if (daysSincePlanting < 0) return { badgeClass: 'moderate', badgeText: 'Check date', stageLabel: 'Planting date is in the future' }
   const stage = getGrowthStage(daysSincePlanting)
   let cls3, lbl3

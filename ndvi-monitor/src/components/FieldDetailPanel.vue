@@ -145,12 +145,80 @@ const conf = computed(() => {
 })
 const noSceneData = computed(() => !state.loading && state.sceneCount.main === 0)
 
+// The active observation for the currently-scrubbed month. `state.chartData` is
+// the per-scene (cloud-free, same collection the map monthly composite uses)
+// series that drives the trend chart — deriving the hero from THIS, rather than
+// the one-shot 90-day `fieldStatus` query, is what makes the sidebar follow the
+// slider date exactly like the map does.
+const selectedMonthWindow = computed(() => {
+  const m = MONTHS[state.mainMonth]
+  if (!m) return null
+  // Compute in UTC so the comparison lines up with chartData's ISO dates
+  // (e.g. '2025-11-08' parses as UTC midnight, not local midnight).
+  const start = Date.UTC(m.year, m.month - 1, 1)
+  const end = Date.UTC(m.year, m.month, 1)
+  return { start, end }
+})
+
+const activeObservation = computed(() => {
+  const data = state.chartData
+  if (!Array.isArray(data) || !data.length) return null
+  const w = selectedMonthWindow.value
+  if (!w) return null
+  const within = data.filter((d) => {
+    const ts = new Date(d.date).getTime()
+    return ts >= w.start && ts < w.end
+  })
+  if (!within.length) return null
+  const sorted = within.slice().sort((a, b) => a.date.localeCompare(b.date))
+  const last = sorted[sorted.length - 1]
+  return { value: last.value, date: last.date }
+})
+
+// Reconstruct a date-only string without the ISO UTC shift that could roll a
+// boundary month start to the previous day in UTC.
+function monthStartISO(m) {
+  const y = m.year
+  const mm = String(m.month).padStart(2, '0')
+  return y + '-' + mm + '-01'
+}
+
+const asOfDate = computed(() => {
+  const obs = activeObservation.value
+  if (obs && obs.date) return obs.date
+  const m = MONTHS[state.mainMonth]
+  if (m) return monthStartISO(m)
+  return new Date().toISOString().slice(0, 10)
+})
+
+// Primary month-scoped status -> falls back to the one-shot latest reading only
+// while the trend series is still loading (chartData not yet populated).
+const monthStatus = computed(() => {
+  const f = currentField.value
+  const obs = activeObservation.value
+  if (!f || !obs || obs.value == null) return null
+  return store.buildStatusObject(f, obs.value, state.currentIndex, asOfDate.value)
+})
+
+const heroStatus = computed(() => monthStatus.value || (Array.isArray(state.chartData) && state.chartData.length ? null : status.value))
+
 const title = computed(() => (isField.value ? currentField.value.name : INDICES[state.chartIndex].name + ' ' + t('index.trend')))
-const statusText = computed(() => (status.value && status.value.badgeText) || '\u2014')
-const statusTone = computed(() => (status.value && status.value.badgeClass) || 'healthy')
-const stageText = computed(() => (status.value && status.value.stageLabel) || '')
+const statusText = computed(() => (heroStatus.value && heroStatus.value.badgeText) || '\u2014')
+const statusTone = computed(() => (heroStatus.value && heroStatus.value.badgeClass) || 'healthy')
+const stageText = computed(() => (monthStatus.value && monthStatus.value.stageLabel) || (status.value && status.value.stageLabel) || '')
 const benchmarkText = computed(() => (state.benchmarkValue != null ? state.benchmarkValue.toFixed(3) : '\u2014'))
-const heroValue = computed(() => (status.value && status.value.value != null ? status.value.value.toFixed(3) : '\u2014'))
+const heroValue = computed(() => {
+  const obs = activeObservation.value
+  // Same loading rule as heroStatus: fall back to the latest fieldStatus value
+  // ONLY while the trend series hasn't loaded yet. Once chartData is present,
+  // the hero reflects the scrubbed month — a cloud-blocked month shows '—'
+  // together with the "Last clear reading (fixed reference)" note below.
+  if (obs && obs.value != null) return obs.value.toFixed(3)
+  if (!Array.isArray(state.chartData) || !state.chartData.length) {
+    if (status.value && status.value.value != null) return status.value.value.toFixed(3)
+  }
+  return '\u2014'
+})
 const radarMapNote = computed(() => !!state.radarFallback.main)
 const heroLastClearDate = computed(() => {
   if (status.value && status.value.date) return status.value.date
@@ -159,7 +227,10 @@ const heroLastClearDate = computed(() => {
 })
 const showHeroStaleNote = computed(() => {
   const stale = !!state.radarFallback.main || !!state.cloudBlock.main || !!(status.value && status.value.cloudBlocked)
-  return stale && !!heroLastClearDate.value
+  // Only surface the note when the scrubbed month has no clear reading of its
+  // own (cloud-blocked / radar fallback), so "Last clear reading" unambiguously
+  // reads as a fixed reference point, never as the hero value.
+  return stale && !!heroLastClearDate.value && !monthStatus.value
 })
 
 // Growth stage is a property of the crop's age (planting date), NOT of the
@@ -167,10 +238,12 @@ const showHeroStaleNote = computed(() => {
 // NDVI/NDWI/LSWI tabs. Computed here directly from the planting date instead of
 // from status.stageLabel, because stageLabel only carries the band value (e.g.
 // "NDWI 0.72") on the non-NDVI tabs.
+// Day count uses the scrubbed month's as-of date, NOT the current calendar date,
+// so the stage card tracks the slider like every other date-driven surface.
 const growthStageDays = computed(() => {
   const f = currentField.value
   if (!f || !f.plantingDate) return null
-  const d = Math.floor((Date.now() - new Date(f.plantingDate).getTime()) / 86400000)
+  const d = Math.floor((new Date(asOfDate.value).getTime() - new Date(f.plantingDate).getTime()) / 86400000)
   return d
 })
 const stageName = computed(() => {
@@ -191,11 +264,11 @@ const stagePct = computed(() => {
 })
 
 const stressTone = computed(() => {
-  const cls = status.value && status.value.badgeClass
+  const cls = heroStatus.value && heroStatus.value.badgeClass
   return cls === 'stressed' ? 'tone-red' : cls === 'moderate' ? 'tone-amber' : 'tone-green'
 })
 const stressMsg = computed(() => {
-  const cls = status.value && status.value.badgeClass
+  const cls = heroStatus.value && heroStatus.value.badgeClass
   if (cls === 'stressed') return t('field.stress_high')
   if (cls === 'moderate') return t('field.stress_moderate')
   return t('field.stress_healthy')
@@ -329,13 +402,13 @@ async function consultAi() {
   let growthStage = null
   let dayCount = null
   if (field.plantingDate) {
-    const days = Math.floor((Date.now() - new Date(field.plantingDate).getTime()) / 86400000)
+    const days = Math.floor((new Date(asOfDate.value).getTime() - new Date(field.plantingDate).getTime()) / 86400000)
     if (days >= 0) {
       dayCount = days
       growthStage = store.getGrowthStage(days).stage
     }
   }
-  const healthStatus = status.value ? status.value.badgeText : ''
+  const healthStatus = heroStatus.value && heroStatus.value.badgeText ? heroStatus.value.badgeText : ''
   const confidence = conf.value && conf.value.tier ? conf.value : null
 
   let token
