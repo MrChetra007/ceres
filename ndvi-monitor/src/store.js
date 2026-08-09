@@ -45,7 +45,7 @@ export const state = reactive({
   mainMonth: Math.max(0, MONTHS.length - 2),
   rightMonth: Math.max(0, MONTHS.length - 5),
   compareMode: false,
-  currentBase: 'street',
+  currentBase: 'satellite',
   currentFieldId: null,
   currentFieldName: null,
   lastClickPoint: null,

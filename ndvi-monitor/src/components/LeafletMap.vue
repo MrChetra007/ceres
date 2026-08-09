@@ -31,10 +31,21 @@ const containerEl = ref(null)
 const rightWidth = ref(50)
 const resizing = ref(false)
 
+function baseTileConfig() {
+  const satellite = state.currentBase === 'satellite'
+  return {
+    url: satellite
+      ? 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'
+      : 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+    attribution: satellite ? 'Tiles &copy; Esri' : '&copy; OpenStreetMap contributors',
+  }
+}
+
 function makeMainMap() {
   const map = L.map(mapEl.value, { center: MAP_CENTER, zoom: MAP_ZOOM })
-  const baseLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '&copy; OpenStreetMap contributors',
+  const baseConfig = baseTileConfig()
+  const baseLayer = L.tileLayer(baseConfig.url, {
+    attribution: baseConfig.attribution,
     maxZoom: 19,
   }).addTo(map)
   const drawnItems = new L.FeatureGroup()
@@ -77,8 +88,9 @@ function makeMainMap() {
 function makeRightMap() {
   if (mapReg.mapRight) return
   const mapRight = L.map(mapRightEl.value, { center: MAP_CENTER, zoom: MAP_ZOOM })
-  const baseLayerRight = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '&copy; OpenStreetMap contributors',
+  const baseConfig = baseTileConfig()
+  const baseLayerRight = L.tileLayer(baseConfig.url, {
+    attribution: baseConfig.attribution,
     maxZoom: 19,
   }).addTo(mapRight)
   mapReg.mapRight = mapRight
