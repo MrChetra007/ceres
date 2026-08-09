@@ -7,6 +7,7 @@ import {
   TELEGRAM_BOT_USERNAME, TELEGRAM_LINK_TTL_MS, SEASON_PRESETS,
 } from './config'
 import * as ee from './services/earthEngine'
+import { loadTrueColor } from './services/earthEngine'
 import { sb } from './services/supabase'
 import * as supabase from './services/supabase'
 
@@ -518,7 +519,7 @@ export function loadIndexForMonth(idx, geometry, silent) {
   beginLoading()
   const geom = geometry || window.ee.Geometry.Rectangle(state.aoiCoords)
   if (state.currentIndex === 'truecolor') {
-    ee.loadTrueColor(m, geom, state.trueColorDate, (res) => {
+    loadTrueColor(m, geom, state.trueColorDate, (res) => {
       endLoading()
       state.sceneCount.main = res.count
       state.trueColorScenes = res.scenes || []
@@ -590,7 +591,7 @@ export function loadIndexForMonthRight(idx, silent) {
   beginLoading()
   const geom = getGeometry()
   if (state.currentIndex === 'truecolor') {
-    ee.loadTrueColor(m, geom, state.trueColorDateRight, (res) => {
+    loadTrueColor(m, geom, state.trueColorDateRight, (res) => {
       if (!mapReg.mapRight) { endLoading(); return }
       endLoading()
       state.sceneCount.right = res.count
