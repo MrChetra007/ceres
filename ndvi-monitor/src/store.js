@@ -1251,7 +1251,7 @@ export function loadField(field) {
   })
   applyFieldStyle()
   updateDrawEditVisibility()
-  mapReg.map.fitBounds(geo.getBounds())
+  mapReg.map.fitBounds(geo.getBounds(), { maxZoom: 18, padding: [40, 40] })
 
   const geom = field.geojson && (field.geojson.geometry || field.geojson)
   if (!geom || !geom.coordinates) {
