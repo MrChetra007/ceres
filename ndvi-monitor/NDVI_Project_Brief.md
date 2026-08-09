@@ -13,6 +13,7 @@ Satellite-based rice crop health monitor for Battambang, Cambodia. Shows NDVI/ND
 ## Core features (live, deployed, confirmed working)
 - Live NDVI/NDWI/LSWI map with time slider (14-month history), scene-count confidence indicator
 - 4th **True Color photo** band — real Sentinel-2 RGB (B4·B3·B2) per-scene imagery with a date picker; clouds stay visible/unmasked, colored-legend hidden, band-exact day counts/growth stages
+- **"Latest Satellite View"** button — standalone shortcut (independent of the time slider) that renders the most recent Sentinel-2 pass over the selected area as an un-masked True Color photo, with a clear "Latest available: <date> · <cloud>% cloud" label (or "No recent satellite pass available" when the 90-day lookback is empty); leaves the slider and slider-driven sidebar analysis untouched
 - Satellite basemap by default + stable overlay layering (fixed `zIndex`/`bringToFront`), so index/True-Color layers always render above the base and survive slider/basemap switches
 - Click-to-inspect trend chart + automatic stress detection (>15% NDVI drop)
 - Draw & save fields, multi-area support (5-area cap per user)
