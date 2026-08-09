@@ -51,3 +51,14 @@ create policy "field_photos_storage_insert" on storage.objects
 
   alter table alerts_log add column if not exists telegram_sent boolean default null;
 alter table ai_explanations add column if not exists truncated boolean default null;
+
+
+
+select column_name, data_type
+from information_schema.columns
+where table_name = 'field_photos'
+order by ordinal_position;
+alter table field_photos 
+  add column if not exists alert_log_id uuid references alerts_log(id);
+
+  notify pgrst, 'reload schema';
