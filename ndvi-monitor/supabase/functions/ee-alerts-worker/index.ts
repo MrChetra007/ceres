@@ -63,9 +63,8 @@ function statusFromNdvi(
 }
 
 function toEeGeometry(geojson: any) {
-  const geometry = geojson && geojson.type === "Feature"
-    ? geojson.geometry
-    : geojson;
+  const geometry =
+    geojson && geojson.type === "Feature" ? geojson.geometry : geojson;
   return ee.Geometry(geometry);
 }
 
@@ -184,7 +183,10 @@ function getNdviTrendPct(geojson: any): Promise<number | null> {
       .evaluate((result: any, err: string) => {
         if (err) return reject(new Error(err));
         const pts = (result?.features || [])
-          .map((f: any) => ({ date: f.properties.date, value: f.properties.value }))
+          .map((f: any) => ({
+            date: f.properties.date,
+            value: f.properties.value,
+          }))
           .sort((a: any, b: any) => a.date.localeCompare(b.date));
         if (pts.length < 2) return resolve(null);
         const recent = pts[pts.length - 1].value;
@@ -196,7 +198,10 @@ function getNdviTrendPct(geojson: any): Promise<number | null> {
               (new Date(pts[pts.length - 1].date).getTime() -
                 new Date(d.date).getTime()) /
               86400000;
-            if (diffDays >= 14) { earlier = d.value; break; }
+            if (diffDays >= 14) {
+              earlier = d.value;
+              break;
+            }
           }
         }
         if (earlier === null || !earlier) return resolve(null);
@@ -217,27 +222,44 @@ function buildAlertMessage(
 ): string {
   const stageText = stage ? ` (${stage})` : "";
   const rainText = rainfall === null ? "n/a" : `${rainfall.toFixed(0)}mm`;
-  const statusLabel = lang === "km"
-    ? status === "stressed"
-      ? "កំពុងមានស្ត្រេស"
-      : status === "below_expected"
-        ? "ទាបជាងការរំពឹងទុក"
-        : status === "healthy"
-          ? "ល្អ"
-          : status.replace("_", " ")
-    : status.replace("_", " ");
+  const statusLabel =
+    lang === "km"
+      ? status === "stressed"
+        ? "កំពុងមានស្ត្រេស"
+        : status === "below_expected"
+          ? "ទាបជាងការរំពឹងទុក"
+          : status === "healthy"
+            ? "ល្អ"
+            : status.replace("_", " ")
+      : status.replace("_", " ");
   if (lang === "km") {
     return `វាល ${fieldName}: ${statusLabel}${stageText} — NDVI ${ndvi.toFixed(2)}, ទឹកភ្លៀង ${rainText} (21 ថ្ងៃ)`;
   }
   return `${fieldName}: ${statusLabel}${stageText} — NDVI ${ndvi.toFixed(2)}, ${rainText} rain (21d)`;
 }
 
-async function sendTelegram(chatId: string, text: string) {
-  await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ chat_id: chatId, text }),
-  });
+async function sendTelegram(chatId: string, text: string): Promise<boolean> {
+  try {
+    const res = await fetch(
+      `https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chat_id: chatId, text }),
+      },
+    );
+    if (!res.ok) {
+      const body = await res.text();
+      console.error(
+        `Telegram send failed for chat ${chatId}: ${res.status} ${body}`,
+      );
+      return false;
+    }
+    return true;
+  } catch (e) {
+    console.error(`Telegram send threw for chat ${chatId}:`, e);
+    return false;
+  }
 }
 
 const SEVERITY: Record<string, number> = {
@@ -264,11 +286,12 @@ async function buildAdvisoryPrompt(
 ): Promise<string> {
   const lswi = await getLswiForGeometry(field.geojson).catch(() => null);
   const pct = await getNdviTrendPct(field.geojson).catch(() => null);
-  const pctLine = pct == null || !isFinite(pct)
-    ? "n/a"
-    : pct >= 0
-      ? `fell about ${pct.toFixed(0)}%`
-      : `rose about ${Math.abs(pct).toFixed(0)}%`;
+  const pctLine =
+    pct == null || !isFinite(pct)
+      ? "n/a"
+      : pct >= 0
+        ? `fell about ${pct.toFixed(0)}%`
+        : `rose about ${Math.abs(pct).toFixed(0)}%`;
   const stageText = stage ?? "unknown";
   const rainText = rainfall === null ? "n/a" : `${rainfall.toFixed(0)}mm`;
   const statusLabel = status.replace("_", " ");
@@ -295,95 +318,273 @@ Deno.serve(async (_req) => {
     if (error) throw error;
 
     const results = [];
+    // for (const field of fields || []) {
+    //   const chatId = (field as any).profiles?.telegram_chat_id;
+    //   const lang = (field as any).profiles?.preferred_language || "en";
+    //   if (!chatId) continue;
+
+    //   const ndvi = await getNdviForGeometry(field.geojson);
+
+    //   const { data: lastAlert } = await supabase
+    //     .from("alerts_log")
+    //     .select("status")
+    //     .eq("field_id", field.id)
+    //     .order("sent_at", { ascending: false })
+    //     .limit(1)
+    //     .maybeSingle();
+
+    //   const lastStatus = lastAlert?.status ?? null;
+
+    //   if (ndvi === null) {
+    //     // Cloud-blocked / no usable clean scenes (the <40% gate filtered out
+    //     // everything). Log a no_data row every run, but send exactly one
+    //     // "can't monitor" Telegram message on the transition INTO extended
+    //     // no_data (from any other status), never on every run — matches the
+    //     // alert-fatigue guidance in the Data Trust Layer spec.
+    //     const sendNoDataMsg = lastStatus !== "no_data";
+    //     const message = sendNoDataMsg
+    //       ? lang === "km"
+    //         ? `វាល ${field.name}: មិនទាន់មានរូបភាពផ្កាយរណបច្បាស់លាស់នៃវាលរបស់អ្នកលើសពី 3 សប្តាហ៍ ដូច្នេះមិនអាចបញ្ជាក់ស្ថានភាពសុខភាពបច្ចុប្បន្នបានទេ។`
+    //         : `${field.name}: We haven't had a clear satellite view of your field in over 3 weeks, so we can't confirm its current health.`
+    //       : null;
+    //     if (sendNoDataMsg) await sendTelegram(chatId, message);
+    //     await supabase.from("alerts_log").insert({
+    //       field_id: field.id,
+    //       status: "no_data",
+    //       ndvi_value: null,
+    //       message,
+    //       chat_id: chatId,
+    //     });
+    //     results.push({
+    //       field: field.name,
+    //       status: "no_data",
+    //       sent: sendNoDataMsg,
+    //     });
+    //     continue;
+    //   }
+    //   const { status, stage } = statusFromNdvi(ndvi, field.planting_date);
+    //   const changed = status !== lastStatus;
+    //   const worse =
+    //     lastStatus === null
+    //       ? status !== "healthy"
+    //       : SEVERITY[status] > SEVERITY[lastStatus];
+
+    //   let message = null;
+    //   let modelUsed = null;
+    //   if (changed && worse) {
+    //     const rainfall = await getRainfallMm(field.geojson);
+    //     const prompt = await buildAdvisoryPrompt(
+    //       field,
+    //       ndvi,
+    //       status,
+    //       stage,
+    //       rainfall,
+    //       lang,
+    //     );
+    //     const result = await generateExplanation(prompt);
+    //     // Let the platform's LLM draft the advisory, but never let an LLM outage
+    //     // block the alert — fall back to the flat template.
+    //     if (result && !result.truncated) {
+    //       modelUsed = result.model;
+    //       message = safeText(
+    //         result.text,
+    //         buildAlertMessage(field.name, status, stage, ndvi, rainfall, lang),
+    //       );
+    //     } else if (result && result.truncated) {
+    //       // finish_reason "length"/"MAX_TOKENS" — the LLM trailed off mid-answer.
+    //       // Prefer the flat, complete template over a dangling sentence.
+    //       modelUsed = result.model;
+    //       console.log(
+    //         `Advisory truncated (${modelUsed}) — using flat template`,
+    //       );
+    //       message = buildAlertMessage(
+    //         field.name,
+    //         status,
+    //         stage,
+    //         ndvi,
+    //         rainfall,
+    //         lang,
+    //       );
+    //     } else {
+    //       modelUsed = null;
+    //       console.log(
+    //         "Advisory fell back to flat template (no LLM provider returned text)",
+    //       );
+    //       message = buildAlertMessage(
+    //         field.name,
+    //         status,
+    //         stage,
+    //         ndvi,
+    //         rainfall,
+    //         lang,
+    //       );
+    //     }
+    //     await sendTelegram(chatId, message);
+    //   }
+
+    //   await supabase.from("alerts_log").insert({
+    //     field_id: field.id,
+    //     status,
+    //     ndvi_value: ndvi,
+    //     message,
+    //     chat_id: chatId,
+    //   });
+
+    //   if (modelUsed)
+    //     console.log(`Advisory served by: ${modelUsed} for field ${field.name}`);
+    //   results.push({
+    //     field: field.name,
+    //     status,
+    //     sent: !!message,
+    //     model: modelUsed,
+    //   });
+    // }
     for (const field of fields || []) {
-      const chatId = (field as any).profiles?.telegram_chat_id;
-      const lang = (field as any).profiles?.preferred_language || "en";
-      if (!chatId) continue;
+      try {
+        const chatId = (field as any).profiles?.telegram_chat_id;
+        const lang = (field as any).profiles?.preferred_language || "en";
+        if (!chatId) continue;
 
-      const ndvi = await getNdviForGeometry(field.geojson);
+        const ndvi = await getNdviForGeometry(field.geojson);
 
-      const { data: lastAlert } = await supabase
-        .from("alerts_log")
-        .select("status")
-        .eq("field_id", field.id)
-        .order("sent_at", { ascending: false })
-        .limit(1)
-        .maybeSingle();
+        const { data: lastAlert } = await supabase
+          .from("alerts_log")
+          .select("status")
+          .eq("field_id", field.id)
+          .order("sent_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
 
-      const lastStatus = lastAlert?.status ?? null;
+        const lastStatus = lastAlert?.status ?? null;
 
-      if (ndvi === null) {
-        // Cloud-blocked / no usable clean scenes (the <40% gate filtered out
-        // everything). Log a no_data row every run, but send exactly one
-        // "can't monitor" Telegram message on the transition INTO extended
-        // no_data (from any other status), never on every run — matches the
-        // alert-fatigue guidance in the Data Trust Layer spec.
-        const sendNoDataMsg = lastStatus !== "no_data";
-        const message = sendNoDataMsg
-          ? lang === "km"
-            ? `វាល ${field.name}: មិនទាន់មានរូបភាពផ្កាយរណបច្បាស់លាស់នៃវាលរបស់អ្នកលើសពី 3 សប្តាហ៍ ដូច្នេះមិនអាចបញ្ជាក់ស្ថានភាពសុខភាពបច្ចុប្បន្នបានទេ។`
-            : `${field.name}: We haven't had a clear satellite view of your field in over 3 weeks, so we can't confirm its current health.`
-          : null;
-        if (sendNoDataMsg) await sendTelegram(chatId, message);
+        if (ndvi === null) {
+          const sendNoDataMsg = lastStatus !== "no_data";
+          const message = sendNoDataMsg
+            ? lang === "km"
+              ? `វាល ${field.name}: មិនទាន់មានរូបភាពផ្កាយរណបច្បាស់លាស់នៃវាលរបស់អ្នកលើសពី 3 សប្តាហ៍ ដូច្នេះមិនអាចបញ្ជាក់ស្ថានភាពសុខភាពបច្ចុប្បន្នបានទេ។`
+              : `${field.name}: We haven't had a clear satellite view of your field in over 3 weeks, so we can't confirm its current health.`
+            : null;
+
+          const telegramSent = sendNoDataMsg
+            ? await sendTelegram(chatId, message!)
+            : false;
+
+          await supabase.from("alerts_log").insert({
+            field_id: field.id,
+            status: "no_data",
+            ndvi_value: null,
+            message,
+            chat_id: chatId,
+            telegram_sent: telegramSent,
+          });
+          results.push({
+            field: field.name,
+            status: "no_data",
+            sent: sendNoDataMsg,
+            telegramSent,
+          });
+          continue;
+        }
+
+        const { status, stage } = statusFromNdvi(ndvi, field.planting_date);
+        const changed = status !== lastStatus;
+        const worse =
+          lastStatus === null
+            ? status !== "healthy"
+            : SEVERITY[status] > SEVERITY[lastStatus];
+
+        let message = null;
+        let modelUsed = null;
+        let telegramSent = false;
+
+        if (changed && worse) {
+          const rainfall = await getRainfallMm(field.geojson);
+          const prompt = await buildAdvisoryPrompt(
+            field,
+            ndvi,
+            status,
+            stage,
+            rainfall,
+            lang,
+          );
+          const result = await generateExplanation(prompt);
+
+          if (result && !result.truncated) {
+            modelUsed = result.model;
+            message = safeText(
+              result.text,
+              buildAlertMessage(
+                field.name,
+                status,
+                stage,
+                ndvi,
+                rainfall,
+                lang,
+              ),
+            );
+          } else if (result && result.truncated) {
+            modelUsed = result.model;
+            console.log(
+              `Advisory truncated (${modelUsed}) — using flat template`,
+            );
+            message = buildAlertMessage(
+              field.name,
+              status,
+              stage,
+              ndvi,
+              rainfall,
+              lang,
+            );
+          } else {
+            modelUsed = null;
+            console.log(
+              "Advisory fell back to flat template (no LLM provider returned text)",
+            );
+            message = buildAlertMessage(
+              field.name,
+              status,
+              stage,
+              ndvi,
+              rainfall,
+              lang,
+            );
+          }
+
+          telegramSent = await sendTelegram(chatId, message);
+        }
+
         await supabase.from("alerts_log").insert({
           field_id: field.id,
-          status: "no_data",
-          ndvi_value: null,
+          status,
+          ndvi_value: ndvi,
           message,
           chat_id: chatId,
+          telegram_sent: telegramSent,
         });
-        results.push({ field: field.name, status: "no_data", sent: sendNoDataMsg });
-        continue;
-      }
-      const { status, stage } = statusFromNdvi(ndvi, field.planting_date);
-      const changed = status !== lastStatus;
-      const worse =
-        lastStatus === null
-          ? status !== "healthy"
-          : SEVERITY[status] > SEVERITY[lastStatus];
 
-      let message = null;
-      let modelUsed = null;
-      if (changed && worse) {
-        const rainfall = await getRainfallMm(field.geojson);
-        const prompt = await buildAdvisoryPrompt(
-          field,
-          ndvi,
+        if (modelUsed)
+          console.log(
+            `Advisory served by: ${modelUsed} for field ${field.name}`,
+          );
+        results.push({
+          field: field.name,
           status,
-          stage,
-          rainfall,
-          lang,
+          sent: !!message,
+          model: modelUsed,
+          telegramSent,
+        });
+      } catch (fieldErr) {
+        console.error(
+          `Failed processing field ${field.name} (${field.id}):`,
+          fieldErr,
         );
-        const result = await generateExplanation(prompt);
-        // Let the platform's LLM draft the advisory, but never let an LLM outage
-        // block the alert — fall back to the flat template.
-        if (result && !result.truncated) {
-          modelUsed = result.model;
-          message = safeText(result.text, buildAlertMessage(field.name, status, stage, ndvi, rainfall, lang));
-        } else if (result && result.truncated) {
-          // finish_reason "length"/"MAX_TOKENS" — the LLM trailed off mid-answer.
-          // Prefer the flat, complete template over a dangling sentence.
-          modelUsed = result.model;
-          console.log(`Advisory truncated (${modelUsed}) — using flat template`);
-          message = buildAlertMessage(field.name, status, stage, ndvi, rainfall, lang);
-        } else {
-          modelUsed = null;
-          console.log("Advisory fell back to flat template (no LLM provider returned text)");
-          message = buildAlertMessage(field.name, status, stage, ndvi, rainfall, lang);
-        }
-        await sendTelegram(chatId, message);
+        results.push({
+          field: field.name,
+          status: "error",
+          sent: false,
+          error: String(fieldErr),
+        });
       }
-
-      await supabase.from("alerts_log").insert({
-        field_id: field.id,
-        status,
-        ndvi_value: ndvi,
-        message,
-        chat_id: chatId,
-      });
-
-      if (modelUsed) console.log(`Advisory served by: ${modelUsed} for field ${field.name}`);
-      results.push({ field: field.name, status, sent: !!message, model: modelUsed });
     }
 
     return new Response(

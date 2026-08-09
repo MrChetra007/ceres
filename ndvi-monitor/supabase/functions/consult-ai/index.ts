@@ -64,7 +64,7 @@ Deno.serve(async (req) => {
     // 1. Check cache — only reuse if NDVI + status haven't moved
     const { data: cached } = await supabase
       .from("ai_explanations")
-      .select("explanation, ndvi_value, status")
+      .select("explanation, ndvi_value, status, truncated")
       .eq("field_id", fieldId)
       .maybeSingle();
 
@@ -76,10 +76,10 @@ Deno.serve(async (req) => {
       return jsonResponse({
         ok: true,
         explanation: cached.explanation,
-        // Cached rows were written before truncation tracking existed — we
-        // can't know from the DB whether they were cut short. Treat unknown
-        // as untruncated so previously-saved answers keep rendering cleanly.
-        truncated: false,
+        // Pre-migration rows have truncated = null; treat that as untruncated
+        // so old cached answers still render cleanly. New rows always have a
+        // real boolean written at cache time.
+        truncated: cached.truncated ?? false,
         cached: true,
       });
     }
@@ -131,7 +131,12 @@ Keep the whole reply under 45 words. Do not mention "NDVI", "LSWI" or any index 
     const modelUsed = result?.model || "none";
     const truncated = result?.truncated ?? false;
     // Attribution + truncation audit trail. finish_reason is logged by llm.ts.
-    console.log("AI explanation served by:", modelUsed, "truncated:", truncated);
+    console.log(
+      "AI explanation served by:",
+      modelUsed,
+      "truncated:",
+      truncated,
+    );
 
     // 4. Cache it (model_used is for our own auditing only)
     await supabase.from("ai_explanations").upsert({
@@ -140,6 +145,7 @@ Keep the whole reply under 45 words. Do not mention "NDVI", "LSWI" or any index 
       status,
       explanation,
       model_used: modelUsed,
+      truncated,
       created_at: new Date().toISOString(),
     });
 

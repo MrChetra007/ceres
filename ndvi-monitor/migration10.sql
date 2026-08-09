@@ -48,3 +48,6 @@ create policy "field_photos_storage_insert" on storage.objects
     bucket_id = 'field-photos'
     and (storage.foldername(name))[1] = auth.uid()::text
   );
+
+  alter table alerts_log add column if not exists telegram_sent boolean default null;
+alter table ai_explanations add column if not exists truncated boolean default null;
