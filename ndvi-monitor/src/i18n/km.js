@@ -177,6 +177,8 @@ export default {
 
   // AOI editor
   'aoi.new_area': 'តំបន់ថ្មី',
+  'aoi.edit_area': 'កែសម្រួលតំបន់',
+  'aoi.filled_existing': 'កំពុងកែព្រំដែនរបស់ “{name}”',
   'aoi.desc': 'កំណត់ប្រអប់ព្រំដែនសម្រាប់ការវិភាគផ្កាយរណប។ វាយកូអរដោនេ ឬស្វែងរកទីតាំង។',
   'aoi.name': 'ឈ្មោះ',
   'aoi.name_example': 'ឧ. បាត់ដំបង (លំនាំដើម)',
@@ -198,6 +200,8 @@ export default {
   'aoi.no_fields_left': 'មិនទាន់មានវាលទេ — សូមគូសវាលលើផែនទីមុនសិន',
   'aoi.creating': 'កំពុងបង្កើត...',
   'aoi.create': 'បង្កើត',
+  'aoi.saving': 'កំពុងរក្សាទុក...',
+  'aoi.save_changes': 'រក្សាទុកការផ្លាស់ប្តូរ',
   'aoi.not_found': 'រកមិនឃើញទីតាំង',
   'aoi.filled_bounds': 'បំពេញព្រំដែនពី “{name}”',
   'aoi.search_failed': 'ការស្វែងរកបរាជ័យ — សូមពិនិត្យការតភ្ជាប់បណ្តាញ',

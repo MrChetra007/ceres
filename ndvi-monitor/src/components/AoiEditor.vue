@@ -1,7 +1,7 @@
 <template>
   <div id="aoi-editor" class="aoi-editor-overlay" v-show="state.aoiEditorVisible" @click.self="close">
     <div class="aoi-editor-modal">
-      <h3>{{ t('aoi.new_area') }}</h3>
+      <h3>{{ isEdit ? t('aoi.edit_area') : t('aoi.new_area') }}</h3>
       <p class="aoi-editor-desc">{{ t('aoi.desc') }}</p>
 
       <div class="aoi-editor-field">
@@ -69,14 +69,16 @@
 
       <div class="aoi-editor-footer">
         <button id="ae-cancel" @click="close">{{ t('common.cancel') }}</button>
-        <button class="ae-apply-btn" :disabled="creating" @click="create">{{ creating ? t('aoi.creating') : t('aoi.create') }}</button>
+        <button class="ae-apply-btn" :disabled="creating" @click="submit">
+          {{ creating ? (isEdit ? t('aoi.saving') : t('aoi.creating')) : (isEdit ? t('aoi.save_changes') : t('aoi.create')) }}
+        </button>
       </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, watch } from 'vue'
+import { ref, computed, watch } from 'vue'
 import { bbox as turfBBox } from '@turf/turf'
 import { state } from '../store'
 import * as store from '../store'
@@ -94,13 +96,18 @@ const creating = ref(false)
 const mode = ref('place')
 const selectedFieldId = ref(null)
 
+const isEdit = computed(() => !!state.aoiEditorEditId)
+
 watch(() => state.aoiEditorVisible, (open) => {
   if (open) {
-    name.value = ''
     query.value = ''
     searchInfo.value = ''
     mode.value = 'place'
     selectedFieldId.value = null
+    const editAoi = isEdit.value
+      ? state.aois.find((a) => a.id === state.aoiEditorEditId)
+      : null
+    name.value = editAoi ? editAoi.name : ''
     if (state.aoiDraftCoords && state.aoiDraftCoords.length === 4) {
       w.value = state.aoiDraftCoords[0]
       s.value = state.aoiDraftCoords[1]
@@ -109,6 +116,12 @@ watch(() => state.aoiEditorVisible, (open) => {
       mode.value = 'manual'
       searchInfo.value = t('aoi.filled_draw')
       state.aoiDraftCoords = null
+    } else if (editAoi && editAoi.bounds) {
+      w.value = editAoi.bounds[0]
+      s.value = editAoi.bounds[1]
+      e.value = editAoi.bounds[2]
+      n.value = editAoi.bounds[3]
+      searchInfo.value = t('aoi.filled_existing', { name: editAoi.name })
     } else {
       w.value = state.aoiCoords[0]
       s.value = state.aoiCoords[1]
@@ -146,6 +159,7 @@ function pickField(f) {
 function close() {
   if (state.isAoiDraw) store.cancelAoiDraw()
   state.aoiEditorVisible = false
+  state.aoiEditorEditId = null
 }
 
 function doSearch() {
@@ -176,7 +190,7 @@ function doSearch() {
     .catch(() => { searchInfo.value = t('aoi.search_failed') })
 }
 
-async function create() {
+async function submit() {
   if (!name.value.trim()) {
     store.showToast(t('toast.area_name_first'))
     return
@@ -186,7 +200,15 @@ async function create() {
     return
   }
   creating.value = true
-  const aoi = await store.createAoi(name.value.trim(), [w.value, s.value, e.value, n.value])
+  const bounds = [w.value, s.value, e.value, n.value]
+  const aoiName = name.value.trim()
+  if (isEdit.value) {
+    const ok = await store.updateAoi(state.aoiEditorEditId, { name: aoiName, bounds })
+    creating.value = false
+    if (ok) close()
+    return
+  }
+  const aoi = await store.createAoi(aoiName, bounds)
   creating.value = false
   if (aoi) close()
 }

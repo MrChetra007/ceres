@@ -176,6 +176,8 @@ export default {
 
   // AOI editor
   'aoi.new_area': 'New area',
+  'aoi.edit_area': 'Edit area',
+  'aoi.filled_existing': 'Editing bounds of \u201c{name}\u201d',
   'aoi.desc': 'Define a bounding box for satellite analysis. Type coordinates or search for a place.',
   'aoi.name': 'Name',
   'aoi.name_example': 'e.g. Battambang (default)',
@@ -197,6 +199,8 @@ export default {
   'aoi.no_fields_left': 'No saved fields yet \u2014 draw one on the map first',
   'aoi.creating': 'Creating...',
   'aoi.create': 'Create',
+  'aoi.saving': 'Saving...',
+  'aoi.save_changes': 'Save changes',
   'aoi.not_found': 'Location not found',
   'aoi.filled_bounds': 'Filled bounds from “{name}”',
   'aoi.search_failed': 'Search failed — check your connection',

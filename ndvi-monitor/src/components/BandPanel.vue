@@ -75,7 +75,7 @@
           </div>
         </div>
 
-        <button class="aoi-btn" :class="{ active: state.aoiEditorVisible }" :title="t('band.edit_area_bounds')" @click="openNewArea">
+        <button class="aoi-btn" :class="{ active: state.aoiEditorVisible }" :title="t('band.edit_area_bounds')" @click="editArea">
         <span class="aoi-btn-icon"><i class="ti ti-map"></i></span>
         <span class="band-btn-caption">{{ t('band.edit_area_bounds') }}</span>
       </button>
@@ -142,7 +142,14 @@ function openNewArea() {
     store.showToast(t('toast.limit_areas'))
     return
   }
-  state.aoiEditorVisible = true
+  store.openAoiEditorEdit(null)
+}
+
+function editArea() {
+  areasOpen.value = false
+  // Edit the currently active area (or fall back to creating if none yet).
+  if (state.selectedAoiId) store.openAoiEditorEdit(state.selectedAoiId)
+  else store.openAoiEditorEdit(null)
 }
 
 function onDocClick(e) {

@@ -86,6 +86,7 @@ export const state = reactive({
   isAoiDraw: false,
   aoiDraftCoords: null,
   aoiEditorCloseForDraw: false,
+  aoiEditorEditId: null,
   editingFieldId: null,
   loading: false,
   statusState: 'idle',
@@ -276,6 +277,11 @@ export async function loadAoisFromSupabase() {
   }
 }
 
+export function openAoiEditorEdit(id) {
+  state.aoiEditorEditId = id || null
+  state.aoiEditorVisible = true
+}
+
 export async function createAoi(name, bounds) {
   if (!state.supabaseUser) { showToast('Sign in to save areas'); return null }
   if (state.aois.length >= 5) { showToast('Limit of 5 areas reached'); return null }
@@ -295,7 +301,7 @@ export async function createAoi(name, bounds) {
 }
 
 export async function updateAoi(id, patch) {
-  if (!state.supabaseUser) { showToast('Sign in to update areas'); return }
+  if (!state.supabaseUser) { showToast('Sign in to update areas'); return false }
   try {
     await supabase.updateAoi(id, patch)
     const aoi = state.aois.find((a) => a.id === id)
@@ -304,8 +310,10 @@ export async function updateAoi(id, patch) {
       if ('bounds' in patch) aoi.bounds = patch.bounds
       if (id === state.selectedAoiId) applyAoiBounds(aoi.bounds, aoi.name)
     }
+    return true
   } catch (err) {
     showToast('Failed to update area: ' + err.message)
+    return false
   }
 }
 
