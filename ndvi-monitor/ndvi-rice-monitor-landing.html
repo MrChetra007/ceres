@@ -1,0 +1,746 @@
+<!DOCTYPE html>
+<html lang="en" data-lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NDVI Rice Monitor — Satellite Field Intelligence</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Battambang:wght@400;700&display=swap" rel="stylesheet">
+<style>
+
+  /* ============ DESIGN TOKENS ============ */
+  :root{
+    --paddy-night:#0F1F16;
+    --canopy:#1B3A28;
+    --canopy-soft:#254a32;
+    --husk-paper:#F3EEDC;
+    --husk-paper-dim:#e7e0c9;
+    --stress-red:#C1443C;
+    --ripening-gold:#E3A72E;
+    --canopy-green:#6BA85F;
+    --line-on-dark: rgba(243,238,220,0.14);
+    --line-on-light: rgba(15,31,22,0.12);
+
+    --font-display: 'Space Grotesk', sans-serif;
+    --font-body: 'IBM Plex Sans', sans-serif;
+    --font-mono: 'IBM Plex Mono', monospace;
+    --font-km: 'Battambang', 'Khmer OS', sans-serif;
+
+    --ease: cubic-bezier(.22,.61,.36,1);
+  }
+
+  html[data-lang="km"] body{ font-family: var(--font-km); }
+  html[data-lang="km"] h1, html[data-lang="km"] h2, html[data-lang="km"] h3, html[data-lang="km"] .display{
+    font-family: var(--font-km);
+    letter-spacing: 0;
+  }
+
+  [data-km]{ display:none; }
+  html[data-lang="km"] [data-km]{ display:inline; }
+  html[data-lang="km"] [data-en]{ display:none; }
+  .b-en, .b-km{ display:block; }
+  html[data-lang="km"] .b-en{ display:none; }
+  html[data-lang="km"] .b-km{ display:block; }
+  html[data-lang="en"] .b-km{ display:none; }
+
+  *{ box-sizing:border-box; margin:0; padding:0; }
+  html{ scroll-behavior:smooth; }
+  body{
+    background:var(--paddy-night);
+    color:var(--husk-paper);
+    font-family:var(--font-body);
+    line-height:1.5;
+    -webkit-font-smoothing:antialiased;
+    overflow-x:hidden;
+  }
+  img{ max-width:100%; display:block; }
+  a{ color:inherit; }
+  .wrap{ max-width:1180px; margin:0 auto; padding:0 28px; }
+  section{ position:relative; }
+
+  @media (prefers-reduced-motion: reduce){
+    *{ animation-duration:.001ms !important; animation-iteration-count:1 !important; transition-duration:.001ms !important; scroll-behavior:auto !important; }
+  }
+
+  ::selection{ background:var(--ripening-gold); color:var(--paddy-night); }
+
+  /* ============ NAV ============ */
+  header.nav{
+    position:fixed; top:0; left:0; right:0; z-index:100;
+    display:flex; align-items:center; justify-content:space-between;
+    padding:18px 28px;
+    background:linear-gradient(to bottom, rgba(15,31,22,.92), rgba(15,31,22,0));
+    backdrop-filter:blur(6px);
+  }
+  .brand{ display:flex; align-items:center; gap:10px; }
+  .brand-mark{ width:22px; height:22px; position:relative; flex:none; }
+  .brand-mark svg{ width:100%; height:100%; }
+  .brand-name{ font-family:var(--font-display); font-weight:600; font-size:15px; letter-spacing:.01em; }
+  .brand-name small{ display:block; font-family:var(--font-mono); font-size:9px; letter-spacing:.14em; color:var(--ripening-gold); font-weight:400; text-transform:uppercase; margin-top:1px;}
+
+  .nav-right{ display:flex; align-items:center; gap:16px; }
+  .lang-toggle{
+    display:flex; border:1px solid var(--line-on-dark); border-radius:999px; padding:3px; gap:2px;
+    font-family:var(--font-mono); font-size:11px;
+  }
+  .lang-toggle button{
+    background:none; border:none; color:var(--husk-paper); opacity:.55;
+    padding:6px 12px; border-radius:999px; cursor:pointer; font-family:inherit; font-size:inherit;
+    transition:all .25s var(--ease); letter-spacing:.04em;
+  }
+  .lang-toggle button.active{ background:var(--ripening-gold); color:var(--paddy-night); opacity:1; font-weight:600; }
+
+  .btn{
+    font-family:var(--font-display); font-weight:600; font-size:13.5px;
+    padding:10px 18px; border-radius:8px; border:1px solid transparent; cursor:pointer;
+    display:inline-flex; align-items:center; gap:8px; text-decoration:none;
+    transition:transform .35s var(--ease), background .25s, border-color .25s, box-shadow .3s;
+  }
+  .btn-primary{ background:var(--ripening-gold); color:var(--paddy-night); }
+  .btn-primary:hover{ transform:translateY(-2px); box-shadow:0 10px 24px -8px rgba(227,167,46,.55); }
+  .btn-ghost{ border-color:var(--line-on-dark); color:var(--husk-paper); background:transparent; }
+  .btn-ghost:hover{ border-color:var(--ripening-gold); color:var(--ripening-gold); }
+  .btn-sm{ padding:8px 14px; font-size:12px; }
+
+  .nav-cta{ display:none; }
+  @media(min-width:760px){ .nav-cta{ display:inline-flex; } }
+
+  /* ============ HERO ============ */
+  .hero{
+    min-height:100svh; display:flex; align-items:flex-end; padding:120px 0 64px;
+    perspective:1400px;
+  }
+  .hero-bg{
+    position:absolute; inset:0; overflow:hidden;
+  }
+  .hero-bg .layer{ position:absolute; inset:0; width:100%; height:100%; object-fit:cover; }
+  .hero-bg .layer.truecolor{ filter:saturate(1.05) brightness(.72) contrast(1.05); }
+  .hero-bg .layer.ndvi{
+    filter: hue-rotate(-28deg) saturate(2.6) contrast(1.25) brightness(.62) sepia(.15);
+    mix-blend-mode:normal;
+    clip-path: polygon(0 0, var(--wipe,38%) 0, var(--wipe,38%) 100%, 0 100%);
+    transition:clip-path 1.4s var(--ease);
+  }
+  .hero-bg .ndvi-tint{
+    position:absolute; inset:0;
+    background:linear-gradient(100deg, rgba(193,68,60,.28) 0%, rgba(227,167,46,.24) 45%, rgba(107,168,95,.34) 100%);
+    clip-path: polygon(0 0, var(--wipe,38%) 0, var(--wipe,38%) 100%, 0 100%);
+    mix-blend-mode:color;
+    transition:clip-path 1.4s var(--ease);
+  }
+  .hero-bg .scanbar{
+    position:absolute; top:0; bottom:0; left:var(--wipe,38%);
+    width:3px; transform:translateX(-1.5px);
+    background:linear-gradient(to bottom, transparent, var(--ripening-gold), transparent);
+    box-shadow:0 0 24px 2px rgba(227,167,46,.7);
+    transition:left 1.4s var(--ease);
+  }
+  .hero-bg .scrim{
+    position:absolute; inset:0;
+    background:linear-gradient(to top, var(--paddy-night) 2%, rgba(15,31,22,.35) 46%, rgba(15,31,22,.55) 100%);
+  }
+  .hero-bg .scanlabel{
+    position:absolute; top:96px; left:var(--wipe,38%); transform:translateX(14px);
+    font-family:var(--font-mono); font-size:10.5px; letter-spacing:.12em; text-transform:uppercase;
+    color:var(--ripening-gold); background:rgba(15,31,22,.55); padding:5px 9px; border:1px solid rgba(227,167,46,.4); border-radius:4px;
+    transition:left 1.4s var(--ease); white-space:nowrap;
+  }
+
+  .hero-content{ position:relative; z-index:5; width:100%; }
+  .eyebrow{
+    font-family:var(--font-mono); font-size:11.5px; letter-spacing:.14em; text-transform:uppercase;
+    color:var(--ripening-gold); margin-bottom:18px; display:flex; align-items:center; gap:9px;
+  }
+  .eyebrow::before{ content:''; width:7px; height:7px; border-radius:50%; background:var(--canopy-green); box-shadow:0 0 0 3px rgba(107,168,95,.25); animation:pulse 2.4s ease-in-out infinite; }
+  @keyframes pulse{ 0%,100%{opacity:1;} 50%{opacity:.35;} }
+
+  h1.hero-title{
+    font-family:var(--font-display); font-weight:600; letter-spacing:-.02em;
+    font-size:clamp(32px, 6vw, 62px); line-height:1.03; max-width:760px; margin-bottom:22px;
+  }
+  h1.hero-title .accent{ color:var(--ripening-gold); font-style:normal; }
+  .hero-sub{ max-width:520px; font-size:16.5px; color:var(--husk-paper-dim); margin-bottom:34px; }
+  .hero-actions{ display:flex; flex-wrap:wrap; gap:14px; margin-bottom:46px; }
+
+  .hero-stats{ display:flex; gap:36px; flex-wrap:wrap; border-top:1px solid var(--line-on-dark); padding-top:22px; max-width:640px; }
+  .stat b{ display:block; font-family:var(--font-mono); font-size:26px; color:var(--husk-paper); font-weight:500; }
+  .stat span{ font-size:11.5px; color:var(--husk-paper-dim); letter-spacing:.03em; }
+
+  /* ---- 3D satellite ---- */
+  .sat-stage{
+    position:absolute; right:4%; top:16%; width:280px; height:280px;
+    perspective:900px; z-index:4; display:none;
+  }
+  @media(min-width:900px){ .sat-stage{ display:block; } }
+  .sat3d{
+    width:100%; height:100%; position:relative; transform-style:preserve-3d;
+    transform: rotateX(var(--mx,-14deg)) rotateY(var(--my,22deg));
+    animation:satSpin 22s linear infinite;
+    transition:transform .4s var(--ease);
+  }
+  @keyframes satSpin{ from{ margin-left:0; } to{ margin-left:0; } }
+  .sat-body{ position:absolute; top:50%; left:50%; width:56px; height:56px; margin:-28px 0 0 -28px; transform-style:preserve-3d; animation:bodySpin 16s linear infinite; }
+  @keyframes bodySpin{ from{ transform:rotateY(0deg); } to{ transform:rotateY(360deg); } }
+  .sat-face{ position:absolute; width:56px; height:56px; background:linear-gradient(135deg, var(--husk-paper) 0%, #cfc8ac 100%); border:1px solid rgba(15,31,22,.4); }
+  .sat-face.f{ transform:translateZ(28px); }
+  .sat-face.b{ transform:translateZ(-28px) rotateY(180deg); }
+  .sat-face.l{ transform:rotateY(-90deg) translateZ(28px); background:linear-gradient(135deg,#cfc8ac,#a9a186); }
+  .sat-face.r{ transform:rotateY(90deg) translateZ(28px); background:linear-gradient(135deg,#cfc8ac,#a9a186); }
+  .sat-face.t{ transform:rotateX(90deg) translateZ(28px); background:#e8e2c8; }
+  .sat-face.d{ transform:rotateX(-90deg) translateZ(28px); background:#8f8870; }
+  .sat-panel{
+    position:absolute; top:50%; width:78px; height:30px; margin-top:-15px;
+    background:
+      repeating-linear-gradient(90deg, #14304c 0 8px, #1c3f63 8px 16px);
+    border:1px solid rgba(227,167,46,.5);
+    transform-style:preserve-3d;
+  }
+  .sat-panel.left{ left:50%; margin-left:-134px; transform:rotateX(8deg) rotateY(4deg); }
+  .sat-panel.right{ left:50%; margin-left:56px; transform:rotateX(8deg) rotateY(4deg); }
+  .sat-dish{
+    position:absolute; top:50%; left:50%; width:30px; height:30px; margin:-46px 0 0 -15px;
+    border-radius:50%;
+    background:radial-gradient(circle at 35% 30%, #f4efd9, #b7ad8b 70%);
+    border:1px solid rgba(15,31,22,.5);
+    transform:rotateX(55deg);
+  }
+  .sat-glow{
+    position:absolute; inset:0; border-radius:50%;
+    background:radial-gradient(circle, rgba(227,167,46,.18), transparent 65%);
+    filter:blur(6px);
+  }
+  .sat-orbit-ring{
+    position:absolute; top:50%; left:50%; width:230px; height:230px; margin:-115px 0 0 -115px;
+    border:1px dashed rgba(243,238,220,.16); border-radius:50%;
+    transform:rotateX(72deg);
+  }
+
+  .scroll-cue{
+    position:absolute; bottom:20px; left:28px; z-index:5;
+    font-family:var(--font-mono); font-size:10px; letter-spacing:.14em; text-transform:uppercase;
+    color:var(--husk-paper-dim); display:flex; align-items:center; gap:8px;
+  }
+  .scroll-cue .bar{ width:1px; height:26px; background:linear-gradient(to bottom, var(--ripening-gold), transparent); animation:scrollcue 1.8s ease-in-out infinite; }
+  @keyframes scrollcue{ 0%{ transform:scaleY(.3); opacity:.3; } 50%{ transform:scaleY(1); opacity:1; } 100%{ transform:scaleY(.3); opacity:.3; } }
+
+  /* ============ SECTION helpers ============ */
+  .section{ padding:100px 0; }
+  .section--light{ background:var(--husk-paper); color:var(--paddy-night); }
+  .section--light .eyebrow{ color:#a97a13; }
+  .kicker{ font-family:var(--font-mono); font-size:11.5px; letter-spacing:.14em; text-transform:uppercase; color:var(--ripening-gold); margin-bottom:14px; }
+  .section--light .kicker{ color:#a97a13; }
+  h2.section-title{ font-family:var(--font-display); font-weight:600; letter-spacing:-.015em; font-size:clamp(26px,4vw,40px); max-width:640px; margin-bottom:18px; line-height:1.08; }
+  .section-desc{ max-width:560px; color:var(--husk-paper-dim); font-size:15.5px; }
+  .section--light .section-desc{ color:#3d4a3f; }
+
+  .reveal{ opacity:0; transform:translateY(28px) rotateX(6deg); transform-origin:top center; transition:opacity .8s var(--ease), transform .8s var(--ease); }
+  .reveal.in{ opacity:1; transform:translateY(0) rotateX(0deg); }
+
+  /* ============ PROBLEM ============ */
+  .problem-grid{ display:grid; grid-template-columns:1fr; gap:40px; align-items:start; }
+  @media(min-width:800px){ .problem-grid{ grid-template-columns:1.1fr .9fr; } }
+  .problem-card{
+    background:var(--canopy); border:1px solid var(--line-on-dark); border-radius:14px; padding:26px;
+  }
+  .problem-card + .problem-card{ margin-top:16px; }
+  .problem-card .tag{ font-family:var(--font-mono); font-size:10.5px; letter-spacing:.1em; text-transform:uppercase; padding:3px 8px; border-radius:4px; display:inline-block; margin-bottom:10px; }
+  .tag-red{ background:rgba(193,68,60,.18); color:#e8837c; }
+  .tag-gold{ background:rgba(227,167,46,.16); color:var(--ripening-gold); }
+  .tag-green{ background:rgba(107,168,95,.18); color:var(--canopy-green); }
+  .problem-card p{ font-size:14.5px; color:var(--husk-paper-dim); }
+
+  /* ============ HOW IT WORKS ============ */
+  .steps{ margin-top:56px; display:flex; flex-direction:column; gap:0; }
+  .step{
+    display:grid; grid-template-columns:1fr; gap:26px; padding:44px 0; border-top:1px solid var(--line-on-light);
+    align-items:center;
+  }
+  .step:first-child{ border-top:1px solid var(--line-on-light); }
+  @media(min-width:820px){
+    .step{ grid-template-columns:.9fr 1.1fr; }
+    .step.rev .step-media{ order:2; }
+    .step.rev .step-text{ order:1; }
+  }
+  .step-num{ font-family:var(--font-mono); font-size:13px; color:#a97a13; letter-spacing:.06em; margin-bottom:10px; }
+  .step-text h3{ font-family:var(--font-display); font-weight:600; font-size:22px; margin-bottom:10px; letter-spacing:-.01em; }
+  .step-text p{ font-size:14.5px; color:#3d4a3f; max-width:440px; }
+  .step-media{
+    position:relative; border-radius:14px; overflow:hidden; aspect-ratio:4/3;
+    transform-style:preserve-3d; transition:transform .5s var(--ease), box-shadow .5s var(--ease);
+    box-shadow:0 18px 40px -20px rgba(15,31,22,.35);
+  }
+  .step-media img{ width:100%; height:100%; object-fit:cover; }
+  .step-media:hover{ transform:perspective(900px) rotateY(-4deg) rotateX(2deg) scale(1.015); box-shadow:0 30px 54px -18px rgba(15,31,22,.45); }
+  .step-media .cap{
+    position:absolute; left:0; right:0; bottom:0; padding:10px 14px;
+    background:linear-gradient(to top, rgba(15,31,22,.82), transparent);
+    font-family:var(--font-mono); font-size:10px; letter-spacing:.06em; color:var(--husk-paper-dim);
+  }
+
+  /* ============ FEATURES ============ */
+  .feat-grid{ margin-top:50px; display:grid; grid-template-columns:1fr; gap:16px; }
+  @media(min-width:640px){ .feat-grid{ grid-template-columns:1fr 1fr; } }
+  @media(min-width:1000px){ .feat-grid{ grid-template-columns:1fr 1fr 1fr; } }
+  .feat-card{
+    background:var(--canopy); border:1px solid var(--line-on-dark); border-radius:14px; padding:24px;
+    transform-style:preserve-3d; transition:transform .25s var(--ease), border-color .25s;
+    will-change:transform;
+  }
+  .feat-card:hover{ border-color:rgba(227,167,46,.45); }
+  .feat-icon{ width:34px; height:34px; margin-bottom:18px; color:var(--ripening-gold); }
+  .feat-card h3{ font-family:var(--font-display); font-size:16.5px; font-weight:600; margin-bottom:8px; letter-spacing:-.005em; }
+  .feat-card p{ font-size:13.5px; color:var(--husk-paper-dim); }
+
+  /* ============ LANGUAGE SHOWCASE / MOCK PANEL ============ */
+  .lang-section{ background:var(--paddy-night); }
+  .mock-wrap{ margin-top:50px; display:grid; grid-template-columns:1fr; gap:40px; align-items:center; }
+  @media(min-width:900px){ .mock-wrap{ grid-template-columns:1fr 1.05fr; } }
+  .mock-panel{
+    background:var(--canopy); border:1px solid var(--line-on-dark); border-radius:16px; padding:18px;
+    transform:perspective(1200px) rotateY(-6deg) rotateX(2deg);
+    transition:transform .5s var(--ease);
+    box-shadow:0 30px 60px -24px rgba(0,0,0,.5);
+  }
+  .mock-panel:hover{ transform:perspective(1200px) rotateY(0deg) rotateX(0deg); }
+  .mock-topbar{ display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; }
+  .mock-dots{ display:flex; gap:5px; }
+  .mock-dots span{ width:7px; height:7px; border-radius:50%; background:var(--line-on-dark); }
+  .mock-badge{ font-family:var(--font-mono); font-size:9.5px; color:var(--canopy-green); border:1px solid rgba(107,168,95,.4); padding:2px 7px; border-radius:4px; }
+  .mock-map{
+    position:relative; height:200px; border-radius:10px; overflow:hidden; margin-bottom:14px;
+    background:linear-gradient(120deg,#173322,#0e2318 55%,#1e4028);
+  }
+  .mock-map svg{ position:absolute; inset:0; width:100%; height:100%; }
+  .mock-map .mock-field{
+    position:absolute; border:2px solid var(--ripening-gold); border-radius:4px;
+    box-shadow:0 0 0 4px rgba(227,167,46,.12);
+  }
+  .mock-legend{ position:absolute; bottom:8px; left:8px; display:flex; gap:4px; }
+  .mock-legend i{ width:16px; height:6px; border-radius:2px; display:block; }
+  .mock-row{ display:flex; justify-content:space-between; align-items:center; padding:9px 2px; border-top:1px solid var(--line-on-dark); font-size:12.5px; }
+  .mock-row b{ font-weight:500; }
+  .mock-row .pill{ font-family:var(--font-mono); font-size:10px; padding:2px 8px; border-radius:999px; }
+  .pill-healthy{ background:rgba(107,168,95,.18); color:var(--canopy-green); }
+  .pill-mod{ background:rgba(227,167,46,.18); color:var(--ripening-gold); }
+
+  .lang-copy .switch-demo{ display:flex; gap:10px; margin-top:26px; }
+
+  /* ============ DATA TRUST ============ */
+  .trust-strip{ margin-top:44px; display:flex; flex-wrap:wrap; gap:12px; }
+  .trust-chip{
+    font-family:var(--font-mono); font-size:12px; letter-spacing:.02em;
+    border:1px solid var(--line-on-dark); border-radius:999px; padding:9px 16px;
+    display:flex; align-items:center; gap:8px; color:var(--husk-paper-dim);
+  }
+  .trust-chip i{ width:6px; height:6px; border-radius:50%; background:var(--canopy-green); display:block; }
+
+  /* ============ CTA ============ */
+  .cta-section{ padding:120px 0; text-align:center; position:relative; overflow:hidden; }
+  .cta-section::before{
+    content:''; position:absolute; inset:-20%;
+    background:radial-gradient(circle at 50% 30%, rgba(227,167,46,.14), transparent 60%);
+  }
+  .cta-title{ font-family:var(--font-display); font-weight:600; font-size:clamp(28px,5vw,48px); max-width:680px; margin:0 auto 20px; letter-spacing:-.02em; position:relative; }
+  .cta-sub{ color:var(--husk-paper-dim); max-width:480px; margin:0 auto 34px; position:relative; }
+  .cta-actions{ display:flex; justify-content:center; gap:14px; flex-wrap:wrap; position:relative; }
+
+  /* ============ FOOTER ============ */
+  footer{ border-top:1px solid var(--line-on-dark); padding:36px 0; }
+  .foot-grid{ display:flex; flex-wrap:wrap; justify-content:space-between; gap:20px; align-items:center; }
+  .foot-credit{ font-family:var(--font-mono); font-size:10.5px; color:var(--husk-paper-dim); opacity:.7; max-width:520px; line-height:1.6; }
+  .foot-links{ display:flex; gap:18px; font-size:12.5px; color:var(--husk-paper-dim); }
+</style>
+</head>
+<body>
+
+  <header class="nav">
+    <div class="brand">
+      <span class="brand-mark">
+        <svg viewBox="0 0 24 24" fill="none"><path d="M12 2L3 7v10l9 5 9-5V7l-9-5z" stroke="#E3A72E" stroke-width="1.4"/><path d="M12 2v20M3 7l9 5 9-5" stroke="#E3A72E" stroke-width="1.1" opacity=".55"/></svg>
+      </span>
+      <span class="brand-name">NDVI Rice Monitor<small><span data-en>Battambang, Cambodia</span><span data-km>ខេត្តបាត់ដំបង កម្ពុជា</span></small></span>
+    </div>
+    <div class="nav-right">
+      <div class="lang-toggle" role="group" aria-label="Language">
+        <button type="button" data-set-lang="en" class="active">EN</button>
+        <button type="button" data-set-lang="km">ខ្មែរ</button>
+      </div>
+      <a href="#cta" class="btn btn-primary btn-sm nav-cta"><span data-en>Sign in</span><span data-km>ចូលប្រើ</span></a>
+    </div>
+  </header>
+
+  <!-- ============ HERO ============ -->
+  <section class="hero" id="hero">
+    <div class="hero-bg" id="heroBg" style="--wipe:38%;">
+      <img class="layer truecolor" src="https://commons.wikimedia.org/wiki/Special:FilePath/Cambodia%20Rice%20Fields%20(9728041389).jpg" alt="Rice fields in Cambodia, true color">
+      <img class="layer ndvi" src="https://commons.wikimedia.org/wiki/Special:FilePath/Cambodia%20Rice%20Fields%20(9728041389).jpg" alt="">
+      <div class="ndvi-tint"></div>
+      <div class="scanbar"></div>
+      <div class="scanlabel"><span data-en>NDVI pass</span><span data-km>ការវិភាគ NDVI</span></div>
+      <div class="scrim"></div>
+    </div>
+
+    <div class="sat-stage" id="satStage">
+      <div class="sat-orbit-ring"></div>
+      <div class="sat-glow"></div>
+      <div class="sat3d" id="sat3d">
+        <div class="sat-panel left"></div>
+        <div class="sat-panel right"></div>
+        <div class="sat-body">
+          <div class="sat-face f"></div>
+          <div class="sat-face b"></div>
+          <div class="sat-face l"></div>
+          <div class="sat-face r"></div>
+          <div class="sat-face t"></div>
+          <div class="sat-face d"></div>
+        </div>
+        <div class="sat-dish"></div>
+      </div>
+    </div>
+
+    <div class="wrap hero-content">
+      <div class="eyebrow"><span data-en>Satellite field intelligence · live over Battambang</span><span data-km>បញ្ញាតាមដានស្រែពីផ្កាយរណប · ផ្សាយផ្ទាល់លើខេត្តបាត់ដំបង</span></div>
+      <h1 class="hero-title">
+        <span data-en>See your rice field the way a <span class="accent">satellite</span> sees it.</span>
+        <span data-km>មើលឃើញស្រែរបស់អ្នក <span class="accent">ដូចផ្កាយរណប</span>មើលឃើញ។</span>
+      </h1>
+      <p class="hero-sub">
+        <span data-en>Sentinel-2 vegetation data, growth-stage alerts, and rainfall watch — explained in plain language, in Khmer or English, before stress shows on the ground.</span>
+        <span data-km>ទិន្នន័យរុក្ខជាតិពីផ្កាយរណប Sentinel-2 ការជូនដំណឹងតាមដំណាក់កាលលូតលាស់ និងការតាមដានទឹកភ្លៀង — ពន្យល់ជាភាសាសាមញ្ញ ជាភាសាខ្មែរ ឬអង់គ្លេស មុនពេលមានបញ្ហាលេចឡើងនៅលើដី។</span>
+      </p>
+      <div class="hero-actions">
+        <a href="#cta" class="btn btn-primary"><span data-en>Sign in with Google</span><span data-km>ចូលប្រើដោយ Google</span></a>
+        <a href="#how" class="btn btn-ghost"><span data-en>See how it works</span><span data-km>មើលរបៀបប្រើប្រាស់</span></a>
+      </div>
+      <div class="hero-stats">
+        <div class="stat"><b>5</b><span data-en>Saved areas per account</span><span data-km>តំបន់ដែលអាចរក្សាទុកក្នុងគណនី</span></div>
+        <div class="stat"><b>14</b><span data-en>Months of satellite history</span><span data-km>ខែនៃប្រវត្តិផ្កាយរណប</span></div>
+        <div class="stat"><b>3</b><span data-en>Vegetation indices tracked</span><span data-km>សន្ទស្សន៍រុក្ខជាតិដែលតាមដាន</span></div>
+      </div>
+    </div>
+
+    <div class="scroll-cue"><span data-en>Scroll</span><span data-km>រំកិលចុះ</span><span class="bar"></span></div>
+  </section>
+
+  <!-- ============ PROBLEM ============ -->
+  <section class="section" id="problem">
+    <div class="wrap problem-grid">
+      <div class="reveal">
+        <div class="kicker"><span data-en>Why it exists</span><span data-km>ហេតុអ្វីបានជាមានកម្មវិធីនេះ</span></div>
+        <h2 class="section-title">
+          <span data-en>Clouds don't stop at the field edge.</span>
+          <span data-km>ពពកមិនឈប់នៅគែមស្រែទេ។</span>
+        </h2>
+        <p class="section-desc">
+          <span data-en>Optical satellites go blind under monsoon cloud cover. Walking every paddy takes days a busy season doesn't have. Most dashboards show a number without saying whether it can be trusted.</span>
+          <span data-km>ផ្កាយរណបអុបទិកមើលមិនឃើញ នៅពេលពពកនៃរដូវវស្សាគ្របដណ្តប់។ ការចុះដើរមើលស្រែម្តងម្នាក់ៗ ត្រូវការពេលច្រើនថ្ងៃ ដែលរដូវកាលមមាញឹកមិនអនុញ្ញាតឱ្យ។ ផ្ទាំងគ្រប់គ្រងភាគច្រើន បង្ហាញតែលេខ ដោយមិនប្រាប់ថាតើអាចទុកចិត្តបានឬអត់។</span>
+        </p>
+      </div>
+      <div class="reveal">
+        <div class="problem-card">
+          <span class="tag tag-red"><span data-en>Signal lost</span><span data-km>បាត់សញ្ញា</span></span>
+          <p><span data-en>A cloud-covered month with no explanation looks identical to a genuinely stressed field — until someone checks by hand.</span><span data-km>ខែដែលពពកគ្របដណ្តប់ ដោយគ្មានការពន្យល់ អាចមើលទៅដូចជាស្រែពិតជាមានបញ្ហា — លុះត្រាតែមានគេចុះមើលដោយផ្ទាល់។</span></p>
+        </div>
+        <div class="problem-card">
+          <span class="tag tag-gold"><span data-en>Growth stage ignored</span><span data-km>មិនគិតពីដំណាក់កាលលូតលាស់</span></span>
+          <p><span data-en>A young paddy naturally reads low on NDVI. Judged against a fixed threshold, it looks stressed when it's simply new.</span><span data-km>ស្រែក្មេងៗ តាមធម្មតាមានតម្លៃ NDVI ទាប។ ប្រសិនបើវាស់ស្ទង់ដោយប្រើកម្រិតតែមួយ វានឹងមើលទៅដូចជាមានបញ្ហា ខណៈដែលវាគ្រាន់តែថ្មីប៉ុណ្ណោះ។</span></p>
+        </div>
+        <div class="problem-card">
+          <span class="tag tag-green"><span data-en>Two languages, one field</span><span data-km>ភាសាពីរ ស្រែមួយ</span></span>
+          <p><span data-en>Farm data tools rarely speak Khmer. Findings from space are only useful if the person holding the sickle can read them.</span><span data-km>ឧបករណ៍ទិន្នន័យកសិកម្ម កម្រនិយាយភាសាខ្មែរណាស់។ ព័ត៌មានពីលំហអវកាស មានប្រយោជន៍ លុះត្រាតែអ្នកកាន់កណ្តៀវអានយល់។</span></p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ HOW IT WORKS ============ -->
+  <section class="section section--light" id="how">
+    <div class="wrap">
+      <div class="reveal">
+        <div class="kicker"><span data-en>The workflow</span><span data-km>ដំណើរការប្រើប្រាស់</span></div>
+        <h2 class="section-title"><span data-en>From sign-in to field report, in five steps.</span><span data-km>ពីការចូលប្រើ រហូតដល់របាយការណ៍ស្រែ ក្នុងជំហានប្រាំ។</span></h2>
+        <p class="section-desc"><span data-en>Each step mirrors what actually happens inside the app — nothing skipped, nothing simplified away.</span><span data-km>ជំហានទាំងនេះ ស្របតាមអ្វីដែលកើតឡើងជាក់ស្តែងក្នុងកម្មវិធី — គ្មានការលោត ឬកាត់បន្ថយឡើយ។</span></p>
+      </div>
+
+      <div class="steps">
+        <div class="step reveal">
+          <div class="step-media">
+            <img src="https://commons.wikimedia.org/wiki/Special:FilePath/Rice%20fields%20around%20Angkor%20Thom%20-%20Cambodia%20-%20panoramio.jpg" alt="Aerial view of rice fields near Angkor Thom, Cambodia">
+            <div class="cap"><span data-en>Rice fields near Angkor Thom, Cambodia</span><span data-km>ស្រែនៅជិតអង្គរធំ កម្ពុជា</span></div>
+          </div>
+          <div class="step-text">
+            <div class="step-num">01 / 05</div>
+            <h3><span data-en>Sign in with Google</span><span data-km>ចូលប្រើដោយ Google</span></h3>
+            <p><span data-en>Google sign-in authenticates with Earth Engine to unlock live imagery, and syncs your saved fields through Supabase across devices.</span><span data-km>ការចូលប្រើតាម Google ភ្ជាប់ជាមួយ Earth Engine ដើម្បីទាញយករូបភាពផ្កាយរណបផ្ទាល់ ហើយធ្វើសមកាលកម្មស្រែដែលបានរក្សាទុករបស់អ្នក តាមរយៈ Supabase លើគ្រប់ឧបករណ៍។</span></p>
+          </div>
+        </div>
+
+        <div class="step rev reveal">
+          <div class="step-media">
+            <img src="https://www.nasa.gov/wp-content/uploads/2023/03/applied_geosolutions_1.png" alt="Satellite data over the Mekong Delta rice region, NASA">
+            <div class="cap"><span data-en>Satellite data over the Mekong Delta — NASA</span><span data-km>ទិន្នន័យផ្កាយរណបលើតំបន់វាលទំនាបទន្លេមេគង្គ — NASA</span></div>
+          </div>
+          <div class="step-text">
+            <div class="step-num">02 / 05</div>
+            <h3><span data-en>Draw or search an area</span><span data-km>គូស ឬស្វែងរកតំបន់</span></h3>
+            <p><span data-en>Search a place, drag a box on the map, or reuse a saved field boundary. Up to five areas per account, synced across devices.</span><span data-km>ស្វែងរកទីតាំង គូសបួនជ្រុងលើផែនទី ឬប្រើព្រំដែនស្រែដែលបានរក្សាទុក។ រហូតដល់ប្រាំតំបន់ក្នុងមួយគណនី ជាមួយការធ្វើសមកាលកម្មលើគ្រប់ឧបករណ៍។</span></p>
+          </div>
+        </div>
+
+        <div class="step reveal">
+          <div class="step-media">
+            <img src="https://commons.wikimedia.org/wiki/Special:FilePath/Rice%20paddy%20with%20water%20buffalo%20(26446016828).jpg" alt="Farmer with water buffalo in a rice paddy">
+            <div class="cap"><span data-en>Ground truth: a working paddy field</span><span data-km>ការណែនាំពិត៖ ស្រែកំពុងធ្វើការ</span></div>
+          </div>
+          <div class="step-text">
+            <div class="step-num">03 / 05</div>
+            <h3><span data-en>Read NDVI, NDWI and LSWI</span><span data-km>អាន NDVI, NDWI និង LSWI</span></h3>
+            <p><span data-en>Switch between vegetation, water and true-color views, and scrub a time slider through the last fourteen months of composites.</span><span data-km>ប្តូររវាងទិដ្ឋភាពរុក្ខជាតិ ទឹក និងពណ៌ពិត ហើយរំកិលមើលរយៈពេល ១៤ខែចុងក្រោយ។</span></p>
+          </div>
+        </div>
+
+        <div class="step rev reveal">
+          <div class="step-media">
+            <img src="https://commons.wikimedia.org/wiki/Special:FilePath/Sc%C3%A8nes%20de%20repiquage%20dans%20une%20rizi%C3%A8re%20cambodgienne.jpg" alt="Farmers transplanting rice seedlings in Cambodia">
+            <div class="cap"><span data-en>Transplanting season, Cambodia</span><span data-km>រដូវប្ដូរដំណាំ កម្ពុជា</span></div>
+          </div>
+          <div class="step-text">
+            <div class="step-num">04 / 05</div>
+            <h3><span data-en>Set a planting date, track a field</span><span data-km>កំណត់ថ្ងៃដាំ ហើយតាមដានស្រែ</span></h3>
+            <p><span data-en>Draw a paddy boundary and set when it was planted. NDVI is then compared against the expected range for that growth stage — not a flat number.</span><span data-km>គូសព្រំដែនស្រែ ហើយកំណត់ថ្ងៃដែលបានចាំដាំ។ NDVI នឹងត្រូវប្រៀបធៀបទៅនឹងកម្រិតរំពឹងទុកសម្រាប់ដំណាក់កាលនោះ — មិនមែនប្រៀបនឹងលេខតែមួយឡើយ។</span></p>
+          </div>
+        </div>
+
+        <div class="step reveal">
+          <div class="step-media">
+            <img src="https://commons.wikimedia.org/wiki/Special:FilePath/Cambodia%20Rice%20Fields%20(9728041389).jpg" alt="Rice fields in Cambodia at sunset">
+            <div class="cap"><span data-en>Field report, ready to export</span><span data-km>របាយការណ៍ស្រែ ត្រៀមនាំចេញ</span></div>
+          </div>
+          <div class="step-text">
+            <div class="step-num">05 / 05</div>
+            <h3><span data-en>Get alerts, export a report</span><span data-km>ទទួលការជូនដំណឹង នាំចេញរបាយការណ៍</span></h3>
+            <p><span data-en>Link Telegram to hear about stress the night it's detected, or export a PDF with the trend chart, field info and health summary.</span><span data-km>ភ្ជាប់ Telegram ដើម្បីទទួលដំណឹងភ្លាមៗនៅយប់ដែលរកឃើញបញ្ហា ឬនាំចេញ PDF ដែលមានក្រាបទំនោរ ព័ត៌មានស្រែ និងសេចក្តីសង្ខេបសុខភាព។</span></p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ FEATURES ============ -->
+  <section class="section" id="features">
+    <div class="wrap">
+      <div class="reveal">
+        <div class="kicker"><span data-en>What's inside</span><span data-km>អ្វីខ្លះនៅខាងក្នុង</span></div>
+        <h2 class="section-title"><span data-en>Built around one question: can this reading be trusted?</span><span data-km>សាងសង់ជុំវិញសំណួរមួយ៖ តើទិន្នន័យនេះអាចទុកចិត្តបានទេ?</span></h2>
+      </div>
+      <div class="feat-grid">
+
+        <div class="feat-card reveal tilt">
+          <svg class="feat-icon" viewBox="0 0 24 24" fill="none"><path d="M4 20l4-9 4 5 3-7 5 11" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <h3><span data-en>Three ways to read a field</span><span data-km>របៀបអានស្រែបីយ៉ាង</span></h3>
+          <p><span data-en>NDVI for biomass, NDWI for standing water, LSWI for canopy and soil moisture — plus the true-color photo underneath every reading.</span><span data-km>NDVI សម្រាប់ជីវម៉ាស់ NDWI សម្រាប់ទឹកលិចលើផ្ទៃដី LSWI សម្រាប់សំណើមស្លឹកនិងដី — ព្រមទាំងរូបភាពពណ៌ពិត ក្រោមរាល់ការអានទិន្នន័យ។</span></p>
+        </div>
+
+        <div class="feat-card reveal tilt">
+          <svg class="feat-icon" viewBox="0 0 24 24" fill="none"><path d="M3 17c4-9 7-11 9-11s5 2 9 11" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="12" cy="17" r="1.4" fill="currentColor"/></svg>
+          <h3><span data-en>Growth-stage aware</span><span data-km>ដឹងពីដំណាក់កាលលូតលាស់</span></h3>
+          <p><span data-en>Germination through harvest each has its own expected NDVI range, so a young paddy isn't mistaken for a stressed one.</span><span data-km>ចាប់ពីការដុះមក ដល់ការច្រូតកាត់ នីមួយៗមានកម្រិត NDVI រំពឹងទុករៀងៗខ្លួន ដូច្នេះស្រែក្មេងៗនឹងមិនត្រូវច្រឡំថាមានបញ្ហាឡើយ។</span></p>
+        </div>
+
+        <div class="feat-card reveal tilt">
+          <svg class="feat-icon" viewBox="0 0 24 24" fill="none"><path d="M18 10a6 6 0 10-11.6 2.2A4 4 0 007 20h10a4 4 0 001-7.9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+          <h3><span data-en>Cloud-blocked fallback</span><span data-km>ជម្រើសបម្រុងពេលមានពពក</span></h3>
+          <p><span data-en>Cloud-covered months show a true-color photo and a note explaining why. If optical is fully blocked, radar (RVI) steps in — clearly labeled as a different signal.</span><span data-km>ខែដែលមានពពកគ្របដណ្តប់ បង្ហាញរូបភាពពណ៌ពិត ជាមួយចំណាំពន្យល់។ ប្រសិនបើមើលមិនឃើញទាំងស្រុង រ៉ាដា (RVI) នឹងចូលមកជំនួស — ដោយសម្គាល់ច្បាស់ថាជាសញ្ញាផ្សេង។</span></p>
+        </div>
+
+        <div class="feat-card reveal tilt">
+          <svg class="feat-icon" viewBox="0 0 24 24" fill="none"><path d="M4 14l3-8 3 5 2-4 3 6 3-3 2 4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 19h16" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+          <h3><span data-en>Rainfall watch</span><span data-km>តាមដានទឹកភ្លៀង</span></h3>
+          <p><span data-en>A 21-day cumulative CHIRPS rainfall reading sits alongside every field, for context that vegetation index alone can't give.</span><span data-km>ទិន្នន័យទឹកភ្លៀងបូកសរុប ២១ថ្ងៃពី CHIRPS បង្ហាញនៅជាប់ស្រែនីមួយៗ ដើម្បីផ្តល់បរិបទដែលសន្ទស្សន៍រុក្ខជាតិតែម្នាក់ឯងផ្តល់មិនបាន។</span></p>
+        </div>
+
+        <div class="feat-card reveal tilt">
+          <svg class="feat-icon" viewBox="0 0 24 24" fill="none"><path d="M12 3v3M12 18v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M3 12h3M18 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="1.6"/></svg>
+          <h3><span data-en>AI agronomist, bilingual</span><span data-km>អ្នកជំនាញកសិកម្ម AI ពីរភាសា</span></h3>
+          <p><span data-en>Ask a field a question and get a plain-language interpretation of its health, in Khmer or English.</span><span data-km>សួរសំណួរអំពីស្រែ ហើយទទួលបានការពន្យល់ជាភាសាសាមញ្ញអំពីសុខភាពរបស់វា ជាភាសាខ្មែរ ឬអង់គ្លេស។</span></p>
+        </div>
+
+        <div class="feat-card reveal tilt">
+          <svg class="feat-icon" viewBox="0 0 24 24" fill="none"><path d="M21 4L3 11l6 2.5M21 4l-4.5 17-6.5-7.5M21 4L10.5 13.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <h3><span data-en>Telegram alerts & photos</span><span data-km>ការជូនដំណឹង និងរូបភាពតាម Telegram</span></h3>
+          <p><span data-en>Link your account to receive a stress alert the moment a field crosses its threshold, and upload ground photos straight from the chat.</span><span data-km>ភ្ជាប់គណនីរបស់អ្នក ដើម្បីទទួលការជូនដំណឹងភ្លាមៗនៅពេលស្រែឆ្លងកម្រិត ហើយផ្ទុករូបភាពផ្ទាល់ពីការជជែក។</span></p>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ LANGUAGE / MOCK ============ -->
+  <section class="section lang-section" id="language">
+    <div class="wrap mock-wrap">
+      <div class="lang-copy reveal">
+        <div class="kicker"><span data-en>Built for the person in the field</span><span data-km>សាងសង់ឡើងសម្រាប់អ្នកនៅក្នុងស្រែ</span></div>
+        <h2 class="section-title"><span data-en>Every screen, in Khmer or English.</span><span data-km>គ្រប់អេក្រង់ទាំងអស់ ជាភាសាខ្មែរ ឬអង់គ្លេស។</span></h2>
+        <p class="section-desc"><span data-en>Not a translated menu bar — growth-stage names, alert text and the AI agronomist's answers all switch fully, so the person reading the field report and the person walking it can be the same person.</span><span data-km>មិនមែនត្រឹមតែបញ្ជីម៉ឺនុយបកប្រែនោះទេ — ឈ្មោះដំណាក់កាលលូតលាស់ អត្ថបទជូនដំណឹង និងចម្លើយពីអ្នកជំនាញ AI ប្តូរទាំងស្រុង ដូច្នេះអ្នកអានរបាយការណ៍ និងអ្នកដើរស្រែ អាចជាមនុស្សតែម្នាក់គ្នា។</span></p>
+        <div class="switch-demo">
+          <button class="btn btn-ghost btn-sm" type="button" data-set-lang="en"><span>EN</span></button>
+          <button class="btn btn-ghost btn-sm" type="button" data-set-lang="km"><span>ខ្មែរ</span></button>
+        </div>
+      </div>
+
+      <div class="mock-panel reveal">
+        <div class="mock-topbar">
+          <div class="mock-dots"><span></span><span></span><span></span></div>
+          <span class="mock-badge"><span data-en>NDVI · Aug</span><span data-km>NDVI · សីហា</span></span>
+        </div>
+        <div class="mock-map">
+          <svg viewBox="0 0 400 200" preserveAspectRatio="none">
+            <defs>
+              <linearGradient id="g1" x1="0" y1="0" x2="1" y2="1">
+                <stop offset="0" stop-color="#6BA85F"/>
+                <stop offset=".5" stop-color="#E3A72E"/>
+                <stop offset="1" stop-color="#C1443C"/>
+              </linearGradient>
+            </defs>
+            <rect x="0" y="0" width="400" height="200" fill="#12281c"/>
+            <path d="M0 120 Q100 90 200 110 T400 100 V200 H0 Z" fill="url(#g1)" opacity="0.55"/>
+            <path d="M0 150 Q120 130 220 150 T400 140 V200 H0 Z" fill="#0e2318" opacity="0.6"/>
+          </svg>
+          <div class="mock-field" style="left:34%; top:32%; width:78px; height:54px;"></div>
+          <div class="mock-legend"><i style="background:#6BA85F"></i><i style="background:#E3A72E"></i><i style="background:#C1443C"></i></div>
+        </div>
+        <div class="mock-row">
+          <b><span data-en>Plot 4 — Sangkae</span><span data-km>ស្រែលេខ ៤ — សង្កែ</span></b>
+          <span class="pill pill-healthy"><span data-en>Healthy</span><span data-km>ល្អ</span></span>
+        </div>
+        <div class="mock-row">
+          <b><span data-en>Growth stage</span><span data-km>ដំណាក់កាល</span></b>
+          <span><span data-en>Reproductive · day 61</span><span data-km>ចេញកួរ · ថ្ងៃទី ៦១</span></span>
+        </div>
+        <div class="mock-row">
+          <b><span data-en>Plot 2 — Ta Kream</span><span data-km>ស្រែលេខ ២ — តាក្រាម</span></b>
+          <span class="pill pill-mod"><span data-en>Moderate</span><span data-km>មធ្យម</span></span>
+        </div>
+        <div class="mock-row">
+          <b><span data-en>21-day rainfall</span><span data-km>ទឹកភ្លៀង ២១ថ្ងៃ</span></b>
+          <span><span data-en>62 mm</span><span data-km>៦២ ម.ម</span></span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ DATA TRUST ============ -->
+  <section class="section" style="padding-top:0;">
+    <div class="wrap reveal">
+      <div class="kicker"><span data-en>Where the data comes from</span><span data-km>ប្រភពទិន្នន័យ</span></div>
+      <h2 class="section-title" style="font-size:clamp(22px,3vw,30px);"><span data-en>Public earth-observation data, processed server-side.</span><span data-km>ទិន្នន័យសង្កេតផែនដីសាធារណៈ ដំណើរការនៅផ្នែក server។</span></h2>
+      <div class="trust-strip">
+        <span class="trust-chip"><i></i>Sentinel-2 (ESA / Copernicus)</span>
+        <span class="trust-chip"><i></i>Sentinel-1 radar (RVI fallback)</span>
+        <span class="trust-chip"><i></i>CHIRPS rainfall</span>
+        <span class="trust-chip"><i></i>Google Earth Engine</span>
+        <span class="trust-chip"><i></i>Nominatim / OSM place search</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ CTA ============ -->
+  <section class="cta-section" id="cta">
+    <div class="wrap">
+      <h2 class="cta-title"><span data-en>Your next rice cycle, watched from above.</span><span data-km>រដូវដាំដុះបន្ទាប់របស់អ្នក ត្រូវបានឃ្លាំមើលពីលើ។</span></h2>
+      <p class="cta-sub"><span data-en>Sign in, draw your first field, and see its growth stage before the season is over.</span><span data-km>ចូលប្រើ គូសស្រែដំបូងរបស់អ្នក ហើយមើលដំណាក់កាលលូតលាស់របស់វា មុនពេលចប់រដូវកាល។</span></p>
+      <div class="cta-actions">
+        <a href="#" class="btn btn-primary"><span data-en>Sign in with Google</span><span data-km>ចូលប្រើដោយ Google</span></a>
+        <a href="#" class="btn btn-ghost"><span data-en>Open on Telegram</span><span data-km>បើកលើ Telegram</span></a>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <div class="wrap foot-grid">
+      <div class="foot-credit">
+        <span data-en>Imagery: rice-field photographs via Wikimedia Commons contributors; Mekong Delta satellite composite courtesy of NASA / Applied GeoSolutions. Vegetation data: Copernicus Sentinel-2 &amp; Sentinel-1, processed via Google Earth Engine. Rainfall: CHIRPS.</span>
+        <span data-km>រូបភាព៖ រូបថតស្រែ ពី Wikimedia Commons contributors; រូបភាពផ្កាយរណបលើវាលទំនាបទន្លេមេគង្គ ដោយ NASA / Applied GeoSolutions។ ទិន្នន័យរុក្ខជាតិ៖ Copernicus Sentinel-2 និង Sentinel-1 ដំណើរការតាមរយៈ Google Earth Engine។ ទឹកភ្លៀង៖ CHIRPS។</span>
+      </div>
+      <div class="foot-links">
+        <a href="#how"><span data-en>How it works</span><span data-km>របៀបប្រើប្រាស់</span></a>
+        <a href="#features"><span data-en>Features</span><span data-km>លក្ខណៈពិសេស</span></a>
+        <a href="#cta"><span data-en>Sign in</span><span data-km>ចូលប្រើ</span></a>
+      </div>
+    </div>
+  </footer>
+
+<script>
+  // ---- language toggle ----
+  var langButtons = document.querySelectorAll('[data-set-lang]');
+  function setLang(lang){
+    document.documentElement.setAttribute('data-lang', lang);
+    document.documentElement.setAttribute('lang', lang === 'km' ? 'km' : 'en');
+    langButtons.forEach(function(b){
+      b.classList.toggle('active', b.getAttribute('data-set-lang') === lang);
+    });
+  }
+  langButtons.forEach(function(btn){
+    btn.addEventListener('click', function(){ setLang(btn.getAttribute('data-set-lang')); });
+  });
+
+  // ---- hero NDVI scan wipe (auto sweep + mouse control) ----
+  var heroBg = document.getElementById('heroBg');
+  var wipe = 38;
+  var dir = 1;
+  function autoSweep(){
+    wipe += dir * 0.18;
+    if (wipe > 78) dir = -1;
+    if (wipe < 22) dir = 1;
+    heroBg.style.setProperty('--wipe', wipe + '%');
+    requestAnimationFrame(autoSweep);
+  }
+  requestAnimationFrame(autoSweep);
+
+  // ---- 3D satellite parallax on mouse ----
+  var satStage = document.getElementById('satStage');
+  var sat3d = document.getElementById('sat3d');
+  var heroSection = document.getElementById('hero');
+  if (satStage && sat3d){
+    heroSection.addEventListener('mousemove', function(e){
+      var r = heroSection.getBoundingClientRect();
+      var px = (e.clientX - r.left) / r.width - 0.5;
+      var py = (e.clientY - r.top) / r.height - 0.5;
+      sat3d.style.setProperty('--my', (22 + px * 26) + 'deg');
+      sat3d.style.setProperty('--mx', (-14 - py * 18) + 'deg');
+    });
+  }
+
+  // ---- scroll reveal ----
+  var revealEls = document.querySelectorAll('.reveal');
+  if ('IntersectionObserver' in window){
+    var io = new IntersectionObserver(function(entries){
+      entries.forEach(function(entry){
+        if (entry.isIntersecting){
+          entry.target.classList.add('in');
+          io.unobserve(entry.target);
+        }
+      });
+    }, { threshold: 0.15, rootMargin: '0px 0px -60px 0px' });
+    revealEls.forEach(function(el){ io.observe(el); });
+  } else {
+    revealEls.forEach(function(el){ el.classList.add('in'); });
+  }
+
+  // ---- feature card tilt ----
+  var tiltCards = document.querySelectorAll('.tilt');
+  tiltCards.forEach(function(card){
+    card.addEventListener('mousemove', function(e){
+      var r = card.getBoundingClientRect();
+      var px = (e.clientX - r.left) / r.width - 0.5;
+      var py = (e.clientY - r.top) / r.height - 0.5;
+      card.style.transform = 'perspective(700px) rotateY(' + (px * 10) + 'deg) rotateX(' + (-py * 10) + 'deg) translateY(-3px)';
+    });
+    card.addEventListener('mouseleave', function(){
+      card.style.transform = 'perspective(700px) rotateY(0deg) rotateX(0deg) translateY(0px)';
+    });
+  });
+</script>
+</body>
+</html>
