@@ -27,6 +27,9 @@
         <button class="latest-btn" :title="t('time.latest')" @click="goLatest">
           <i class="ti ti-last"></i>
         </button>
+        <button class="today-btn" :title="t('time.today_tip')" @click="goToday">
+          <i class="ti ti-calendar-event"></i> {{ t('time.today') }}
+        </button>
       </div>
     </div>
 
@@ -317,6 +320,10 @@ function goLatest() {
     state.rightMonth = latest
     store.loadIndexForMonthRight(latest)
   }
+}
+
+function goToday() {
+  store.jumpToToday()
 }
 
 onBeforeUnmount(() => {

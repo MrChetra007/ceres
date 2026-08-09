@@ -85,6 +85,8 @@ export default {
   'time.playing': 'ផ្អាក',
   'time.play': 'លេងតាមខែ',
   'time.latest': 'លោតទៅខែពេញថ្មីបំផុត',
+  'time.today': 'ថ្ងៃនេះ',
+  'time.today_tip': 'រំកិលរបារទៅកាលបរិច្ឆេទថ្ងៃនេះ',
   'time.expand_collapse': 'ពង្រីក / បង្រួម',
   'time.low_rain': 'ទឹកភ្លៀងតិច',
   'time.flood': 'ទឹកជំនន់',

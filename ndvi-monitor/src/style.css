@@ -528,6 +528,27 @@ html, body {
   color: #1a56db;
 }
 
+.today-btn {
+  background: none;
+  border: 1px solid rgba(125, 180, 255, 0.35);
+  color: var(--accent, #4a90d9);
+  border-radius: 999px;
+  font-size: 12px;
+  padding: 2px 10px;
+  cursor: pointer;
+  line-height: 1.4;
+  vertical-align: middle;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.today-btn:hover {
+  background: rgba(125, 180, 255, 0.14);
+  border-color: rgba(138, 182, 255, 0.65);
+  color: #bcd6ff;
+}
+.today-btn .ti {
+  font-size: 12px;
+}
+
 #slider-panel.loading .segmented::after {
   content: ' \u27f3';
   font-size: 12px;

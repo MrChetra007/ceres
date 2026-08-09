@@ -645,6 +645,39 @@ export function loadIndexForMonthRight(idx, silent) {
   })
 }
 
+// "Today" quick-jump — snap the slider to the current real calendar date and
+// run the EXACT SAME per-date pipeline as a manual scrub (loadIndexForMonth →
+// loadIndexTile's cloud_blocked/radar/no_data branches, or loadTrueColor).
+// `state.chartData` (per-scene series) and `asOfDate` (the scene-exact fix)
+// then drive the hero/growth/stress surfaces with NO special-casing.
+export function jumpToToday() {
+  if (!state.eeReady) return
+  const now = new Date()
+  let idx = MONTHS.findIndex((m) => m.year === now.getFullYear() && m.month === now.getMonth() + 1)
+  if (idx < 0) idx = MONTHS.length - 1 // current month always ends the window
+  // If a date-range hides today's month, clear the range first so the full
+  // (always-today-ending) MONTHS window is available again.
+  if (state.rangeStart && state.rangeEnd) {
+    const b = sliderBounds()
+    if (idx < b.min || idx > b.max) {
+      state.mainMonth = idx
+      clearDateRange()
+      return // clearDateRange already reloads the current month
+    }
+  }
+  state.mainMonth = idx
+  // True Color mode renders the scene the picker selected; today means "today",
+  // so hand loadTrueColor the exact captures (nearest clean scene or the least
+  // cloudy fallback that loadTrueColor already picks when no exact date exists).
+  if (state.currentIndex === 'truecolor') state.trueColorDate = toISODate(now)
+  loadIndexForMonth(idx, currentGeometry.value)
+  if (state.compareMode) {
+    state.rightMonth = idx
+    if (state.currentIndex === 'truecolor') state.trueColorDateRight = toISODate(now)
+    loadIndexForMonthRight(idx)
+  }
+}
+
 // Part 8 follow-up — move the time slider to the month containing the last
 // cloud-free reading, turning a cloud-obscured view into an actionable jump.
 export function jumpToLastValidReading(side = 'main') {

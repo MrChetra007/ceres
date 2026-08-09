@@ -84,6 +84,8 @@ export default {
   'time.playing': 'Pause',
   'time.play': 'Play through months',
   'time.latest': 'Jump to latest complete month',
+  'time.today': 'Today',
+  'time.today_tip': 'Jump the slider to today\u2019s date',
   'time.expand_collapse': 'Expand / collapse',
   'time.low_rain': 'Low rainfall',
   'time.flood': 'Flood',
