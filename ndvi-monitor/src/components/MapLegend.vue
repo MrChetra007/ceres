@@ -1,11 +1,16 @@
 <template>
-  <div class="map-legend">
-    <div class="legend-bar"></div>
-    <div class="legend-labels">
-      <span>0.0 {{ t('legend.soil_water') }}</span>
-      <span>0.4 {{ t('legend.moderate') }}</span>
-      <span>1.0 {{ t('legend.dense_veg') }}</span>
-    </div>
+  <div class="map-legend" :class="{ photo: isTrueColor }">
+    <template v-if="!isTrueColor">
+      <div class="legend-bar"></div>
+      <div class="legend-labels">
+        <span>0.0 {{ t('legend.soil_water') }}</span>
+        <span>0.4 {{ t('legend.moderate') }}</span>
+        <span>1.0 {{ t('legend.dense_veg') }}</span>
+      </div>
+    </template>
+    <template v-else>
+      <div class="legend-photo-note">{{ t('legend.true_color') }}</div>
+    </template>
     <ConfidenceBadge v-if="!state.loading && conf && conf.tier" :tier="conf.tier" :reason="conf.reason" showReason class="legend-conf" />
   </div>
 </template>
@@ -17,5 +22,6 @@ import ConfidenceBadge from './ConfidenceBadge.vue'
 import { useI18n } from '../i18n'
 
 const { t } = useI18n()
+const isTrueColor = computed(() => state.currentIndex === 'truecolor')
 const conf = computed(() => viewConfidence('main'))
 </script>

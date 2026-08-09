@@ -3,14 +3,26 @@
     <div class="band-panel panel">
       <div class="segmented" role="group" aria-label="Index">
         <button
-          v-for="idx in ['ndvi', 'ndwi', 'lswi']"
+          v-for="idx in ['ndvi', 'ndwi', 'lswi', 'truecolor']"
           :key="idx"
           class="segmented-btn"
           :class="{ active: state.currentIndex === idx }"
           :data-index="idx"
           :title="indexTitle(idx)"
           @click="store.setIndex(idx)"
-        >{{ idx.toUpperCase() }}</button>
+        >{{ idx === 'truecolor' ? t('band.truecolor') : idx.toUpperCase() }}</button>
+      </div>
+      <div class="band-divider"></div>
+      <div class="known-scenes" v-show="state.currentIndex === 'truecolor' && state.trueColorScenes.length > 1">
+        <span class="scenes-label">{{ t('band.scene_precision') }}</span>
+        <select
+          class="scenes-select"
+          :value="state.trueColorDate || (state.trueColorScenes[0] && state.trueColorScenes[0].date)"
+          @change="onTrueColorScene"
+          :title="t('band.scene_pick_tip')"
+        >
+          <option v-for="s in state.trueColorScenes" :key="s.date" :value="s.date">{{ sceneOption(s) }}</option>
+        </select>
       </div>
       <div class="band-divider"></div>
       <div class="band-base segmented" role="group" :aria-label="t('band.base_layer')">
@@ -67,7 +79,7 @@
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { state } from '../store'
 import * as store from '../store'
-import { INDICES } from '../config'
+import { INDICES, TRUE_COLOR } from '../config'
 import { useI18n } from '../i18n'
 
 const { t } = useI18n()
@@ -76,7 +88,7 @@ const areasWrap = ref(null)
 const areasGroupWrap = ref(null)
 
 const explainerText = computed(() => {
-  const cfg = INDICES[state.currentIndex]
+  const cfg = INDICES[state.currentIndex] || TRUE_COLOR
   return cfg.name + ' \u00b7 ' + (state.preferredLanguage === 'km' ? cfg.fullKhm : cfg.full)
 })
 
@@ -90,8 +102,18 @@ function indexTitle(idx) {
     ndvi: t('index.ndvi_title'),
     ndwi: t('index.ndwi_title'),
     lswi: t('index.lswi_title'),
+    truecolor: t('index.truecolor_title'),
   }
   return map[idx]
+}
+
+function sceneOption(s) {
+  const cloud = s.cloudPct != null ? Math.round(s.cloudPct) + '%' : '—'
+  return s.date + ' \u00b7 ' + cloud + ' ' + t('common.cloud')
+}
+
+function onTrueColorScene(e) {
+  store.setTrueColorDate(e.target.value, 'main')
 }
 
 function pick(a) {

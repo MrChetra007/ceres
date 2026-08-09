@@ -3,7 +3,7 @@ import { area as turfArea } from '@turf/turf'
 import { jsPDF } from 'jspdf'
 import {
   EE_PROJECT_ID, CLIENT_ID, MONTHS, DEFAULT_AOI, DEFAULT_PRESETS,
-  RICE_GROWTH_STAGES, EVENTS, EVENT_COLORS, INDICES, MAP_CENTER, MAP_ZOOM,
+  RICE_GROWTH_STAGES, EVENTS, EVENT_COLORS, INDICES, TRUE_COLOR, MAP_CENTER, MAP_ZOOM,
   TELEGRAM_BOT_USERNAME, TELEGRAM_LINK_TTL_MS, SEASON_PRESETS,
 } from './config'
 import * as ee from './services/earthEngine'
@@ -46,6 +46,10 @@ export const state = reactive({
   rightMonth: Math.max(0, MONTHS.length - 5),
   compareMode: false,
   currentBase: 'satellite',
+  trueColorDate: null,
+  trueColorDateRight: null,
+  trueColorScenes: [],
+  trueColorScenesRight: [],
   currentFieldId: null,
   currentFieldName: null,
   lastClickPoint: null,
@@ -492,6 +496,17 @@ function applyTileLayer(map, layer, url, opacity) {
   }).addTo(map)
 }
 
+// True Color photo layers are fully-opaque (a real photograph, not a
+// semi-transparent index overlay) and must stay above the basemap.
+function applyTrueColorLayer(map, layer, url) {
+  if (layer) map.removeLayer(layer)
+  const l = window.L.tileLayer(url, {
+    attribution: 'Sentinel-2 / Google Earth Engine',
+    opacity: 1,
+  }).addTo(map)
+  return l
+}
+
 export function loadIndexForMonth(idx, geometry, silent) {
   const m = MONTHS[idx]
   if (!m || !state.eeReady) return
@@ -502,6 +517,30 @@ export function loadIndexForMonth(idx, geometry, silent) {
   state.radarFallback.main = null
   beginLoading()
   const geom = geometry || window.ee.Geometry.Rectangle(state.aoiCoords)
+  if (state.currentIndex === 'truecolor') {
+    ee.loadTrueColor(m, geom, state.trueColorDate, (res) => {
+      endLoading()
+      state.sceneCount.main = res.count
+      state.trueColorScenes = res.scenes || []
+      if (res.mode === 'no_data' || !res.url) {
+        if (mapReg.ndviLayer) { mapReg.map.removeLayer(mapReg.ndviLayer); mapReg.ndviLayer = null }
+        setStatus('error', 'No Sentinel-2 scenes yet for ' + m.label + ' \u2014 check back later in the month')
+        return
+      }
+      // Remember which single scene is being displayed, so the picker
+      // highlights it and re-selection keeps per-scene precision.
+      state.trueColorDate = res.chosen ? res.chosen.date : null
+      // Explicitly mark the view cloud-blocked when the picked scene is heavy
+      // so the ☁️ badge stays visible — on true color the clouds themselves are
+      // the demo signal for why that date is unreliable.
+      if (res.chosen && res.chosen.cloudPct != null && res.chosen.cloudPct >= 40) {
+        state.cloudBlock.main = { month: m.label, cloudPct: res.chosen.cloudPct, lastValidDate: res.chosen.date }
+      }
+      mapReg.ndviLayer = applyTrueColorLayer(mapReg.map, mapReg.ndviLayer, res.url)
+      setStatus('ready', TRUE_COLOR.name + ' photo \u2014 ' + m.label + (state.trueColorDate ? ' \u00b7 ' + state.trueColorDate : ''))
+    })
+    return
+  }
   ee.loadIndexTile(m, state.currentIndex, geom, (res) => {
     state.sceneCount.main = res.count
     if (res.mode === 'radar_fallback') {
@@ -550,6 +589,24 @@ export function loadIndexForMonthRight(idx, silent) {
   state.radarFallback.right = null
   beginLoading()
   const geom = getGeometry()
+  if (state.currentIndex === 'truecolor') {
+    ee.loadTrueColor(m, geom, state.trueColorDateRight, (res) => {
+      if (!mapReg.mapRight) { endLoading(); return }
+      endLoading()
+      state.sceneCount.right = res.count
+      state.trueColorScenesRight = res.scenes || []
+      if (res.mode === 'no_data' || !res.url) {
+        if (mapReg.ndviLayerRight) { mapReg.mapRight.removeLayer(mapReg.ndviLayerRight); mapReg.ndviLayerRight = null }
+        return
+      }
+      state.trueColorDateRight = res.chosen ? res.chosen.date : null
+      if (res.chosen && res.chosen.cloudPct != null && res.chosen.cloudPct >= 40) {
+        state.cloudBlock.right = { month: m.label, cloudPct: res.chosen.cloudPct, lastValidDate: res.chosen.date }
+      }
+      mapReg.ndviLayerRight = applyTrueColorLayer(mapReg.mapRight, mapReg.ndviLayerRight, res.url)
+    })
+    return
+  }
   ee.loadIndexTile(m, state.currentIndex, geom, (res) => {
     if (!mapReg.mapRight) { endLoading(); return }
     state.sceneCount.right = res.count
@@ -805,6 +862,9 @@ export function jumpToObservationDate(dateStr) {
   }
   if (target < 0) return
   state.mainMonth = target
+  // True Color renders a single scene, not a monthly mosaic — use the exact
+  // capture date clicked in the Observations panel rather than re-picking.
+  if (state.currentIndex === 'truecolor') state.trueColorDate = dateStr
   loadIndexForMonth(target, null)
 }
 
@@ -823,10 +883,11 @@ export function fetchDryMonths() {
 // Trend chart data
 // ---------------------------------------------------------------------------
 export function loadChartForPoint(lat, lng, index, onEmpty) {
-  setStatus('computing', 'Fetching ' + INDICES[index].name + ' trend...')
+  const cfg = INDICES[index] || TRUE_COLOR
+  setStatus('computing', 'Fetching ' + cfg.name + ' trend...')
   ee.getIndexTimeSeries(lat, lng, index, activeMonths(), (data) => {
     if (data.length === 0) {
-      setStatus('error', 'No ' + INDICES[index].name + ' data for this point')
+      setStatus('error', 'No ' + cfg.name + ' data for this point')
       if (onEmpty) onEmpty()
       return
     }
@@ -834,22 +895,23 @@ export function loadChartForPoint(lat, lng, index, onEmpty) {
     state.chartIndex = index
     state.chartSubtitle = lat.toFixed(4) + ', ' + lng.toFixed(4) + ' \u00b7 ' + data.length + ' observations'
     checkStress(data, lat, lng, index)
-    setStatus('ready', INDICES[index].name + ' trend loaded \u2014 ' + data.length + ' observations')
+    setStatus('ready', cfg.name + ' trend loaded \u2014 ' + data.length + ' observations')
   })
 }
 
 export function loadChartForGeometry(geometry, index, label) {
-  setStatus('computing', 'Fetching ' + INDICES[index].name + ' trend...')
+  const cfg = INDICES[index] || TRUE_COLOR
+  setStatus('computing', 'Fetching ' + cfg.name + ' trend...')
   ee.getIndexTimeSeriesForGeometry(geometry, index, activeMonths(), (data) => {
     if (!data || data.length === 0) {
-      setStatus('error', 'No ' + INDICES[index].name + ' data for this area')
+      setStatus('error', 'No ' + cfg.name + ' data for this area')
       return
     }
     state.chartData = data
     state.chartIndex = index
     state.chartSubtitle = label + ' \u00b7 ' + data.length + ' observations'
     checkStress(data, null, null, index)
-    setStatus('ready', INDICES[index].name + ' trend loaded \u2014 ' + data.length + ' observations')
+    setStatus('ready', cfg.name + ' trend loaded \u2014 ' + data.length + ' observations')
   })
 }
 
@@ -857,11 +919,25 @@ export function setIndex(index) {
   state.currentIndex = index
   loadIndexForMonth(state.mainMonth, currentGeometry.value)
   if (state.compareMode) loadIndexForMonthRight(state.rightMonth)
+  if (index === 'truecolor') return // photo mode — no index trend/status to refresh
   refreshAllFieldStatuses()
   if (state.currentFieldId && currentGeometry.value) {
     loadChartForGeometry(currentGeometry.value, index, state.currentFieldName)
   } else {
     reloadChartForIndex()
+  }
+}
+
+// Pick a specific capture date for the True Color photo (per-scene precision).
+// `side` is 'main' or 'right' to mirror the compare-mode split.
+export function setTrueColorDate(date, side = 'main') {
+  if (state.currentIndex !== 'truecolor') return
+  if (side === 'right') {
+    state.trueColorDateRight = date
+    loadIndexForMonthRight(state.rightMonth)
+  } else {
+    state.trueColorDate = date
+    loadIndexForMonth(state.mainMonth, currentGeometry.value)
   }
 }
 
@@ -1560,7 +1636,8 @@ export function exportChart() {
   if (!infoChart) { showToast('Click a location on the map first'); return }
   const canvas = document.getElementById('trend-chart')
   const link = document.createElement('a')
-  link.download = INDICES[state.currentIndex].name + '_trend_report.png'
+  const cfg = INDICES[state.currentIndex] || TRUE_COLOR
+  link.download = cfg.name + '_trend_report.png'
   link.href = canvas.toDataURL('image/png')
   link.click()
 }
@@ -1570,10 +1647,11 @@ export function exportPdf() {
   const doc = new jsPDF('p', 'mm', 'a4')
   const pw = doc.internal.pageSize.getWidth()
   let y = 20
+  const expCfgStart = INDICES[state.currentIndex] || TRUE_COLOR
 
   doc.setFontSize(18)
   doc.setTextColor(26, 26, 46)
-  doc.text(INDICES[state.currentIndex].name + ' Crop Health Report', pw / 2, y, { align: 'center' })
+  doc.text(expCfgStart.name + ' Crop Health Report', pw / 2, y, { align: 'center' })
   y += 10
 
   doc.setFontSize(10)

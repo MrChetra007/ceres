@@ -113,6 +113,49 @@ export function loadIndexTile(month, index, geometry, cb) {
   })
 }
 
+// True Color photo mode — a single Sentinel-2 RGB scene (B4·B3·B2), NOT an
+// index or a monthly mosaic. Deliberately no cloud masking: clouds/haze stay
+// visible because on a cloudy scene that IS the demo signal showing why the
+// index values for that date are unreliable. `sceneDate` (YYYY-MM-DD) picks an
+// exact capture; when omitted/null the least-cloudy scene of the month wins.
+// Returns the full scene list too, so the UI can offer a date picker.
+export function loadTrueColor(month, geometry, sceneDate, cb) {
+  const e = ee()
+  const start = e.Date.fromYMD(month.year, month.month, 1)
+  const end = start.advance(1, 'month')
+  const all = e.ImageCollection('COPERNICUS/S2_SR_HARMONIZED')
+    .filterBounds(geometry)
+    .filterDate(start, end)
+  const list = all.map((img) => e.Feature(null, {
+    date: img.date().format('YYYY-MM-dd'),
+    cloudPct: e.Number(img.get('CLOUDY_PIXEL_PERCENTAGE')),
+  }))
+  list.evaluate((result) => {
+    const scenes = ((result && result.features) || [])
+      .map((f) => ({ date: f.properties.date, cloudPct: f.properties.cloudPct }))
+      .sort((a, b) => a.date.localeCompare(b.date))
+    if (scenes.length === 0) {
+      cb({ mode: 'no_data', count: 0, scenes: [], chosen: null, url: null, err: 'none' })
+      return
+    }
+    let chosen = (sceneDate && scenes.find((s) => s.date === sceneDate)) || null
+    if (!chosen) chosen = scenes.reduce((a, b) => (b.cloudPct < a.cloudPct ? b : a))
+    const day = e.Date(chosen.date)
+    const vis = { bands: ['B4', 'B3', 'B2'], min: 0, max: 3000 }
+    const picked = all
+      .filterDate(day, day.advance(1, 'day'))
+      .sort('CLOUDY_PIXEL_PERCENTAGE')
+      .first()
+    picked.clip(geometry).getMap(vis, (mapId, err) => {
+      if (err || !mapId || !mapId.urlFormat) {
+        cb({ mode: 'error', count: scenes.length, scenes, chosen, url: null, err })
+        return
+      }
+      cb({ mode: 'photo', count: scenes.length, scenes, chosen, url: mapId.urlFormat })
+    })
+  })
+}
+
 // Sentinel-1 Radar Vegetation Index (RVI) fallback. Used when Sentinel-2
 // optical imagery is cloud-blocked: radar sees through clouds, so this gives a
 // real vegetation-structure signal where NDVI can't be computed. S1_GRD returns

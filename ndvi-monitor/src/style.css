@@ -2349,6 +2349,37 @@ body {
 .band-panel .segmented { padding: 3px; }
 .band-panel .segmented-btn { font-size: 12px; padding: 5px 14px; }
 
+/* ---- True Color per-scene picker ---- */
+.known-scenes {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.045);
+  border: 0.5px solid var(--panel-border);
+  border-radius: var(--radius-md);
+  padding: 3px 5px;
+}
+.known-scenes .scenes-label {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+  padding: 0 4px 0 2px;
+  white-space: nowrap;
+}
+.scenes-select {
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text);
+  border: 0.5px solid var(--panel-border);
+  border-radius: 6px;
+  font-size: 11px;
+  font-family: 'JetBrains Mono', monospace;
+  padding: 4px 6px;
+  max-width: 190px;
+}
+.scenes-select option { background: #171c24; color: var(--text); }
+
 .band-divider {
   width: 0.5px;
   align-self: stretch;
@@ -2591,6 +2622,13 @@ body {
   color: var(--text-faint);
   margin-top: 4px;
   white-space: nowrap;
+}
+
+.legend-photo-note {
+  font-size: 10px;
+  color: var(--text-dim);
+  line-height: 1.4;
+  max-width: 200px;
 }
 
 /* ---- Confidence badge (Data Trust Layer, Part B) ---- */

@@ -20,6 +20,23 @@ export const NDVI_VIS = { min: -0.2, max: 0.8, palette: ['red', 'yellow', 'green
 export const NDWI_VIS = { min: -1, max: 1, palette: ['brown', 'tan', '#e0f0ff', '#4a90d9', '#003366'] }
 export const LSWI_VIS = { min: -0.3, max: 0.6, palette: ['tan', 'lightblue', 'darkblue'] }
 
+// True Color photo mode — real Sentinel-2 RGB (B4·B3·B2), not an index.
+// Deliberately NOT in INDICES: the trend functions normalizeDifference() over
+// cfg.bands, which would break for a 3-band RGB triplet. Store/store guard
+// routes around it.
+export const TRUE_COLOR_VIS = { min: 0, max: 3000 }
+
+export const TRUE_COLOR = {
+  name: 'True Color',
+  bands: ['B4', 'B3', 'B2'],
+  label: 'Photo',
+  color: '#ffffff',
+  full: 'True Color Photo',
+  fullKhm: 'រូបថតពណ៌ពិត',
+  explain: 'Real Sentinel-2 RGB photo (Bands 4·3·2) — what the field actually looks like, no index colors. Clouds and haze show as-is.',
+  explainKhm: 'រូបថតផ្កាយរណបពណ៌ពិត (Bands 4·3·2) — អ្វីដែលវាលពិតជាមើលទៅ គ្មានពណ៌សន្ទស្សន៍។ ពពក និងអ័ព្ទនឹងបង្ហាញដូចដើម។',
+}
+
 export const INDICES = {
   ndvi: {
     name: 'NDVI', bands: ['B8', 'B4'], vis: NDVI_VIS, label: 'Vegetation',

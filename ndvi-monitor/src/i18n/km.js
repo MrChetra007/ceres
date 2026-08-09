@@ -58,9 +58,13 @@ export default {
   'legend.soil_water': 'ដី/ទឹក',
   'legend.moderate': 'ល្មម',
   'legend.dense_veg': 'ដំណាំក្រាស់',
+  'legend.true_color': 'រូបថតពណ៌ពិត — RGB ពិត គ្មានពណ៌សន្ទស្សន៍។',
 
   // Band panel / index
   'band.base_layer': 'ស្រទាប់ផែនទី',
+  'band.truecolor': 'រូបពណ៌ពិត',
+  'band.scene_precision': 'ឈុតឆាក',
+  'band.scene_pick_tip': 'ជ្រើសកាលបរិច្ឆេទថតជាក់លាក់ — រូបភាពមួយសន្លឹក មិនមែនជាការរួបរួមប្រចាំខែ',
   'band.switch_area': 'ប្តូរតំបន់',
   'band.my_areas': 'តំបន់របស់ខ្ញុំ',
   'band.delete_area': 'លុបតំបន់',
@@ -74,6 +78,7 @@ export default {
   'index.ndvi_title': 'NDVI — សន្ទស្សន៍សុខភាពដំណាំ។ ខ្ពស់ = រុក្ខជាតិបៃតងល្អ ទាប = ដីទទេ ទឹក ឬដំណាំប៉ះពាល់។',
   'index.ndwi_title': 'NDWI — សន្ទស្សន៍ទឹក។ ខ្ពស់ = ផ្ទៃទឹក ទាប = ដីស្ងួត។',
   'index.lswi_title': 'LSWI — សន្ទស្សន៍ទឹកលើផ្ទៃដី។ ខ្ពស់ = សំណើមក្នុងដី និងសំបកដំណាំ ទាប = ស្ងួត។',
+  'index.truecolor_title': 'រូបពណ៌ពិត — រូបផ្កាយរណប Sentinel-2 ពិត (Bands 4·3·2)។ ពពកបង្ហាញដូចដើម៖ ថ្ងៃមានពពកជាមូលហេតុដែលខែនោះមានទំនុកចិត្តទាប។',
   'index.trend': 'និន្នាការ',
 
   // Time control

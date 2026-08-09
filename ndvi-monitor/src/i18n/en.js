@@ -58,9 +58,13 @@ export default {
   'legend.soil_water': 'Soil/Water',
   'legend.moderate': 'Moderate',
   'legend.dense_veg': 'Dense Veg.',
+  'legend.true_color': 'True Color photo — real RGB, no index colors.',
 
   // Band panel / index
   'band.base_layer': 'Base layer',
+  'band.truecolor': 'True Color',
+  'band.scene_precision': 'Scene',
+  'band.scene_pick_tip': 'Pick an individual capture date — a single scene, not a monthly composite',
   'band.switch_area': 'Switch area',
   'band.my_areas': 'My areas',
   'band.delete_area': 'Delete area',
@@ -74,6 +78,7 @@ export default {
   'index.ndvi_title': 'NDVI — Vegetation Health. High = healthy green plants, low = bare soil, water, or stressed crops.',
   'index.ndwi_title': 'NDWI — Water Index. High = surface water, low = dry land.',
   'index.lswi_title': 'LSWI — Land Surface Water Index. High = moisture in soil and plant canopy, low = dry.',
+  'index.truecolor_title': 'True Color — real Sentinel-2 photo (Bands 4·3·2). Clouds show as-is: a cloudy date is exactly why that month is low-confidence.',
   'index.trend': 'Trend',
   // Time control
   'time.playing': 'Pause',
