@@ -62,6 +62,11 @@ export default {
 
   // Band panel / index
   'band.base_layer': 'ស្រទាប់ផែនទី',
+  'band.latest_view': 'រូបផ្កាយរណបចុងក្រោយ',
+  'band.latest_loading': 'កំពុងផ្ទុករូបចុងក្រោយ…',
+  'band.latest_tip': 'បង្ហាញរូបផ្កាយរណបថ្មីបំផុតលើតំបន់ដែលបានជ្រើសរើស (មិនអាស្រ័យនឹងគ្រាប់រំកិលពេលវេលា)',
+  'band.latest_caption': 'រូបចុងក្រោយ៖ {date} · ពពក {cloud}',
+  'band.latest_no_data': 'គ្មានរូបផ្កាយរណបថ្មីទេ',
   'band.truecolor': 'រូបពណ៌ពិត',
   'band.scene_precision': 'ឈុតឆាក',
   'band.scene_pick_tip': 'ជ្រើសកាលបរិច្ឆេទថតជាក់លាក់ — រូបភាពមួយសន្លឹក មិនមែនជាការរួបរួមប្រចាំខែ',

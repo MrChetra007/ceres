@@ -62,6 +62,11 @@ export default {
 
   // Band panel / index
   'band.base_layer': 'Base layer',
+  'band.latest_view': 'Latest Satellite View',
+  'band.latest_loading': 'Loading latest…',
+  'band.latest_tip': 'Show the most recent satellite pass over the selected area as a true-color photo (independent of the time slider)',
+  'band.latest_caption': 'Latest available: {date} · {cloud} cloud',
+  'band.latest_no_data': 'No recent satellite pass available',
   'band.truecolor': 'True Color',
   'band.scene_precision': 'Scene',
   'band.scene_pick_tip': 'Pick an individual capture date — a single scene, not a monthly composite',

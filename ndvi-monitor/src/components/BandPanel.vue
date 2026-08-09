@@ -1,6 +1,16 @@
 <template>
   <div class="band-wrap" v-show="state.eeReady">
     <div class="band-panel panel">
+      <div class="latest-view" :class="{ active: !!state.latestView && !state.latestView.noData }">
+        <button class="latest-view-btn" :class="{ loading: state.latestViewLoading }" :disabled="state.latestViewLoading" @click="store.showLatestView()" :title="t('band.latest_tip')">
+          <i class="ti ti-satellite"></i>
+          <span class="latest-btn-label">{{ state.latestViewLoading ? t('band.latest_loading') : t('band.latest_view') }}</span>
+        </button>
+        <span class="latest-view-caption" v-if="!state.latestViewLoading && state.latestView">
+          <template v-if="state.latestView.noData">{{ t('band.latest_no_data') }}</template>
+          <template v-else>{{ t('band.latest_caption', { date: state.latestView.date, cloud: state.latestView.cloudPct != null ? Math.round(state.latestView.cloudPct) + '%' : '—' }) }}</template>
+        </span>
+      </div>
       <div class="segmented" role="group" aria-label="Index">
         <button
           v-for="idx in ['ndvi', 'ndwi', 'lswi', 'truecolor']"

@@ -161,6 +161,49 @@ export function loadTrueColor(month, geometry, sceneDate, cb) {
   })
 }
 
+// "Latest Satellite View" — the single most-recent Sentinel-2 pass over the
+// area within the lookback window, regardless of month or cloud cover. Rendered
+// as an un-masked True Color photo (the newest scene overall, not a monthly
+// composite and not a cloud-filtered one). Used by the standalone map shortcut
+// that deliberately ignores the time slider's month.
+export function loadLatestTrueColor(geometry, cb, lookbackDays = 90) {
+  const e = ee()
+  const start = e.Date(Date.now()).advance(-lookbackDays, 'day')
+  const end = e.Date(Date.now())
+  const all = e.ImageCollection('COPERNICUS/S2_SR_HARMONIZED')
+    .filterBounds(geometry)
+    .filterDate(start, end)
+    .sort('system:time_start', false)
+  all.size().evaluate((totalCount) => {
+    if (totalCount === 0) {
+      cb({ mode: 'no_data', count: 0, date: null, cloudPct: null, url: null })
+      return
+    }
+    const latest = all.first()
+    const vis = { bands: TRUE_COLOR.bands, ...TRUE_COLOR_VIS }
+    latest.get('system:time_start').evaluate((ts) => {
+      const date = ts == null ? null : new Date(ts).toISOString().slice(0, 10)
+      latest.get('CLOUDY_PIXEL_PERCENTAGE').evaluate((cloudPct) => {
+        latest.clip(geometry).getMap(vis, (mapId, err) => {
+          if (err || !mapId || !mapId.urlFormat) {
+            console.error('[loadLatestTrueColor] getMap failed:', err)
+            cb({ mode: 'error', count: totalCount, date, cloudPct, url: null, err })
+            return
+          }
+          console.log(`[loadLatestTrueColor] date=${date} → cloud=${cloudPct}% url=${String(mapId.urlFormat).slice(0, 90)}…`)
+          cb({ mode: 'photo', count: totalCount, date, cloudPct, url: mapId.urlFormat })
+        })
+      })
+    }, (err) => {
+      console.error('[loadLatestTrueColor] time_start failed:', err)
+      cb({ mode: 'error', count: totalCount, date: null, cloudPct: null, url: null, err })
+    })
+  }, (err) => {
+    console.error('[loadLatestTrueColor] size failed:', err)
+    cb({ mode: 'error', count: 0, date: null, cloudPct: null, url: null, err })
+  })
+}
+
 // Sentinel-1 Radar Vegetation Index (RVI) fallback. Used when Sentinel-2
 // optical imagery is cloud-blocked: radar sees through clouds, so this gives a
 // real vegetation-structure signal where NDVI can't be computed. S1_GRD returns

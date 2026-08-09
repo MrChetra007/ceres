@@ -51,6 +51,8 @@ export const state = reactive({
   trueColorDateRight: null,
   trueColorScenes: [],
   trueColorScenesRight: [],
+  latestView: null,
+  latestViewLoading: false,
   currentFieldId: null,
   currentFieldName: null,
   lastClickPoint: null,
@@ -516,6 +518,8 @@ function applyTrueColorLayer(map, layer, url) {
 export function loadIndexForMonth(idx, geometry, silent) {
   const m = MONTHS[idx]
   if (!m || !state.eeReady) return
+  state.latestView = null
+  state.latestViewLoading = false
   const cfg = INDICES[state.currentIndex]
   state.mainMonth = idx
   state.sceneCount.main = 0
@@ -589,6 +593,8 @@ export function loadIndexForMonth(idx, geometry, silent) {
 export function loadIndexForMonthRight(idx, silent) {
   const m = MONTHS[idx]
   if (!m || !state.eeReady || !mapReg.mapRight) return
+  state.latestView = null
+  state.latestViewLoading = false
   const cfg = INDICES[state.currentIndex]
   state.rightMonth = idx
   state.sceneCount.right = 0
@@ -966,6 +972,40 @@ export function setIndex(index) {
   } else {
     reloadChartForIndex()
   }
+}
+
+// "Latest Satellite View" — a standalone shortcut that renders the most recent
+// Sentinel-2 pass over the current AOI as an un-masked True Color photo. It
+// deliberately does NOT move the time slider: state.mainMonth, the per-scene
+// picker (trueColorScenes/data dates) and the sidebar's slider-driven analysis
+// all stay untouched. Only the map's overlay band and its True Color layer are
+// switched, plus the status label naming the actual scene date + cloud%.
+export function showLatestView() {
+  if (!state.eeReady) {
+    setStatus('error', 'Sign in with Google to view the latest satellite pass')
+    return
+  }
+  if (!currentGeometry.value && !state.aoiCoords) {
+    setStatus('error', 'No field selected — pick a field to view its latest satellite image')
+    return
+  }
+  state.currentIndex = 'truecolor'
+  state.latestViewLoading = true
+  beginLoading()
+  ee.loadLatestTrueColor(getGeometry(), (res) => {
+    state.latestViewLoading = false
+    endLoading()
+    if (!res || res.mode !== 'photo' || !res.url) {
+      state.latestView = { noData: true, date: null, cloudPct: null }
+      if (mapReg.ndviLayer) { mapReg.map.removeLayer(mapReg.ndviLayer); mapReg.ndviLayer = null }
+      setStatus('error', 'No recent satellite pass available for this area — try again in a few days')
+      return
+    }
+    state.latestView = { noData: false, date: res.date, cloudPct: res.cloudPct }
+    mapReg.ndviLayer = applyTrueColorLayer(mapReg.map, mapReg.ndviLayer, res.url)
+    const pct = res.cloudPct == null ? '—' : Math.round(res.cloudPct) + '%'
+    setStatus('ready', 'Latest available: ' + (res.date || '?') + ' · ' + pct + ' cloud')
+  })
 }
 
 // Pick a specific capture date for the True Color photo (per-scene precision).
