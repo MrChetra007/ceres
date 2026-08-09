@@ -976,7 +976,8 @@ export function jumpToObservationDate(dateStr) {
   // True Color renders a single scene, not a monthly mosaic — use the exact
   // capture date clicked in the Observations panel rather than re-picking.
   if (state.currentIndex === 'truecolor') state.trueColorDate = dateStr
-  loadIndexForMonth(target, null)
+  // Mirror the time slider: render over the selected field, not the AOI rect.
+  loadIndexForMonth(target, currentGeometry.value)
 }
 
 // ---------------------------------------------------------------------------
