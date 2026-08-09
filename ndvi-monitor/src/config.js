@@ -24,7 +24,7 @@ export const LSWI_VIS = { min: -0.3, max: 0.6, palette: ['tan', 'lightblue', 'da
 // Deliberately NOT in INDICES: the trend functions normalizeDifference() over
 // cfg.bands, which would break for a 3-band RGB triplet. Store/store guard
 // routes around it.
-export const TRUE_COLOR_VIS = { min: 0, max: 3000 }
+export const TRUE_COLOR_VIS = { min: 0, max: 5000 }
 
 export const TRUE_COLOR = {
   name: 'True Color',

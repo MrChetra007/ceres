@@ -1,4 +1,4 @@
-import { INDICES, DRY_MONTH_THRESHOLD } from '../config'
+import { INDICES, DRY_MONTH_THRESHOLD, TRUE_COLOR_VIS, TRUE_COLOR } from '../config'
 
 function ee() {
   return window.ee
@@ -34,7 +34,7 @@ function s2Collection(geom, start, end) {
 function getCloudPctAndTrueColor(scene, geometry, monthStart, cb) {
   const e = ee()
   scene.get('CLOUDY_PIXEL_PERCENTAGE').evaluate((cloudPct) => {
-    const vis = { bands: ['B4', 'B3', 'B2'], min: 0, max: 3000 }
+    const vis = { bands: TRUE_COLOR.bands, ...TRUE_COLOR_VIS }
     scene.getMap(vis, (mapId, err) => {
       if (err || !mapId || !mapId.urlFormat) {
         cb({ url: null, cloudPct, lastValidDate: null, err })
@@ -141,16 +141,21 @@ export function loadTrueColor(month, geometry, sceneDate, cb) {
     let chosen = (sceneDate && scenes.find((s) => s.date === sceneDate)) || null
     if (!chosen) chosen = scenes.reduce((a, b) => (b.cloudPct < a.cloudPct ? b : a))
     const day = e.Date(chosen.date)
-    const vis = { bands: ['B4', 'B3', 'B2'], min: 0, max: 3000 }
+    // Wide stretch (max 5000) so bright Cloud-free areas of a rice scene don't
+    // clamp to a single saturated green block; a tight 0–3000 range leaves
+    // mid-season canopies pinned at the top of the scale.
+    const vis = { bands: TRUE_COLOR.bands, ...TRUE_COLOR_VIS }
     const picked = all
       .filterDate(day, day.advance(1, 'day'))
       .sort('CLOUDY_PIXEL_PERCENTAGE')
       .first()
+    console.log(`[loadTrueColor] ${chosen.date} (month ${month.year}-${month.month}) → ${scenes.length} scenes, cloud=${chosen.cloudPct}%, vis=${JSON.stringify(vis)}`)
     picked.clip(geometry).getMap(vis, (mapId, err) => {
       if (err || !mapId || !mapId.urlFormat) {
         cb({ mode: 'error', count: scenes.length, scenes, chosen, url: null, err })
         return
       }
+      console.log(`[loadTrueColor] chosen=${chosen.date} → mapId=${String(mapId.mapid).slice(0, 24)} url=${String(mapId.urlFormat).slice(0, 90)}…`)
       cb({ mode: 'photo', count: scenes.length, scenes, chosen, url: mapId.urlFormat })
     })
   })

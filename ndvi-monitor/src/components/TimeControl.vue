@@ -271,7 +271,7 @@ function eventLabel(i) {
 function onMainSlider(e) {
   state.mainMonth = parseInt(e.target.value)
   clearTimeout(debounceTimer)
-  debounceTimer = setTimeout(() => store.loadIndexForMonth(state.mainMonth, null), 300)
+  debounceTimer = setTimeout(() => store.loadIndexForMonth(state.mainMonth, store.currentGeometry.value), 300)
 }
 
 function onRightSlider(e) {
@@ -296,7 +296,7 @@ function startPlay() {
     const b = sliderBounds.value
     const next = state.mainMonth >= b.max ? b.min : state.mainMonth + 1
     state.mainMonth = next
-    store.loadIndexForMonth(next, null, true)
+    store.loadIndexForMonth(next, store.currentGeometry.value, true)
     if (state.compareMode) {
       state.rightMonth = next
       store.loadIndexForMonthRight(next, true)
@@ -312,7 +312,7 @@ function goLatest() {
   const b = sliderBounds.value
   const latest = rangeActive.value ? b.max : Math.max(0, MONTHS.length - 2)
   state.mainMonth = latest
-  store.loadIndexForMonth(latest, null)
+  store.loadIndexForMonth(latest, store.currentGeometry.value)
   if (state.compareMode) {
     state.rightMonth = latest
     store.loadIndexForMonthRight(latest)

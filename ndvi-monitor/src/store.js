@@ -494,6 +494,10 @@ function applyTileLayer(map, layer, url, opacity) {
   return window.L.tileLayer(url, {
     attribution: 'Sentinel-2 / Google Earth Engine',
     opacity: opacity || 0.8,
+    // Keep the index overlay above the basemap regardless of which layer was
+    // added last (Leaflet paints same-pane tile layers by DOM order). A slider
+    // change re-adds this layer, so a fixed lookup makes the index win.
+    zIndex: 950,
   }).addTo(map)
 }
 
@@ -504,6 +508,7 @@ function applyTrueColorLayer(map, layer, url) {
   const l = window.L.tileLayer(url, {
     attribution: 'Sentinel-2 / Google Earth Engine',
     opacity: 1,
+    zIndex: 951,
   }).addTo(map)
   return l
 }
@@ -538,6 +543,7 @@ export function loadIndexForMonth(idx, geometry, silent) {
         state.cloudBlock.main = { month: m.label, cloudPct: res.chosen.cloudPct, lastValidDate: res.chosen.date }
       }
       mapReg.ndviLayer = applyTrueColorLayer(mapReg.map, mapReg.ndviLayer, res.url)
+      console.log(`[TrueColor @store] applied url=${String(res.url).slice(0, 90)}… (previous layer removed, new tile layer added)`)
       setStatus('ready', TRUE_COLOR.name + ' photo \u2014 ' + m.label + (state.trueColorDate ? ' \u00b7 ' + state.trueColorDate : ''))
     })
     return
@@ -654,7 +660,7 @@ export function jumpToLastValidReading(side = 'main') {
   }
   if (target < 0) return
   if (side === 'right') loadIndexForMonthRight(target)
-  else loadIndexForMonth(target)
+  else loadIndexForMonth(target, currentGeometry.value)
 }
 
 // ---------------------------------------------------------------------------
