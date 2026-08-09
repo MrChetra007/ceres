@@ -83,6 +83,10 @@ export const state = reactive({
   rainfallMm: null,
   benchmarkValue: null,
   isDrawing: false,
+  isAoiDraw: false,
+  aoiDraftCoords: null,
+  aoiEditorCloseForDraw: false,
+  editingFieldId: null,
   loading: false,
   statusState: 'idle',
   statusText: '',
@@ -326,6 +330,59 @@ export async function deleteAoi(id) {
   } catch (err) {
     showToast('Failed to delete area: ' + err.message)
   }
+}
+
+// ---------------------------------------------------------------------------
+// AOI draw-on-map (define the area rectangle on the map instead of typing
+// coordinates). Uses the same leaflet-draw toolbar so the UX matches field
+// drawing, then drops the captured bounds back into the AoiEditor form.
+// ---------------------------------------------------------------------------
+export function startAoiDraw() {
+  if (!mapReg.map || !window.L.Draw) { showToast('Map not ready'); return }
+  if (state.isAoiDraw) {
+    cancelAoiDraw()
+    return
+  }
+  state.aoiEditorCloseForDraw = true
+  state.aoiEditorVisible = false
+  state.aoiDraftCoords = null
+  try {
+    const draw = new window.L.Draw.Rectangle(mapReg.map, {
+      shapeOptions: { color: '#ff4444', weight: 2 },
+      showArea: true,
+      metric: ['ha'],
+    })
+    mapReg.activeDraw = draw
+    state.isAoiDraw = true
+    draw.enable()
+    showToast('Drag a rectangle on the map to define the area \u2014 Esc to cancel')
+  } catch (e) {
+    showToast('Drawing unavailable')
+  }
+}
+
+export function cancelAoiDraw() {
+  if (mapReg.activeDraw) {
+    try { mapReg.activeDraw.disable() } catch (e) {}
+    mapReg.activeDraw = null
+  }
+  state.isAoiDraw = false
+}
+
+export function onAoiRectangleCreated(layer) {
+  cancelAoiDraw()
+  let coords = null
+  try {
+    const b = layer.getBounds()
+    coords = [b.getWest().toFixed(6) * 1, b.getSouth().toFixed(6) * 1, b.getEast().toFixed(6) * 1, b.getNorth().toFixed(6) * 1]
+  } catch (e) {
+    showToast('Could not read the drawn rectangle')
+    return
+  }
+  state.aoiDraftCoords = coords
+  // Reopen the editor with the drawn bounds pre-filled for naming.
+  state.aoiEditorVisible = true
+  showToast('Drawn area bounds captured \u2014 name it below to save')
 }
 
 // ---------------------------------------------------------------------------
@@ -1365,6 +1422,8 @@ export function startFieldEdit(field) {
   const needsLoad = state.currentFieldId !== field.id
   if (needsLoad) loadField(field)
   state.infoPanelVisible = false
+  nativeActionsHidden = false
+  state.editingFieldId = field.id
   const enableEdit = () => {
     try {
       // leaflet-draw 1.0.4 stores the edit toolbar as `_toolbars.edit`
@@ -1374,19 +1433,88 @@ export function startFieldEdit(field) {
       const mode = editTb && editTb._modes && editTb._modes.edit
       if (mode && mode.handler && typeof mode.handler.enable === 'function') {
         mode.handler.enable()
+        setTimeout(hideNativeEditActions, 0)
         return
       }
     } catch (e) {}
     const btn = document.querySelector('.leaflet-draw-edit-edit')
     if (btn) btn.click()
+    setTimeout(hideNativeEditActions, 0)
   }
   if (needsLoad) requestAnimationFrame(enableEdit)
   else enableEdit()
 }
 
+// Resolves the leaflet-draw edit handler currently driving vertex dragging.
+function editHandler() {
+  try {
+    const tm = mapReg.drawControl._toolbars
+    const editTb = tm && tm.edit
+    const mode = editTb && editTb._modes && editTb._modes.edit
+    if (mode && mode.handler && typeof mode.handler.enable === 'function') return mode.handler
+  } catch (e) {}
+  return null
+}
+
+// Persists the reshaped boundary using the same leaflet-draw save path the
+// native ribbon uses (fires `draw:edited` -> `onFieldEdited`), then exits
+// editing. Called by the header "Save" button so the drawer never blocks it.
+export function endFieldEdit() {
+  const handler = editHandler()
+  if (handler && typeof handler.save === 'function') {
+    handler.save()
+    if (typeof handler.disable === 'function') {
+      try { handler.disable() } catch (e) {}
+    }
+    return
+  }
+  // Fallback: no active edit handler — just persist whatever is drawn now.
+  onFieldEdited()
+}
+
+// Discards any vertex drags and leaves edit mode. The native leaflet-draw
+// cancel path does exactly this — this is the header's twin of it.
+export function cancelFieldEdit() {
+  const handler = editHandler()
+  if (handler && typeof handler.revertLayers === 'function') {
+    try { handler.revertLayers() } catch (e) {}
+  }
+  if (handler && typeof handler.disable === 'function') {
+    try { handler.disable() } catch (e) {}
+  } else {
+    try {
+      const btn = document.querySelector('.leaflet-draw-edit-edit')
+      if (btn) btn.click()
+    } catch (e) {}
+  }
+  finishFieldEdit()
+}
+
+let nativeActionsHidden = false
+function hideNativeEditActions() {
+  if (nativeActionsHidden) return
+  nativeActionsHidden = true
+  document.querySelectorAll('.leaflet-draw-actions').forEach((ul) => {
+    Array.from(ul.querySelectorAll('a')).forEach((a) => {
+      if (a.title === 'Save changes' || a.title === 'Cancel editing, discards all changes') {
+        a.style.display = 'none'
+      }
+    })
+  })
+}
+
+// Shared cleanup after editing ends (save, cancel, or the native toolbar):
+// stop advertising the header Save/Cancel and bring the detail panel back.
+function finishFieldEdit() {
+  state.editingFieldId = null
+  updateDrawEditVisibility()
+  if (state.currentFieldId) state.infoPanelVisible = true
+}
+
 export function clearFieldSelection() {
   state.currentFieldId = null
   state.currentFieldName = null
+  state.editingFieldId = null
   currentGeometry.value = null
   state.rainfallMm = null
   state.infoPanelVisible = false
@@ -1690,6 +1818,7 @@ export function onFieldEdited() {
       })
     }
   }
+  finishFieldEdit()
 }
 
 // ---------------------------------------------------------------------------

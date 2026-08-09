@@ -1711,6 +1711,18 @@ body {
   color: var(--accent);
 }
 
+.glass-pill.edit-commit {
+  background: var(--accent-dim);
+  border-color: rgba(34, 201, 142, 0.5);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.glass-pill.edit-commit:hover {
+  background: var(--accent);
+  color: #0b0f14;
+}
+
 .glass-pill.icon { padding: 6px 9px; }
 
 .topbar-user {

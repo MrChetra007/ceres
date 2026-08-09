@@ -153,6 +153,8 @@ export default {
   'field.pre_planting': 'Pre-planting',
   'field.no_active_crop': 'No active crop \u2014 planting date is {date}',
   'field.last_clear_reading': 'Last clear reading (fixed reference): {date}',
+  'field.save_edits': 'Save the reshaped field boundary',
+  'field.cancel_edits': 'Discard changes and stop editing',
   'field.radar_map_note': 'Map showing satellite radar signal (RVI) — a different measurement from the NDVI value above, not directly comparable.',
 
   // Sidebar
@@ -185,8 +187,10 @@ export default {
   'aoi.north': 'North (lat)',
   'aoi.hint_rect': 'The map shows the active area as a red dashed rectangle.',
   'aoi.tab_place': 'Search place',
+  'aoi.tab_draw': 'Draw on map',
   'aoi.tab_manual': 'Manual coordinates',
   'aoi.tab_field': 'Use existing field',
+  'aoi.filled_draw': 'Drawn on the map \u2014 review the bounds, then name it',
   'aoi.pick_field': 'Pick a saved field \u2014 its bounding box fills the area',
   'aoi.filled_field': 'Filled bounds from field \u201c{name}\u201d',
   'aoi.filled_place': 'Filled bounds from \u201c{name}\u201d',

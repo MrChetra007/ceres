@@ -35,6 +35,15 @@
     </div>
 
     <div class="topbar-right">
+      <template v-if="state.editingFieldId">
+        <button class="glass-pill edit-commit" :title="t('field.save_edits')" @click="store.endFieldEdit()">
+          <i class="ti ti-check"></i><span class="pill-text">{{ t('common.save') }}</span>
+        </button>
+        <button class="glass-pill" :title="t('field.cancel_edits')" @click="store.cancelFieldEdit()">
+          <i class="ti ti-x"></i><span class="pill-text">{{ t('common.cancel') }}</span>
+        </button>
+      </template>
+
       <span class="topbar-desktop-controls">
         <button class="glass-pill icon" :title="t('topbar.my_fields')" @click="$emit('menu')">
           <i class="ti ti-list-details"></i>

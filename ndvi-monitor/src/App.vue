@@ -71,6 +71,7 @@ onMounted(() => {
   store.applyRangeFromUrl()
   window.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && state.isDrawing) store.cancelDraw()
+    else if (e.key === 'Escape' && state.isAoiDraw) store.cancelAoiDraw()
   })
 })
 

@@ -17,6 +17,11 @@
         >{{ t('aoi.tab_place') }}</button>
         <button
           class="aoi-editor-tab"
+          :class="{ active: mode === 'draw' }"
+          @click="mode = 'draw'; store.startAoiDraw()"
+        >{{ t('aoi.tab_draw') }}</button>
+        <button
+          class="aoi-editor-tab"
           :class="{ active: mode === 'manual' }"
           @click="mode = 'manual'"
         >{{ t('aoi.tab_manual') }}</button>
@@ -96,11 +101,26 @@ watch(() => state.aoiEditorVisible, (open) => {
     searchInfo.value = ''
     mode.value = 'place'
     selectedFieldId.value = null
-    w.value = state.aoiCoords[0]
-    s.value = state.aoiCoords[1]
-    e.value = state.aoiCoords[2]
-    n.value = state.aoiCoords[3]
+    if (state.aoiDraftCoords && state.aoiDraftCoords.length === 4) {
+      w.value = state.aoiDraftCoords[0]
+      s.value = state.aoiDraftCoords[1]
+      e.value = state.aoiDraftCoords[2]
+      n.value = state.aoiDraftCoords[3]
+      mode.value = 'manual'
+      searchInfo.value = t('aoi.filled_draw')
+      state.aoiDraftCoords = null
+    } else {
+      w.value = state.aoiCoords[0]
+      s.value = state.aoiCoords[1]
+      e.value = state.aoiCoords[2]
+      n.value = state.aoiCoords[3]
+    }
+    // If a previous draw session is still live, tear it down when reopening.
+    if (state.isAoiDraw) store.cancelAoiDraw()
+  } else if (state.isAoiDraw && !state.aoiEditorCloseForDraw) {
+    store.cancelAoiDraw()
   }
+  state.aoiEditorCloseForDraw = false
 })
 
 function fieldArea(f) {
@@ -124,6 +144,7 @@ function pickField(f) {
 }
 
 function close() {
+  if (state.isAoiDraw) store.cancelAoiDraw()
   state.aoiEditorVisible = false
 }
 

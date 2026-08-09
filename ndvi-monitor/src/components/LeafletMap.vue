@@ -17,6 +17,7 @@
 import { ref, onMounted, watch, nextTick } from 'vue'
 import {
   state, mapReg, onMapClick, onFieldCreated, onFieldEdited,
+  onAoiRectangleCreated,
   loadIndexForMonthRight, setBaseLayer, updateAoiRectangle,
   showToast,
 } from '../store'
@@ -65,7 +66,12 @@ function makeMainMap() {
   map.addControl(drawControl)
 
   map.on('click', (e) => onMapClick(e.latlng.lat, e.latlng.lng))
-  map.on(L.Draw.Event.CREATED, (e) => onFieldCreated(e.layer))
+  map.on(L.Draw.Event.CREATED, (e) => {
+    // A rectangle drawn in AOI-draw mode defines the analysis area, not a
+    // saved field — route it to the AOI handler instead of the field flow.
+    if (state.isAoiDraw) { onAoiRectangleCreated(e.layer); return }
+    onFieldCreated(e.layer)
+  })
   map.on(L.Draw.Event.EDITED, () => onFieldEdited())
   map.on(L.Draw.Event.EDITSTART, () => {
     if (drawnItems.getLayers().length === 0) {
