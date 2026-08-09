@@ -138,6 +138,8 @@ export default {
   'field.stage_reproductive': 'ដំណាក់កាលបន្តពូជ',
   'field.stage_maturation': 'ដំណាក់កាលចាស់ទុំ',
   'field.stage_harvest': 'ច្រូតកាត់',
+  'field.pre_planting': 'មុនដាំ',
+  'field.no_active_crop': 'គ្មានដំណាំសកម្ម — កាលបរិច្ឆេទដាំគឺ {date}',
   'field.trend': 'និន្នាការ',
   'field.last_clear_reading': 'ការអានច្បាស់ចុងក្រោយ (ឯកសារយោងថេរ)៖ {date}',
   'field.radar_map_note': 'ផែនទីកំពុងបង្ហាញសញ្ញេរ៉ាដាពីផ្កាយរណប (RVI) — ជាការវាស់វែងខុសពីតម្លៃ NDVI ដែលបង្ហាញខាងលើ មិនអាចប្រៀបធៀបដោយផ្ទាល់បានទេ។',

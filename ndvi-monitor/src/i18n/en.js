@@ -138,6 +138,8 @@ export default {
   'field.stage_maturation': 'Maturation',
   'field.stage_harvest': 'Harvest',
   'field.trend': 'Trend',
+  'field.pre_planting': 'Pre-planting',
+  'field.no_active_crop': 'No active crop \u2014 planting date is {date}',
   'field.last_clear_reading': 'Last clear reading (fixed reference): {date}',
   'field.radar_map_note': 'Map showing satellite radar signal (RVI) — a different measurement from the NDVI value above, not directly comparable.',
 

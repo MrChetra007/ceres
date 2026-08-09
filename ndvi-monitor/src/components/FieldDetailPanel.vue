@@ -202,9 +202,25 @@ const monthStatus = computed(() => {
 
 const heroStatus = computed(() => monthStatus.value || (Array.isArray(state.chartData) && state.chartData.length ? null : status.value))
 
+// ONE shared "is the selected date before planting" check, reused by the Growth
+// Stage box, the Stress Alert box AND the hero badge so all three always agree
+// on pre-planting state (instead of each independently deciding).
+const prePlanting = computed(() => {
+  const f = currentField.value
+  if (!f || !f.plantingDate) return false
+  return new Date(asOfDate.value).getTime() < new Date(f.plantingDate).getTime()
+})
+
 const title = computed(() => (isField.value ? currentField.value.name : INDICES[state.chartIndex].name + ' ' + t('index.trend')))
-const statusText = computed(() => (heroStatus.value && heroStatus.value.badgeText) || '\u2014')
-const statusTone = computed(() => (heroStatus.value && heroStatus.value.badgeClass) || 'healthy')
+const statusText = computed(() => {
+  if (heroStatus.value && heroStatus.value.badgeText === '\u2014') return '\u2014'
+  if (prePlanting.value) return t('field.pre_planting')
+  return (heroStatus.value && heroStatus.value.badgeText) || '\u2014'
+})
+const statusTone = computed(() => {
+  if (prePlanting.value) return 'tone-blue'
+  return (heroStatus.value && heroStatus.value.badgeClass) || 'healthy'
+})
 const stageText = computed(() => (monthStatus.value && monthStatus.value.stageLabel) || (status.value && status.value.stageLabel) || '')
 const benchmarkText = computed(() => (state.benchmarkValue != null ? state.benchmarkValue.toFixed(3) : '\u2014'))
 const heroValue = computed(() => {
@@ -249,7 +265,7 @@ const growthStageDays = computed(() => {
 const stageName = computed(() => {
   const d = growthStageDays.value
   if (d == null) return t('field.no_planting_date')
-  if (d < 0) return t('field.stage_future')
+  if (prePlanting.value) return t('field.stage_future')
   return store.getGrowthStage(d).stage
 })
 const stageDaysText = computed(() => {
@@ -264,10 +280,15 @@ const stagePct = computed(() => {
 })
 
 const stressTone = computed(() => {
+  if (prePlanting.value) return 'tone-blue'
   const cls = heroStatus.value && heroStatus.value.badgeClass
   return cls === 'stressed' ? 'tone-red' : cls === 'moderate' ? 'tone-amber' : 'tone-green'
 })
 const stressMsg = computed(() => {
+  if (prePlanting.value) {
+    const f = currentField.value
+    return t('field.no_active_crop', { date: f && f.plantingDate ? f.plantingDate : '\u2014' })
+  }
   const cls = heroStatus.value && heroStatus.value.badgeClass
   if (cls === 'stressed') return t('field.stress_high')
   if (cls === 'moderate') return t('field.stress_moderate')

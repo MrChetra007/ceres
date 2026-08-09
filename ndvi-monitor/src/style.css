@@ -653,6 +653,8 @@ html, body {
 .status-dry { background: #fef9c3; color: #854d0e; }
 .status-lswi { background: #e0f2fe; color: #075985; }
 
+.status-badge.tone-blue { background: rgba(79, 168, 255, 0.16); color: var(--blue); }
+
 .field-card-stats {
   display: flex;
   gap: 12px;
@@ -3664,6 +3666,7 @@ body {
 .hero-value.tone-healthy, .hero-value.healthy { color: var(--accent); }
 .hero-value.tone-moderate, .hero-value.moderate { color: var(--amber); }
 .hero-value.tone-red, .hero-value.stressed { color: var(--red); }
+.hero-value.tone-blue { color: var(--blue); }
 
 .hero-sub {
   margin-top: 6px;
@@ -3743,6 +3746,7 @@ body {
 .stress-card.tone-green { border-left: 3px solid var(--accent); }
 .stress-card.tone-amber { border-left: 3px solid var(--amber); }
 .stress-card.tone-red { border-left: 3px solid var(--red); }
+.stress-card.tone-blue { border-left: 3px solid var(--blue); }
 .stress-card.alert-msg { border-left: 3px solid var(--amber); }
 
 .stress-msg {
