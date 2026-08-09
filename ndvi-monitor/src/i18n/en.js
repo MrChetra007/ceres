@@ -39,6 +39,21 @@ export default {
   'topbar.go_to_ai': 'Consult AI',
   'topbar.settings': 'Settings',
 
+  // Browse observations
+  'obs.title': 'Browse Observations',
+  'obs.short': 'Observations',
+  'obs.no_field': 'Select a field to browse its satellite passes.',
+  'obs.no_observations': 'No satellite passes found for this field in the last 14 months.',
+  'obs.date_cap': 'Date',
+  'obs.source_cap': 'Source',
+  'obs.cloud_cap': 'Cloud',
+  'obs.status_cap': 'Status',
+  'obs.ndvi_cap': 'NDVI',
+  'obs.clear': 'Clear',
+  'obs.low': 'Low conf.',
+  'obs.blocked': 'Cloud-blocked',
+  'obs.jump_tip': 'Load {date} into the map',
+
   // Map legend
   'legend.soil_water': 'Soil/Water',
   'legend.moderate': 'Moderate',

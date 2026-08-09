@@ -347,3 +347,62 @@ export function getRainfallMm(geometry, daysBack, cb) {
       },
     )
 }
+
+// Browse Observations — one batched server-side query (no per-image
+// .evaluate() loop; that pattern caused the serialized EE throttling bug in
+// fetchDryMonths). Maps the whole S2 collection into a FeatureCollection of
+// {date, source, cloudCover, status, ndvi} and evaluates() it once.
+//
+// Status is derived with the app's existing decision rules:
+//   - cloudCover >= 40  -> 'blocked'   (the cloud-mask gate that marks a month
+//                                       Cloud-blocked / LOW CONFIDENCE)
+//   - < 40 but older than 21 days (the existing CONFIDENCE_STALE_DAYS) → 'low'
+//   - otherwise                        → 'clear'
+// These two constants MUST stay in sync with store.js getConfidenceTier().
+export function getObservations(geometry, cb) {
+  const e = ee()
+  if (!geometry) { cb([]); return }
+  const end = e.Date(Date.now())
+  const start = end.advance(-14, 'month') // same window as the trend time series
+  const collection = e.ImageCollection('COPERNICUS/S2_SR_HARMONIZED')
+    .filterBounds(geometry)
+    .filterDate(start, end)
+  const series = collection.map((img) => {
+    const cloudCover = e.Number(img.get('CLOUDY_PIXEL_PERCENTAGE'))
+    const blocked = cloudCover.gte(40)
+    const ageDays = e.Date(Date.now()).difference(img.date(), 'day')
+    const stale = e.Number(ageDays).gte(21)
+    // Server-side branching — plain JS ternary on an EE object would always
+    // pick the first branch, so branch with ee.Algorithms.If.
+    const status = e.Algorithms.If(blocked, 'blocked', e.Algorithms.If(stale, 'low', 'clear'))
+    const ndvi = img
+      .normalizedDifference(['B8', 'B4'])
+      .rename('ndvi')
+      .reduceRegion({ reducer: e.Reducer.mean(), geometry, scale: 10, maxPixels: 1e9 })
+      .get('ndvi')
+    return e.Feature(null, {
+      date: img.date().format('YYYY-MM-dd'),
+      source: 'Sentinel-2', // optical only for now; Sentinel-1 radar rows can be merged here later
+      cloudCover,
+      status,
+      ndvi,
+    })
+  })
+  series.evaluate((result) => {
+    const feats = (result && result.features) || []
+    const rows = feats
+      .map((f) => ({
+        date: f.properties.date,
+        source: f.properties.source,
+        cloudCover: f.properties.cloudCover,
+        status: f.properties.status,
+        ndvi: f.properties.ndvi,
+      }))
+      .filter((r) => r.date != null)
+      .sort((a, b) => b.date.localeCompare(a.date)) // newest first
+    cb(rows)
+  }, (err) => {
+    console.error('getObservations failed:', err)
+    cb([])
+  })
+}

@@ -39,6 +39,21 @@ export default {
   'topbar.go_to_ai': 'ពិគ្រោះ AI',
   'topbar.settings': 'ការកំណត់',
 
+  // Browse observations
+  'obs.title': 'រុករករូបភាពផ្កាយរណប',
+  'obs.short': 'រូបភាព',
+  'obs.no_field': 'សូមជ្រើសរើសវាលដើម្បីមើលរូបភាពផ្កាយរណបរបស់វា។',
+  'obs.no_observations': 'រកមិនឃើញរូបភាពផ្កាយរណបសម្រាប់វាលនេះក្នុងរយៈពេល ១៤ ខែចុងក្រោយទេ។',
+  'obs.date_cap': 'កាលបរិច្ឆេទ',
+  'obs.source_cap': 'ប្រភព',
+  'obs.cloud_cap': 'ពពក',
+  'obs.status_cap': 'ស្ថានភាព',
+  'obs.ndvi_cap': 'NDVI',
+  'obs.clear': 'ច្បាស់',
+  'obs.low': 'ទំនុកចិត្តទាប',
+  'obs.blocked': 'ពពកបាំង',
+  'obs.jump_tip': 'ផ្ទុក {date} ចូលផែនទី',
+
   // Map legend
   'legend.soil_water': 'ដី/ទឹក',
   'legend.moderate': 'ល្មម',

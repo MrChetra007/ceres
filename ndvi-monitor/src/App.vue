@@ -9,6 +9,7 @@
 
   <Sidebar ref="sidebarRef" />
   <FieldDetailPanel />
+  <ObservationsPanel />
 
   <div id="status-bar" class="status-toast" :class="{ hidden: !state.statusText }">{{ state.statusText }}</div>
 
@@ -42,6 +43,7 @@ import BandPanel from './components/BandPanel.vue'
 import MapLegend from './components/MapLegend.vue'
 import Sidebar from './components/Sidebar.vue'
 import FieldDetailPanel from './components/FieldDetailPanel.vue'
+import ObservationsPanel from './components/ObservationsPanel.vue'
 import PresetEditor from './components/PresetEditor.vue'
 import AoiEditor from './components/AoiEditor.vue'
 import HelpModal from './components/HelpModal.vue'
@@ -70,4 +72,15 @@ onMounted(() => {
     if (e.key === 'Escape' && state.isDrawing) store.cancelDraw()
   })
 })
+
+// Load the per-pass observation list lazily: whenever the toggle opens the
+// panel or the selected field changes, (re-)pull observations for that field.
+watch(
+  [() => state.observationsVisible, () => state.currentFieldId],
+  ([visible, fieldId]) => {
+    if (!visible) return
+    if (!fieldId) { store.resetObservations(); return }
+    store.fetchObservations()
+  },
+)
 </script>

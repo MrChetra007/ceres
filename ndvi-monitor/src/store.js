@@ -66,6 +66,9 @@ export const state = reactive({
   sceneCount: { main: 0, right: 0 },
   cloudBlock: { main: null, right: null },
   radarFallback: { main: null, right: null },
+  observationsVisible: false,
+  observationsLoading: false,
+  observations: [],
   rainfallMm: null,
   benchmarkValue: null,
   isDrawing: false,
@@ -585,6 +588,60 @@ export function jumpToLastValidReading(side = 'main') {
   if (target < 0) return
   if (side === 'right') loadIndexForMonthRight(target)
   else loadIndexForMonth(target)
+}
+
+// ---------------------------------------------------------------------------
+// Browse Observations (per-pass inspection)
+// ---------------------------------------------------------------------------
+let observationsFieldId = null
+
+export function fetchObservations() {
+  const field = state.fields.find((f) => f.id === state.currentFieldId)
+  if (!field) {
+    state.observations = []
+    observationsFieldId = null
+    return
+  }
+  if (!state.eeReady) return
+  if (observationsFieldId === field.id && state.observations.length) {
+    return // already fetched for this field — no need to re-run the batch
+  }
+  const geom = field.geojson && (field.geojson.geometry || field.geojson)
+  if (!geom || !geom.coordinates) {
+    state.observations = []
+    observationsFieldId = field.id
+    return
+  }
+  state.observationsLoading = true
+  const geometry = window.ee.Geometry.Polygon(geom.coordinates)
+  ee.getObservations(geometry, (rows) => {
+    state.observationsLoading = false
+    state.observations = rows
+    observationsFieldId = field.id
+  })
+}
+
+export function resetObservations() {
+  observationsFieldId = null
+  state.observations = []
+  state.observationsLoading = false
+}
+
+// Clicking an observation row loads that date via the SAME path the time slider
+// uses — resolve the observation's month to a MONTHS index, set state.mainMonth,
+// and call loadIndexForMonth(). No parallel change-detection code path.
+export function jumpToObservationDate(dateStr) {
+  const d = new Date(dateStr)
+  if (isNaN(d.getTime())) return
+  let target = -1
+  for (let i = 0; i < MONTHS.length; i++) {
+    const start = new Date(MONTHS[i].year, MONTHS[i].month - 1, 1)
+    const end = new Date(MONTHS[i].year, MONTHS[i].month, 1)
+    if (d >= start && d < end) { target = i; break }
+  }
+  if (target < 0) return
+  state.mainMonth = target
+  loadIndexForMonth(target, null)
 }
 
 // ---------------------------------------------------------------------------
