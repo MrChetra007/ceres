@@ -76,6 +76,10 @@ Deno.serve(async (req) => {
       return jsonResponse({
         ok: true,
         explanation: cached.explanation,
+        // Cached rows were written before truncation tracking existed — we
+        // can't know from the DB whether they were cut short. Treat unknown
+        // as untruncated so previously-saved answers keep rendering cleanly.
+        truncated: false,
         cached: true,
       });
     }
@@ -110,12 +114,24 @@ ${confidenceLine}
 ${langLine}
 In 2-3 short sentences: describe what the numbers suggest, and name 1-2 possible causes as possibilities to check — never state a single cause as certain. End with one practical next step. Do not use technical jargon like "NDVI" or "LSWI" in the reply itself.`;
 
-    const result = await generateExplanation(prompt);
+    // If the model hits its output token ceiling (finish_reason "length" /
+    // "MAX_TOKENS") and trails off mid-sentence, retry the same provider with a
+    // hard-trimmed "keep it minimal" prompt. The user gets a complete short
+    // answer instead of a truncated one, and if it STILL gets cut we flag it so
+    // the UI can tell the user rather than silently showing a dangling sentence.
+    const concisePrompt = `Be EXTREMELY concise. In 1-2 short, simple sentences only: what the field's satellite data suggests and ONE practical next step.
+${confidenceLine === "" ? "" : `Remember: ${confidenceLine}`}
+${langLine}
+Keep the whole reply under 45 words. Do not mention "NDVI", "LSWI" or any index name.`;
+
+    const result = await generateExplanation(prompt, concisePrompt);
     const explanation =
       result?.text ||
       "Could not generate an explanation right now — please try again.";
     const modelUsed = result?.model || "none";
-    console.log("AI explanation served by:", modelUsed);
+    const truncated = result?.truncated ?? false;
+    // Attribution + truncation audit trail. finish_reason is logged by llm.ts.
+    console.log("AI explanation served by:", modelUsed, "truncated:", truncated);
 
     // 4. Cache it (model_used is for our own auditing only)
     await supabase.from("ai_explanations").upsert({
@@ -127,7 +143,7 @@ In 2-3 short sentences: describe what the numbers suggest, and name 1-2 possible
       created_at: new Date().toISOString(),
     });
 
-    return jsonResponse({ ok: true, explanation, cached: false });
+    return jsonResponse({ ok: true, explanation, truncated, cached: false });
   } catch (e) {
     console.error(e);
     return jsonResponse({ ok: false, error: String(e) }, 500);

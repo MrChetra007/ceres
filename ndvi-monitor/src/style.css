@@ -3975,6 +3975,12 @@ body {
   color: var(--amber);
 }
 
+.ai-note.ai-truncated {
+  margin-top: 8px;
+  color: var(--amber);
+  font-weight: 600;
+}
+
 /* ---- Stage 2 responsive (spec section 5) ---- */
 @media (max-width: 1024px) {
   #sidebar { width: 280px; }

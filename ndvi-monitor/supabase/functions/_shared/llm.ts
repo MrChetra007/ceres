@@ -2,8 +2,10 @@
 //
 // Extracted from supabase/functions/consult-ai/index.ts so both consult-ai and
 // the ee-alerts-worker can generate LLM text with the same Gemini → DeepSeek →
-// Qwen fallback chain. Each provider caller returns string | null and never
-// throws, so a single provider's outage/quota/404 never blocks the caller.
+// Qwen fallback chain. Each provider caller returns a ProviderResult (or null)
+// and never throws, so a single provider's outage/quota/404 never blocks the
+// caller. ProviderResult.truncated signals a finish_reason of "length" /
+// "MAX_TOKENS" so callers never mistake a cut-off answer for a complete one.
 //
 // Env secrets (set once at the Supabase project level via `supabase secrets set`):
 //   GEMINI_API_KEY, DEEPSEEK_API_KEY, QWEN_API_KEY
@@ -34,7 +36,19 @@ async function fetchWithTimeout(
 // chain below can move on cleanly.
 // ---------------------------------------------------------------------------
 
-async function callGemini(prompt: string): Promise<string | null> {
+// A provider result carries two signals separately:
+//   truncated - true when the provider hit its output token ceiling
+//               (finish_reason applied, not natural finish). Callers can then
+//               retry with a shorter prompt or tell the user the answer is cut
+//               short instead of displaying a sentence that trails off.
+//   finishReason - the raw provider reason, for logging/auditing.
+interface ProviderResult {
+  text: string;
+  truncated: boolean;
+  finishReason: string | null;
+}
+
+async function callGemini(prompt: string): Promise<ProviderResult | null> {
   if (!GEMINI_KEY) return null;
   try {
     const res = await fetchWithTimeout(
@@ -54,21 +68,27 @@ async function callGemini(prompt: string): Promise<string | null> {
     );
     console.log("Gemini response status:", res.status);
     const data = await res.json();
-    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+    const candidate = data?.candidates?.[0];
+    const text = candidate?.content?.parts?.[0]?.text?.trim();
+    const finishReason = candidate?.finishReason || null;
     if (!text) {
       console.error(
         "Gemini returned no usable text. Full response:",
         JSON.stringify(data),
       );
     }
-    return text || null;
+    // Gemini API surface: MAX_TOKENS / STOP / BLOCKED / SAFETY / RECITATION.
+    const truncated = text
+      ? finishReason === "MAX_TOKENS" || finishReason === "RECITATION"
+      : false;
+    return text ? { text, truncated, finishReason } : null;
   } catch (e) {
     console.error("Gemini call failed:", e);
     return null;
   }
 }
 
-async function callDeepSeek(prompt: string): Promise<string | null> {
+async function callDeepSeek(prompt: string): Promise<ProviderResult | null> {
   if (!DEEPSEEK_KEY) return null;
   try {
     const res = await fetchWithTimeout(
@@ -82,7 +102,7 @@ async function callDeepSeek(prompt: string): Promise<string | null> {
         body: JSON.stringify({
           model: "deepseek-v4-flash",
           messages: [{ role: "user", content: prompt }],
-          max_tokens: 500,
+          max_tokens: 800,
           temperature: 0.4,
         }),
       },
@@ -90,21 +110,24 @@ async function callDeepSeek(prompt: string): Promise<string | null> {
     );
     console.log("DeepSeek response status:", res.status);
     const data = await res.json();
-    const text = data?.choices?.[0]?.message?.content?.trim();
+    const choice = data?.choices?.[0];
+    const text = choice?.message?.content?.trim();
+    const finishReason = choice?.finish_reason || null;
     if (!text) {
       console.error(
         "DeepSeek returned no usable text. Full response:",
         JSON.stringify(data),
       );
     }
-    return text || null;
+    const truncated = text ? finishReason === "length" : false;
+    return { text, truncated, finishReason };
   } catch (e) {
     console.error("DeepSeek call failed:", e);
     return null;
   }
 }
 
-async function callQwen(prompt: string): Promise<string | null> {
+async function callQwen(prompt: string): Promise<ProviderResult | null> {
   if (!QWEN_KEY) return null;
   try {
     const res = await fetchWithTimeout(
@@ -118,7 +141,7 @@ async function callQwen(prompt: string): Promise<string | null> {
         body: JSON.stringify({
           model: "qwen3-max",
           messages: [{ role: "user", content: prompt }],
-          max_tokens: 500,
+          max_tokens: 800,
           temperature: 0.4,
         }),
       },
@@ -126,14 +149,17 @@ async function callQwen(prompt: string): Promise<string | null> {
     );
     console.log("Qwen response status:", res.status);
     const data = await res.json();
-    const text = data?.choices?.[0]?.message?.content?.trim();
+    const choice = data?.choices?.[0];
+    const text = choice?.message?.content?.trim();
+    const finishReason = choice?.finish_reason || null;
     if (!text) {
       console.error(
         "Qwen returned no usable text. Full response:",
         JSON.stringify(data),
       );
     }
-    return text || null;
+    const truncated = text ? finishReason === "length" : false;
+    return { text, truncated, finishReason };
   } catch (e) {
     console.error("Qwen call failed:", e);
     return null;
@@ -147,16 +173,34 @@ async function callQwen(prompt: string): Promise<string | null> {
 
 export async function generateExplanation(
   prompt: string,
-): Promise<{ text: string; model: string } | null> {
-  const providers: [string, (p: string) => Promise<string | null>][] = [
+  concisePrompt?: string,
+): Promise<{ text: string; model: string; truncated: boolean } | null> {
+  const providers: [string, (p: string) => Promise<ProviderResult | null>][] = [
     ["gemini-3.5-flash", callGemini],
-    ["deepseek-chat", callDeepSeek],
+    ["deepseek-v4-flash", callDeepSeek],
     ["qwen3-max", callQwen],
   ];
   for (const [name, fn] of providers) {
     try {
-      const text = await fn(prompt);
-      if (text) return { text, model: name };
+      const first = await fn(prompt);
+      if (!first?.text) continue;
+      // If the first pass hit the output token ceiling, retry the SAME provider
+      // with a hard-trimmed "just be short" prompt (cheaper + faster than
+      // bouncing to the next provider, and usually lands under budget).
+      if (first.truncated && concisePrompt) {
+        console.log(
+          `AI provider ${name} truncated (${first.finishReason}) — retrying with concise prompt`,
+        );
+        const second = await fn(concisePrompt);
+        if (second?.text) {
+          return {
+            text: second.text,
+            model: name,
+            truncated: second.truncated,
+          };
+        }
+      }
+      return { text: first.text, model: name, truncated: first.truncated };
     } catch (e) {
       console.error(`Provider ${name} threw:`, e);
     }

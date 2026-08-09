@@ -357,9 +357,15 @@ Deno.serve(async (_req) => {
         const result = await generateExplanation(prompt);
         // Let the platform's LLM draft the advisory, but never let an LLM outage
         // block the alert — fall back to the flat template.
-        if (result) {
+        if (result && !result.truncated) {
           modelUsed = result.model;
           message = safeText(result.text, buildAlertMessage(field.name, status, stage, ndvi, rainfall, lang));
+        } else if (result && result.truncated) {
+          // finish_reason "length"/"MAX_TOKENS" — the LLM trailed off mid-answer.
+          // Prefer the flat, complete template over a dangling sentence.
+          modelUsed = result.model;
+          console.log(`Advisory truncated (${modelUsed}) — using flat template`);
+          message = buildAlertMessage(field.name, status, stage, ndvi, rainfall, lang);
         } else {
           modelUsed = null;
           console.log("Advisory fell back to flat template (no LLM provider returned text)");

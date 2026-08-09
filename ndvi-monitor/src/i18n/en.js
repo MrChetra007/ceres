@@ -140,6 +140,7 @@ export default {
   'field.no_scene_note': 'No satellite data for this month — try a recent month with data.',
   'field.ai_agronomist': 'AI agronomist',
   'field.ai_generated': 'AI-generated interpretation to guide you — not a diagnosis.',
+  'field.ai_truncated': 'Note: this explanation was cut short by the AI service — tap Consult AI again to retry for the full answer.',
   'field.stress_high': 'Below expected range for this growth stage — consider checking irrigation.',
   'field.stress_moderate': 'Slightly below expected for this stage — monitor over the coming weeks.',
   'field.stress_healthy': 'Within the expected NDVI range for this growth stage.',

@@ -56,6 +56,7 @@
         <div v-if="aiExplanation" class="ai-answer">
           <p class="detail-card-label">{{ t('field.ai_agronomist') }}</p>
           <p class="ai-text">{{ aiExplanation }}</p>
+          <p v-if="aiTruncated" class="ai-note ai-truncated">{{ t('field.ai_truncated') }}</p>
           <p class="ai-note">{{ t('field.ai_generated') }}</p>
         </div>
       </div>
@@ -131,6 +132,7 @@ import { useI18n } from '../i18n'
 const chartCanvas = ref(null)
 const consultingAi = ref(false)
 const aiExplanation = ref('')
+const aiTruncated = ref(false)
 const photos = ref([])
 let chart = null
 
@@ -466,6 +468,7 @@ async function consultAi() {
 
   consultingAi.value = true
   aiExplanation.value = ''
+  aiTruncated.value = false
   let ndviValue = null
   let lswiValue = null
   let rainfallMm = state.rainfallMm
@@ -536,6 +539,7 @@ async function consultAi() {
     }
     if (body && body.ok && body.explanation) {
       aiExplanation.value = body.explanation
+      aiTruncated.value = !!body.truncated
     } else {
       store.showToast(t('toast.explain_failed'))
     }
@@ -553,7 +557,7 @@ watch(() => state.benchmarkValue, () => {
   if (state.chartData && state.infoPanelVisible) render(state.chartData)
 })
 watch(() => state.mainMonth, () => updateMarker())
-watch(() => state.currentFieldId, () => { aiExplanation.value = ''; photos.value = []; state.photosLightboxIndex = null; loadPhotos() })
+watch(() => state.currentFieldId, () => { aiExplanation.value = ''; aiTruncated.value = false; photos.value = []; state.photosLightboxIndex = null; loadPhotos() })
 watch(() => state.infoPanelVisible, (open) => {
   if (open && currentField.value) loadPhotos()
 })
