@@ -11,10 +11,14 @@ Satellite-based rice crop health monitor for Battambang, Cambodia. Shows NDVI/ND
 - **AI:** `consult-ai` and `ee-alerts-worker` both call a shared LLM orchestrator (`_shared/llm.ts`), fallback chain Gemini → DeepSeek → Qwen
 
 ## Core features (live, deployed, confirmed working)
-- Live NDVI/NDWI map with time slider (14-month history), scene-count confidence indicator
+- Live NDVI/NDWI/LSWI map with time slider (14-month history), scene-count confidence indicator
+- 4th **True Color photo** band — real Sentinel-2 RGB (B4·B3·B2) per-scene imagery with a date picker; clouds stay visible/unmasked, colored-legend hidden, band-exact day counts/growth stages
+- Satellite basemap by default + stable overlay layering (fixed `zIndex`/`bringToFront`), so index/True-Color layers always render above the base and survive slider/basemap switches
 - Click-to-inspect trend chart + automatic stress detection (>15% NDVI drop)
 - Draw & save fields, multi-area support (5-area cap per user)
 - Growth-stage-aware health thresholds (NDVI expected range by days-since-planting)
+- Growth/Pre-planting logic share ONE source of truth: an exact slider scene date (not "today's real date") drives days-since-planting, growth stage, hero NDVI and the pre-planting badge consistently across all three sidebar surfaces
+- **"Today" quick-jump** — snaps the slider to the current calendar date and runs the standard pipeline (clean/cloud-blocked/no-data) with no special-casing
 - Dashboard with health badges, compare-two-dates mode, PNG/PDF export
 - Event overlays (flood/dry-spell markers), CHIRPS rainfall context on alerts
 - Google-auth login, per-user Supabase-synced fields (replaced localStorage)
@@ -27,7 +31,7 @@ Run these to activate:
 2. Redeploy Edge Functions: `consult-ai`, `ee-alerts-worker`, `telegram-webhook`
 
 What they unlock once deployed:
-- **Cloud-blocked fallback:** true-color imagery + 🟢🟡🔴 confidence badge when a month is ≥40% cloudy
+- **Cloud-blocked fallback (backend confidence signals):** true-color imagery + 🟢🟡🔴 confidence badge when a month is ≥40% cloudy — the True-Color rendering and badge UI are already live; the deployed migrations seal the confidence-tier signals so it behaves fully in production
 - **LLM-generated Telegram alerts:** Khmer/English advisory text instead of flat templates (falls back to template if LLM fails)
 - **Farmer photo uploads:** send a field photo via Telegram → auto-linked to the right field, stored privately, viewable in-app
 - **Auto-planting-date detection:** detects transplanting date from an LSWI spike (dry→flooded), auto-fills field, downgrades confidence to "estimated" until manually confirmed
