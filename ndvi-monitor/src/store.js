@@ -463,11 +463,16 @@ export function setBaseLayer(type) {
 
   if (mapReg.baseLayer) mapReg.map.removeLayer(mapReg.baseLayer)
   mapReg.baseLayer = window.L.tileLayer(url, { attribution: attr, maxZoom: 19 }).addTo(mapReg.map)
+  // Re-adding the base layer puts it last in the tile stacking order (on top of
+  // the NDVI/NDWI/LSWI overlay). Bring any overlay back to the front so a
+  // basemap switch never hides the rendered index for a selected field.
+  if (mapReg.ndviLayer) mapReg.ndviLayer.bringToFront()
   mapReg.map.invalidateSize()
 
   if (mapReg.mapRight && mapReg.baseLayerRight) {
     mapReg.mapRight.removeLayer(mapReg.baseLayerRight)
     mapReg.baseLayerRight = window.L.tileLayer(url, { attribution: attr, maxZoom: 19 }).addTo(mapReg.mapRight)
+    if (mapReg.ndviLayerRight) mapReg.ndviLayerRight.bringToFront()
     mapReg.mapRight.invalidateSize()
   }
 }
