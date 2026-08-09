@@ -189,9 +189,25 @@ function monthEndISO(m) {
   return y + '-' + mm + '-' + dd
 }
 
-const asOfDate = computed(() => {
+// The exact scene date currently being VIEWED, matching what drives the map
+// overlay and hero NDVI value — NOT a synthetic month-boundary date:
+//   1. True Color mode  -> the capture the user picked in the scene picker.
+//   2. Index modes       -> the last cloud-free per-scene observation of the
+//      selected month (state.chartData is the SAME per-scene series the hero
+//      reads, so this is exactly the scene the hero value is showing).
+//   3. Fallback          -> the "last clear reading" date (cloud-blocked view),
+//      else null so asOfDate takes the explicit month-end last resort below.
+const selectedSceneDate = computed(() => {
+  if (state.currentIndex === 'truecolor' && state.trueColorDate) return state.trueColorDate
   const obs = activeObservation.value
   if (obs && obs.date) return obs.date
+  const block = state.cloudBlock.main
+  return block && block.lastValidDate ? block.lastValidDate : null
+})
+
+const asOfDate = computed(() => {
+  const scene = selectedSceneDate.value
+  if (scene) return scene
   const m = MONTHS[state.mainMonth]
   if (m) return monthEndISO(m)
   return new Date().toISOString().slice(0, 10)
@@ -301,7 +317,13 @@ const growthStageDays = computed(() => {
     '| plantingDate=' + f.plantingDate,
     '| asOfDate=' + asOfDate.value,
       '| days=' + d,
-    '(asOfDate source: ' + (activeObservation.value && activeObservation.value.date ? 'per-scene observation ' + activeObservation.value.date : 'month END') + ')',
+    '| source=' + (state.currentIndex === 'truecolor' && state.trueColorDate
+      ? 'truecolor scene ' + state.trueColorDate
+      : activeObservation.value && activeObservation.value.date
+        ? 'per-scene observation ' + activeObservation.value.date
+        : state.cloudBlock.main && state.cloudBlock.main.lastValidDate
+          ? 'last clear reading ' + state.cloudBlock.main.lastValidDate
+          : 'month-END fallback'),
   )
   return d
 })
