@@ -118,6 +118,8 @@ export default {
   'field.stage_maturation': 'Maturation',
   'field.stage_harvest': 'Harvest',
   'field.trend': 'Trend',
+  'field.last_clear_reading': 'Last clear reading: {date}',
+  'field.radar_map_note': 'Map showing satellite radar signal (RVI) — a different measurement from the NDVI value above, not directly comparable.',
 
   // Sidebar
   'sidebar.monitored_fields': 'Monitored Fields',

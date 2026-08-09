@@ -1262,7 +1262,7 @@ export function updateFieldStatus(field) {
   ee.getRecentIndexValue(geometry, state.currentIndex, ({ count, value, date, cloudBlocked }) => {
     if (count === 0 || value == null) {
       fieldStatus[field.id] = {
-        badgeText: '\u2014', badgeClass: '', stageLabel: 'No recent data',
+        badgeText: '\u2014', badgeClass: '', stageLabel: 'No usable reading in the last 90 days',
         value: null, count: 0, date: date || null, cloudBlocked: !!cloudBlocked,
       }
       if (field.id === state.currentFieldId) applyFieldStyle()

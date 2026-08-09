@@ -266,12 +266,14 @@ export function getDryMonths(months, geometry, cb) {
 export function getRecentIndexValue(geometry, index, cb) {
   const e = ee()
   const cfg = INDICES[index] || INDICES.ndvi
-  // Same 14-month window the trend chart uses — a hard 30-day window returns
-  // zero scenes whenever the latest cloud-free image is older than a month
-  // (common in Cambodia's rainy season), which silently showed "No recent data"
-  // while the trend/stress cards had real values. Sort desc + first() so we
-  // report the most recent available value, consistent with the chart's last point.
-  const start = e.Date(Date.now()).advance(-14, 'month')
+  // Cap at the same 90-day lookback the ee-alerts-worker uses, so the hero
+  // NDVI and Telegram agree on when a field has no usable reading: once no
+  // cloud-free scene exists within 90 days, the hero stops showing a number
+  // instead of reaching back into the 14-month trend window for a stale one.
+  // The trend chart keeps its own wider 14-month window for history; this is
+  // the "current status" value, so it respects the stricter bound. Sort desc +
+  // first() so we report the most recent available value.
+  const start = e.Date(Date.now()).advance(-90, 'day')
   const end = e.Date(Date.now())
   const all = e.ImageCollection('COPERNICUS/S2_SR_HARMONIZED')
     .filterBounds(geometry)

@@ -3486,6 +3486,23 @@ body {
 
 .hero-bench b { color: var(--blue); font-weight: 600; }
 
+.hero-stale-note {
+  margin: 6px 0 0;
+  font-size: 11px;
+  color: var(--amber);
+}
+
+.radar-map-note {
+  border-left: 3px solid #c3a4ff;
+}
+
+.radar-map-note-text {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--text-dim);
+}
+
 .bench-dot {
   width: 8px;
   height: 8px;

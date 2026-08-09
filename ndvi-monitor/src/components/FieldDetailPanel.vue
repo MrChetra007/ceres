@@ -15,11 +15,16 @@
           <span class="status-badge" :class="statusTone">{{ statusText }}</span>
         </div>
         <div class="hero-sub mono">{{ stageText }}</div>
+        <p v-if="showHeroStaleNote" class="hero-stale-note">{{ t('field.last_clear_reading', { date: heroLastClearDate }) }}</p>
         <div class="hero-bench">
           <span class="bench-dot"></span> {{ t('field.aoi_benchmark') }}
           <b class="mono">{{ benchmarkText }}</b>
         </div>
         <ConfidenceBadge v-if="conf && conf.tier" :tier="conf.tier" :reason="conf.reason" showReason class="detail-conf" />
+      </div>
+
+      <div v-if="radarMapNote" class="detail-section radar-map-note">
+        <p class="radar-map-note-text">{{ t('field.radar_map_note') }}</p>
       </div>
 
       <div class="detail-section stage-card">
@@ -138,6 +143,16 @@ const statusTone = computed(() => (status.value && status.value.badgeClass) || '
 const stageText = computed(() => (status.value && status.value.stageLabel) || '')
 const benchmarkText = computed(() => (state.benchmarkValue != null ? state.benchmarkValue.toFixed(3) : '\u2014'))
 const heroValue = computed(() => (status.value && status.value.value != null ? status.value.value.toFixed(3) : '\u2014'))
+const radarMapNote = computed(() => !!state.radarFallback.main)
+const heroLastClearDate = computed(() => {
+  if (status.value && status.value.date) return status.value.date
+  const b = state.cloudBlock.main
+  return b && b.lastValidDate ? b.lastValidDate : null
+})
+const showHeroStaleNote = computed(() => {
+  const stale = !!state.radarFallback.main || !!state.cloudBlock.main || !!(status.value && status.value.cloudBlocked)
+  return stale && !!heroLastClearDate.value
+})
 
 const stageName = computed(() => {
   const s = status.value

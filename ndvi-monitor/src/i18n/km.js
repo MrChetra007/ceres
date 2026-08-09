@@ -119,6 +119,8 @@ export default {
   'field.stage_maturation': 'ដំណាក់កាលចាស់ទុំ',
   'field.stage_harvest': 'ច្រូតកាត់',
   'field.trend': 'និន្នាការ',
+  'field.last_clear_reading': 'ការអានច្បាស់ចុងក្រោយ៖ {date}',
+  'field.radar_map_note': 'ផែនទីកំពុងបង្ហាញសញ្ញេរ៉ាដាពីផ្កាយរណប (RVI) — ជាការវាស់វែងខុសពីតម្លៃ NDVI ដែលបង្ហាញខាងលើ មិនអាចប្រៀបធៀបដោយផ្ទាល់បានទេ។',
 
   // Sidebar
   'sidebar.monitored_fields': 'វាលតាមដាន',
