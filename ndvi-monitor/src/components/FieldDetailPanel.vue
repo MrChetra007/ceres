@@ -175,19 +175,25 @@ const activeObservation = computed(() => {
   return { value: last.value, date: last.date }
 })
 
-// Reconstruct a date-only string without the ISO UTC shift that could roll a
-// boundary month start to the previous day in UTC.
-function monthStartISO(m) {
+// Reconstruct a date-only string (YYYY-MM-DD) in UTC without the ISO UTC shift
+// that could roll a boundary date to the previous day in local time.
+// monthEndISO returns the LAST day of the selected month: when the scrubbed
+// month has no per-scene observation yet (activeObservation is null), the
+// pre-planting check must compare against the month's latest day — not its
+// first day. Using month-start (e.g. July 1) made any field planted mid-month
+// (July 8) look "before planting" even when the user was viewing July.
+function monthEndISO(m) {
   const y = m.year
   const mm = String(m.month).padStart(2, '0')
-  return y + '-' + mm + '-01'
+  const dd = String(new Date(Date.UTC(y, m.month, 0)).getUTCDate()).padStart(2, '0')
+  return y + '-' + mm + '-' + dd
 }
 
 const asOfDate = computed(() => {
   const obs = activeObservation.value
   if (obs && obs.date) return obs.date
   const m = MONTHS[state.mainMonth]
-  if (m) return monthStartISO(m)
+  if (m) return monthEndISO(m)
   return new Date().toISOString().slice(0, 10)
 })
 
@@ -208,7 +214,19 @@ const heroStatus = computed(() => monthStatus.value || (Array.isArray(state.char
 const prePlanting = computed(() => {
   const f = currentField.value
   if (!f || !f.plantingDate) return false
-  return new Date(asOfDate.value).getTime() < new Date(f.plantingDate).getTime()
+  const asOf = new Date(asOfDate.value).getTime()
+  const planting = new Date(f.plantingDate).getTime()
+  const result = asOf < planting
+  if (result) {
+    console.log(
+      '[prePlanting]', f.name,
+      '| asOfDate(raw)=' + asOfDate.value,
+      '| plantingDate=', f.plantingDate,
+      '| isPrePlanting=', result,
+      '(asOfDate comes from: ' + (activeObservation.value && activeObservation.value.date ? 'per-scene observation signed in chartData' : 'month END fallback') + ')',
+    )
+  }
+  return result
 })
 
 const title = computed(() => (isField.value ? currentField.value.name : INDICES[state.chartIndex].name + ' ' + t('index.trend')))
