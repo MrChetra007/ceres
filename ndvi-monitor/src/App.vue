@@ -1,4 +1,5 @@
 <template>
+  <LandingPage />
   <TopBar @menu="openDashboard" />
   <LeafletMap />
   <div v-if="state.loading" class="map-loading"></div>
@@ -36,6 +37,7 @@
 import { ref, onMounted, watch } from 'vue'
 import { state } from './store'
 import * as store from './store'
+import LandingPage from './components/LandingPage.vue'
 import TopBar from './components/TopBar.vue'
 import LeafletMap from './components/LeafletMap.vue'
 import TimeControl from './components/TimeControl.vue'

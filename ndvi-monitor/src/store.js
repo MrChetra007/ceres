@@ -98,8 +98,11 @@ export const state = reactive({
   telegramChatId: null,
   telegramModalVisible: false,
   telegramLinking: false,
-  preferredLanguage: 'en',
+  preferredLanguage: 'km',
   photosLightboxIndex: null,
+  landingVisible: (() => {
+    try { return !localStorage.getItem('ndvi_landing_done') } catch { return true }
+  })(),
 })
 
 export const currentGeometry = shallowRef(null)
@@ -406,7 +409,7 @@ export async function loadTelegramChatId() {
   try {
     const profile = await supabase.getMyProfile()
     state.telegramChatId = profile?.telegram_chat_id || null
-    state.preferredLanguage = profile?.preferred_language || 'en'
+    state.preferredLanguage = profile?.preferred_language || 'km'
   } catch (err) {
     state.telegramChatId = null
   }
@@ -1222,6 +1225,11 @@ export function showAuthOverlay() {
 
 export function hideAuthOverlay() {
   state.authOverlayVisible = false
+}
+
+export function dismissLanding() {
+  state.landingVisible = false
+  try { localStorage.setItem('ndvi_landing_done', '1') } catch {}
 }
 
 export async function signInWithSupabaseGoogle() {
