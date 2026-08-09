@@ -239,7 +239,23 @@ const statusTone = computed(() => {
   if (prePlanting.value) return 'tone-blue'
   return (heroStatus.value && heroStatus.value.badgeClass) || 'healthy'
 })
-const stageText = computed(() => (monthStatus.value && monthStatus.value.stageLabel) || (status.value && status.value.stageLabel) || '')
+const stageText = computed(() => {
+  if (monthStatus.value && monthStatus.value.stageLabel) return monthStatus.value.stageLabel
+  const st = status.value
+  if (!st || !st.stageLabel) return ''
+  // One-shot fallback: status.stageLabel is built (store.updateFieldStatus) with
+  // Date.now() as the as-of date, so "Day N" there can drift from the Growth
+  // box (which uses the slider's asOfDate). Rebuild the day count from the SAME
+  // asOfDate the Growth box uses so both surfaces always agree.
+  const f = currentField.value
+  const days = growthStageDays.value
+  if (state.currentIndex === 'ndvi' && f && f.plantingDate && days != null && !prePlanting.value) {
+    const stage = store.getGrowthStage(days).stage
+    const val = st.value != null ? ' \u00b7 NDVI ' + st.value.toFixed(2) : ''
+    return stage + ' \u00b7 Day ' + days + val
+  }
+  return st.stageLabel
+})
 const benchmarkText = computed(() => (state.benchmarkValue != null ? state.benchmarkValue.toFixed(3) : '\u2014'))
 const heroValue = computed(() => {
   const obs = activeObservation.value
@@ -277,7 +293,16 @@ const showHeroStaleNote = computed(() => {
 const growthStageDays = computed(() => {
   const f = currentField.value
   if (!f || !f.plantingDate) return null
-  const d = Math.floor((new Date(asOfDate.value).getTime() - new Date(f.plantingDate).getTime()) / 86400000)
+  const asOf = new Date(asOfDate.value).getTime()
+  const planting = new Date(f.plantingDate).getTime()
+  const d = Math.floor((asOf - planting) / 86400000)
+  console.log(
+    '[daysSincePlanting]', f.name,
+    '| plantingDate=' + f.plantingDate,
+    '| asOfDate=' + asOfDate.value,
+      '| days=' + d,
+    '(asOfDate source: ' + (activeObservation.value && activeObservation.value.date ? 'per-scene observation ' + activeObservation.value.date : 'month END') + ')',
+  )
   return d
 })
 const stageName = computed(() => {
