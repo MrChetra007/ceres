@@ -100,6 +100,7 @@ export default {
   'field.photo': 'រូបថតវាល',
   'field.no_photos': 'មិនទាន់មានរូបថត — សូមផ្ញើរូបថតវាលនេះទៅបូត Telegram។',
   'field.no_planting_date': 'មិនមានកាលបរិច្ឆេទដាំ',
+  'field.stage_future': 'កាលបរិច្ឆេទដាំគឺនៅពេលអនាគត',
   'field.day_since_planting': 'ថ្ងៃទី {day} ចាប់តាំងពីដាំ',
   'field.loading': 'កំពុងផ្ទុក…',
   'field.data_unavailable': 'មិនមានទិន្នន័យ',

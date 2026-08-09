@@ -99,6 +99,7 @@ export default {
   'field.photo': 'Field photo',
   'field.no_photos': 'No photos yet — send a photo of this field to the Telegram bot.',
   'field.no_planting_date': 'No planting date',
+  'field.stage_future': 'Planting date is in the future',
   'field.day_since_planting': 'Day {day} since planting',
   'field.loading': 'Loading…',
   'field.data_unavailable': 'Data unavailable',

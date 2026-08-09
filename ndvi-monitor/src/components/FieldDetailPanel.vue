@@ -27,6 +27,8 @@
         <p class="radar-map-note-text">{{ t('field.radar_map_note') }}</p>
       </div>
 
+      <!-- Growth stage is planting-date based, not band-derived, so it stays
+           identical across the NDVI/NDWI/LSWI tabs (intentional). -->
       <div class="detail-section stage-card">
         <p class="detail-card-label">{{ t('field.growth_stage') }}</p>
         <p class="stage-name">{{ stageName }}</p>
@@ -36,7 +38,10 @@
         <p class="stage-days mono">{{ stageDaysText }}</p>
       </div>
 
-      <div class="detail-section stress-card" :class="stressTone">
+      <!-- Stress Alert is a NDVI-only health signal (no NDWI/LSWI thresholds
+           exist yet) — hide the card on non-NDVI tabs instead of showing stale
+           NDVI text. -->
+      <div v-if="isField && state.currentIndex === 'ndvi'" class="detail-section stress-card" :class="stressTone">
         <p class="detail-card-label">{{ t('field.stress_alert') }}</p>
         <p class="stress-msg">{{ stressMsg }}</p>
       </div>
@@ -56,7 +61,10 @@
       </div>
     </template>
 
-    <div v-if="state.stressAlert" class="detail-section stress-card alert-msg">
+    <!-- Rainfall-watch stress note is built from the NDVI trend (checkStress only
+           ever populates state.stressAlert for the ndvi index) — gate it so it
+           never renders NDVI wording on the NDWI/LSWI tabs. -->
+    <div v-if="state.stressAlert && state.currentIndex === 'ndvi'" class="detail-section stress-card alert-msg">
       <p class="detail-card-label">{{ t('field.rainfall_watch') }}</p>
       <p class="stress-msg">{{ state.stressAlert }}</p>
     </div>
@@ -154,23 +162,32 @@ const showHeroStaleNote = computed(() => {
   return stale && !!heroLastClearDate.value
 })
 
+// Growth stage is a property of the crop's age (planting date), NOT of the
+// selected band — it intentionally does not change when switching between the
+// NDVI/NDWI/LSWI tabs. Computed here directly from the planting date instead of
+// from status.stageLabel, because stageLabel only carries the band value (e.g.
+// "NDWI 0.72") on the non-NDVI tabs.
+const growthStageDays = computed(() => {
+  const f = currentField.value
+  if (!f || !f.plantingDate) return null
+  const d = Math.floor((Date.now() - new Date(f.plantingDate).getTime()) / 86400000)
+  return d
+})
 const stageName = computed(() => {
-  const s = status.value
-  if (!s || !s.stageLabel) return t('field.no_planting_date')
-  return s.stageLabel.split('\u00b7')[0].trim()
+  const d = growthStageDays.value
+  if (d == null) return t('field.no_planting_date')
+  if (d < 0) return t('field.stage_future')
+  return store.getGrowthStage(d).stage
 })
 const stageDaysText = computed(() => {
-  const s = status.value
-  if (!s || !s.stageLabel) return '\u2014'
-  const m = s.stageLabel.match(/Day (\d+)/)
-  return m ? t('field.day_since_planting', { day: m[1] }) : '\u2014'
+  const d = growthStageDays.value
+  if (d == null || d < 0) return '\u2014'
+  return t('field.day_since_planting', { day: d })
 })
 const stagePct = computed(() => {
-  const s = status.value
-  if (!s || !s.stageLabel) return 0
-  const m = s.stageLabel.match(/Day (\d+)/)
-  const days = m ? parseInt(m[1], 10) : 0
-  return Math.min(100, Math.round((days / 120) * 100))
+  const d = growthStageDays.value
+  if (d == null || d < 0) return 0
+  return Math.min(100, Math.round((d / 120) * 100))
 })
 
 const stressTone = computed(() => {

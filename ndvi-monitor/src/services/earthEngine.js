@@ -97,7 +97,15 @@ export function loadIndexTile(month, index, geometry, cb) {
       })
       return
     }
+    // Each index uses its OWN band combination from the INDICES config, so the
+    // computed image genuinely differs per tab, never reused:
+    //   NDVI = NDVI(B8, B4)   NDWI = NDWI(B3, B8)   LSWI = LSWI(B8, B11)
+    // They can still LOOK similar for the same flooded paddy — water loads on
+    // both NDWI (green→NIR) and LSWI (NIR→SWIR) — so a near-identical visual is
+    // expected for water-heavy fields, not a sign of a shared image/palette.
+    // Log the exact expression below for per-tab verification.
     const composite = cleanCollection.median().clip(geometry).normalizedDifference(cfg.bands).rename(cfg.name)
+    console.log(`[loadIndexTile] ${cfg.name} → normalizedDifference(${cfg.bands.join(', ')})  vis=${JSON.stringify(cfg.vis)}`)
     composite.getMap(cfg.vis, (mapId, err) => {
       if (err || !mapId || !mapId.urlFormat) { cb({ mode: 'index', count, url: null, err }); return }
       cb({ mode: 'index', count, url: mapId.urlFormat })
