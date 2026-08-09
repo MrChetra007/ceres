@@ -30,14 +30,36 @@
       </div>
     </div>
 
+    <div class="range-selector" :class="{ active: rangeActive }">
+      <select
+        class="range-select"
+        :value="rangePresetValue"
+        @change="onPresetChange"
+        :title="t('time.range_tip')"
+      >
+        <option value="">— {{ t('time.full_window') }} —</option>
+        <option v-for="p in SEASON_PRESETS" :key="p.id" :value="p.id">{{ p.label }}</option>
+        <option :value="CUSTOM_RANGE_ID">{{ t('time.custom_range') }}</option>
+      </select>
+      <span v-if="rangeActive" class="range-badge">
+        {{ state.rangeStart }} → {{ state.rangeEnd }}
+        <button class="range-clear" :title="t('time.clear_range')" @click="clearRange">×</button>
+      </span>
+      <div class="range-custom">
+        <input type="date" class="range-input" :value="customStart" @input="onCustomStart" />
+        <span class="range-arrow">→</span>
+        <input type="date" class="range-input" :value="customEnd" @input="onCustomEnd" />
+      </div>
+    </div>
+
     <div class="scrubber-wrap">
       <div class="scrubber">
         <input
           type="range"
           id="month-slider"
           step="1"
-          :min="0"
-          :max="MONTHS.length - 1"
+          :min="sliderBounds.min"
+          :max="sliderBounds.max"
           :value="state.mainMonth"
           :style="{ background: trackBg(state.mainMonth) }"
           @input="onMainSlider"
@@ -48,6 +70,7 @@
               v-for="(m, i) in MONTHS"
               :key="'e' + i"
               class="event-marker"
+              :class="{ out: !isInRange(i) }"
               :style="{ background: eventColor(i) || 'transparent' }"
               :title="eventLabel(i)"
             ></div>
@@ -57,7 +80,7 @@
               v-for="(m, i) in MONTHS"
               :key="'a' + i"
               class="auto-marker"
-              :class="{ 'auto-dry': state.dryMonthSet.has(i) }"
+              :class="{ 'auto-dry': state.dryMonthSet.has(i), out: !isInRange(i) }"
               :title="state.dryMonthSet.has(i) ? t('time.low_rain') : ''"
             ></div>
           </div>
@@ -68,8 +91,8 @@
           <span class="ev-key"><i class="ev-dot dry-auto"></i>{{ t('time.low_rain_chirps') }}</span>
         </div>
         <div class="scrubber-ticks">
-          <span>{{ MONTHS[0].label }}</span>
-          <span>{{ MONTHS[MONTHS.length - 1].label }}</span>
+          <span>{{ rangeActive ? monthTick(firstMonthInRange) : MONTHS[0].label }}</span>
+          <span>{{ rangeActive ? monthTick(lastMonthInRange) : MONTHS[MONTHS.length - 1].label }}</span>
         </div>
       </div>
 
@@ -93,8 +116,8 @@
           type="range"
           id="month-slider-right"
           step="1"
-          :min="0"
-          :max="MONTHS.length - 1"
+          :min="sliderBounds.min"
+          :max="sliderBounds.max"
           :value="state.rightMonth"
           :style="{ background: trackBg(state.rightMonth) }"
           @input="onRightSlider"
@@ -105,6 +128,7 @@
               v-for="(m, i) in MONTHS"
               :key="'re' + i"
               class="event-marker"
+              :class="{ out: !isInRange(i) }"
               :style="{ background: eventColor(i) || 'transparent' }"
             ></div>
           </div>
@@ -113,7 +137,7 @@
               v-for="(m, i) in MONTHS"
               :key="'ra' + i"
               class="auto-marker"
-              :class="{ 'auto-dry': state.dryMonthSet.has(i) }"
+              :class="{ 'auto-dry': state.dryMonthSet.has(i), out: !isInRange(i) }"
             ></div>
           </div>
         </div>
@@ -126,7 +150,7 @@
 import { ref, computed, onBeforeUnmount } from 'vue'
 import { state } from '../store'
 import * as store from '../store'
-import { MONTHS, EVENT_COLORS } from '../config'
+import { MONTHS, EVENT_COLORS, SEASON_PRESETS, CUSTOM_RANGE_ID } from '../config'
 import ConfidenceBadge from './ConfidenceBadge.vue'
 import { useI18n } from '../i18n'
 
@@ -136,6 +160,50 @@ const collapsed = ref(true)
 let playTimer = null
 let debounceTimer = null
 let debounceTimerRight = null
+
+const rangeActive = computed(() => !!(state.rangeStart && state.rangeEnd))
+const sliderBounds = computed(() => rangeActive.value ? store.sliderBounds() : { min: 0, max: MONTHS.length - 1 })
+const rangePresetValue = computed(() => {
+  if (rangeActive.value) {
+    if (state.rangePresetId && SEASON_PRESETS.some((p) => p.id === state.rangePresetId)) return state.rangePresetId
+    return CUSTOM_RANGE_ID
+  }
+  return ''
+})
+const firstMonthInRange = computed(() => {
+  const months = store.sliderBounds()
+  return MONTHS[months.min]
+})
+const lastMonthInRange = computed(() => {
+  const months = store.sliderBounds()
+  return MONTHS[months.max]
+})
+const customStart = computed(() => state.rangeStart || '')
+const customEnd = computed(() => state.rangeEnd || '')
+
+function monthTick(m) {
+  return m ? m.label : ''
+}
+function isInRange(i) {
+  if (!rangeActive.value) return true
+  const b = sliderBounds.value
+  return i >= b.min && i <= b.max
+}
+function onPresetChange(e) {
+  const v = e.target.value
+  if (v === '') { store.clearDateRange(); return }
+  if (v === CUSTOM_RANGE_ID) return
+  store.setRangePreset(v)
+}
+function onCustomStart(e) {
+  store.applyDateRange(e.target.value || null, state.rangeEnd || null, CUSTOM_RANGE_ID)
+}
+function onCustomEnd(e) {
+  store.applyDateRange(state.rangeStart || null, e.target.value || null, CUSTOM_RANGE_ID)
+}
+function clearRange() {
+  store.clearDateRange()
+}
 
 const mainMonthLabel = computed(() => fullLabel(MONTHS[state.mainMonth]))
 const rightMonthLabel = computed(() => fullLabel(MONTHS[state.rightMonth]))
@@ -225,7 +293,8 @@ function toggleCollapsed() {
 function startPlay() {
   stopPlay()
   playTimer = setInterval(() => {
-    const next = (state.mainMonth + 1) % MONTHS.length
+    const b = sliderBounds.value
+    const next = state.mainMonth >= b.max ? b.min : state.mainMonth + 1
     state.mainMonth = next
     store.loadIndexForMonth(next, null, true)
     if (state.compareMode) {
@@ -240,7 +309,8 @@ function stopPlay() {
 }
 
 function goLatest() {
-  const latest = Math.max(0, MONTHS.length - 2)
+  const b = sliderBounds.value
+  const latest = rangeActive.value ? b.max : Math.max(0, MONTHS.length - 2)
   state.mainMonth = latest
   store.loadIndexForMonth(latest, null)
   if (state.compareMode) {

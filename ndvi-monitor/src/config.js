@@ -87,3 +87,16 @@ export const EVENTS = [
 export const EVENT_COLORS = { flood: '#3b82f6', drought: '#f59e0b' }
 
 export const DRY_MONTH_THRESHOLD = 50
+
+// Season/date-range presets for the demo date picker. Edit boundaries freely —
+// each entry maps to start/end ISO dates (YYYY-MM-DD), except:
+//   kind: 'current'  -> planting date (or last 30 days) to today, dynamic
+//   kind: 'days'     -> N days back to today, dynamic
+//   kind: 'fixed'    -> uses the explicit start/end below
+export const SEASON_PRESETS = [
+  { id: 'current', label: 'Current Season', kind: 'current' },
+  { id: 'dry2526', label: 'Dry Season 2025-26', kind: 'custom', start: '2025-11-01', end: '2026-04-30' },
+  { id: 'wet25', label: 'Wet Season 2025', kind: 'custom', start: '2025-06-01', end: '2025-10-31' },
+  { id: 'last30', label: 'Last 30 days', kind: 'days', days: 30 },
+]
+export const CUSTOM_RANGE_ID = '__custom__'

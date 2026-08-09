@@ -4,7 +4,7 @@ import { jsPDF } from 'jspdf'
 import {
   EE_PROJECT_ID, CLIENT_ID, MONTHS, DEFAULT_AOI, DEFAULT_PRESETS,
   RICE_GROWTH_STAGES, EVENTS, EVENT_COLORS, INDICES, MAP_CENTER, MAP_ZOOM,
-  TELEGRAM_BOT_USERNAME, TELEGRAM_LINK_TTL_MS,
+  TELEGRAM_BOT_USERNAME, TELEGRAM_LINK_TTL_MS, SEASON_PRESETS,
 } from './config'
 import * as ee from './services/earthEngine'
 import { sb } from './services/supabase'
@@ -69,6 +69,10 @@ export const state = reactive({
   observationsVisible: false,
   observationsLoading: false,
   observations: [],
+  rangeStart: null,
+  rangeEnd: null,
+  rangePresetId: null,
+  rangeMonths: [],
   rainfallMm: null,
   benchmarkValue: null,
   isDrawing: false,
@@ -591,9 +595,152 @@ export function jumpToLastValidReading(side = 'main') {
 }
 
 // ---------------------------------------------------------------------------
-// Browse Observations (per-pass inspection)
+// Date-range scoping (demo presets) — filters ALL date-driven surfaces
+// (slider bounds, observations, trend chart, map snap) by reusing the existing
+// month-index / EE-filter machinery. No parallel data path.
 // ---------------------------------------------------------------------------
+export function toISODate(d) {
+  const y = d.getFullYear()
+  const m = String(d.getMonth() + 1).padStart(2, '0')
+  const dd = String(d.getDate()).padStart(2, '0')
+  return y + '-' + m + '-' + dd
+}
+
+function monthWindow(m) {
+  const start = new Date(m.year, m.month - 1, 1)
+  const end = new Date(m.year, m.month, 1)
+  return { start, end }
+}
+
+function monthOverlaps(m, startTime, endTime) {
+  const w = monthWindow(m)
+  return w.start.getTime() <= endTime && w.end.getTime() - 1 >= startTime
+}
+
+export function rangeStartMs() {
+  return state.rangeStart ? new Date(state.rangeStart + 'T00:00:00').getTime() : 0
+}
+export function rangeEndMs() {
+  return state.rangeEnd ? new Date(state.rangeEnd + 'T23:59:59').getTime() : Infinity
+}
+
+// The month list every date-driven query uses. When a range is active this is
+// the filtered subset; otherwise the full rolling MONTHS window — so callers
+// don't need their own branching. (Calendar-placeholder vs range comparisons
+// are all done in ms against the actual month starts, which is what the EE
+// trend-family functions already key off.)
+export function activeMonths() {
+  if (state.rangeStart && state.rangeEnd && state.rangeMonths.length) return state.rangeMonths
+  return MONTHS
+}
+
+export function sliderBounds() {
+  const months = state.rangeMonths.length ? state.rangeMonths : MONTHS
+  const min = MONTHS.indexOf(months[0])
+  const max = MONTHS.indexOf(months[months.length - 1])
+  return { min: min >= 0 ? min : 0, max: max >= 0 ? max : MONTHS.length - 1 }
+}
+
+function applyMainMonthToRange() {
+  if (state.rangeStart && state.rangeEnd) {
+    const b = sliderBounds()
+    if (state.mainMonth < b.min) state.mainMonth = b.min
+    if (state.mainMonth > b.max) state.mainMonth = b.max
+  }
+}
+
+function reloadChartForActiveRange() {
+  if (!state.eeReady) return
+  if (state.currentFieldId && currentGeometry.value) {
+    loadChartForGeometry(currentGeometry.value, state.currentIndex, state.currentFieldName)
+    if (state.compareMode) loadIndexForMonthRight(state.rightMonth)
+  } else {
+    reloadChartForIndex()
+  }
+}
+
+// Applies a persisted/selected range to all scoped views. startISO/endISO are
+// 'YYYY-MM-DD', presetId is optional for URL/bookmark labelling.
+export function applyDateRange(startISO, endISO, presetId) {
+  const startValid = startISO && !isNaN(new Date(startISO + 'T00:00:00'))
+  const endValid = endISO && !isNaN(new Date(endISO + 'T23:59:59'))
+  if (!startValid && !endValid) { clearDateRange(); return }
+  state.rangeStart = startValid ? startISO : null
+  state.rangeEnd = endValid ? endISO : null
+  state.rangePresetId = presetId || null
+  state.rangeMonths = MONTHS.filter((m) => monthOverlaps(m, rangeStartMs(), rangeEndMs()))
+  applyMainMonthToRange()
+  syncRangeUrl()
+  if (state.eeReady) {
+    loadIndexForMonth(state.mainMonth, currentGeometry.value || null)
+    if (state.compareMode) loadIndexForMonthRight(state.rightMonth)
+    fetchDryMonths()
+    refreshAllFieldStatuses()
+    refreshAllFieldTrends()
+    reloadChartForActiveRange()
+    if (state.currentFieldId) fetchObservations() // scoped to range
+  }
+}
+
+export function clearDateRange() {
+  state.rangeStart = null
+  state.rangeEnd = null
+  state.rangePresetId = null
+  state.rangeMonths = []
+  syncRangeUrl()
+  if (state.eeReady) {
+    loadIndexForMonth(state.mainMonth, currentGeometry.value || null)
+    if (state.compareMode) loadIndexForMonthRight(state.rightMonth)
+    fetchDryMonths()
+    refreshAllFieldStatuses()
+    refreshAllFieldTrends()
+    reloadChartForActiveRange()
+    if (state.currentFieldId) fetchObservations()
+  }
+}
+
+export function setRangePreset(id) {
+  const preset = SEASON_PRESETS.find((p) => p.id === id)
+  if (!preset) return
+  if (preset.kind === 'days') {
+    const end = new Date()
+    const start = new Date(end.getTime() - preset.days * 86400000)
+    applyDateRange(toISODate(start), toISODate(end), id)
+    return
+  }
+  if (preset.kind === 'current') {
+    const f = state.fields.find((x) => x.id === state.currentFieldId)
+    const begin = f && f.plantingDate ? new Date(f.plantingDate) : new Date(Date.now() - 30 * 86400000)
+    if (begin.getTime() > Date.now()) begin.setTime(Date.now())
+    applyDateRange(toISODate(begin), toISODate(new Date()), id)
+    return
+  }
+  applyDateRange(preset.start, preset.end, id)
+}
+
+// URL sync: range is bookmarked as ?start=YYYY-MM-DD&end=YYYY-MM-DD.
+function syncRangeUrl() {
+  if (!history.replaceState) return
+  const url = new URL(window.location.href)
+  if (state.rangeStart && state.rangeEnd) {
+    url.searchParams.set('start', state.rangeStart)
+    url.searchParams.set('end', state.rangeEnd)
+  } else {
+    url.searchParams.delete('start')
+    url.searchParams.delete('end')
+  }
+  window.history.replaceState({}, '', url.toString())
+}
+
+export function applyRangeFromUrl() {
+  const url = new URL(window.location.href)
+  const start = url.searchParams.get('start')
+  const end = url.searchParams.get('end')
+  applyDateRange(start, end, null)
+}
+
 let observationsFieldId = null
+let observationsRangeKey = ''
 
 export function fetchObservations() {
   const field = state.fields.find((f) => f.id === state.currentFieldId)
@@ -603,26 +750,38 @@ export function fetchObservations() {
     return
   }
   if (!state.eeReady) return
-  if (observationsFieldId === field.id && state.observations.length) {
-    return // already fetched for this field — no need to re-run the batch
+  const rangeKey = (state.rangeStart || '') + '|' + (state.rangeEnd || '')
+  if (observationsFieldId === field.id && observationsRangeKey === rangeKey && state.observations.length) {
+    return // already fetched for this field + range — no need to re-run the batch
   }
   const geom = field.geojson && (field.geojson.geometry || field.geojson)
   if (!geom || !geom.coordinates) {
     state.observations = []
     observationsFieldId = field.id
+    observationsRangeKey = rangeKey
     return
   }
   state.observationsLoading = true
   const geometry = window.ee.Geometry.Polygon(geom.coordinates)
-  ee.getObservations(geometry, (rows) => {
+  ee.getObservations(geometry, state.rangeStart, state.rangeEnd, (rows) => {
     state.observationsLoading = false
     state.observations = rows
     observationsFieldId = field.id
+    observationsRangeKey = rangeKey
+    // Console dump for inspection — every satellite pass found for this field.
+    console.log(`[observations] ${rows.length} pass(es) for field "${field.name}" (${field.id}):`)
+    console.table(rows.map((r) => ({
+      date: r.date, source: r.source,
+      cloudPct: r.cloudCover != null ? Number(r.cloudCover).toFixed(1) : '—',
+      status: r.status,
+      ndvi: r.ndvi != null ? Number(r.ndvi).toFixed(3) : '—',
+    })))
   })
 }
 
 export function resetObservations() {
   observationsFieldId = null
+  observationsRangeKey = ''
   state.observations = []
   state.observationsLoading = false
 }
@@ -660,7 +819,7 @@ export function fetchDryMonths() {
 // ---------------------------------------------------------------------------
 export function loadChartForPoint(lat, lng, index, onEmpty) {
   setStatus('computing', 'Fetching ' + INDICES[index].name + ' trend...')
-  ee.getIndexTimeSeries(lat, lng, index, MONTHS, (data) => {
+  ee.getIndexTimeSeries(lat, lng, index, activeMonths(), (data) => {
     if (data.length === 0) {
       setStatus('error', 'No ' + INDICES[index].name + ' data for this point')
       if (onEmpty) onEmpty()
@@ -676,7 +835,7 @@ export function loadChartForPoint(lat, lng, index, onEmpty) {
 
 export function loadChartForGeometry(geometry, index, label) {
   setStatus('computing', 'Fetching ' + INDICES[index].name + ' trend...')
-  ee.getIndexTimeSeriesForGeometry(geometry, index, MONTHS, (data) => {
+  ee.getIndexTimeSeriesForGeometry(geometry, index, activeMonths(), (data) => {
     if (!data || data.length === 0) {
       setStatus('error', 'No ' + INDICES[index].name + ' data for this area')
       return

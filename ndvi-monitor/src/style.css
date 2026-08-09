@@ -404,6 +404,11 @@ html, body {
   background: repeating-linear-gradient(45deg, #fcd34d 0px, #fcd34d 3px, #fef3c7 3px, #fef3c7 6px);
 }
 
+.event-marker.out,
+.auto-marker.out {
+  opacity: 0.12;
+}
+
 .event-legend {
   display: flex;
   align-items: center;
@@ -2178,6 +2183,78 @@ body {
 .scrubber.compare { margin-top: 8px; border-top: 0.5px solid var(--panel-border); padding-top: 8px; }
 
 /* Collapsible time panel (Step 3): wrapper for smooth height transition */
+.range-selector {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 0;
+  margin-bottom: 4px;
+}
+
+.range-selector.active { padding-bottom: 8px; }
+
+.range-select {
+  background: rgba(255, 255, 255, 0.06);
+  border: 0.5px solid rgba(255, 255, 255, 0.16);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 6px;
+  cursor: pointer;
+  max-width: 180px;
+}
+
+.range-select option { background: #141b22; color: var(--text); }
+
+.range-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--accent-dim);
+  color: var(--accent);
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  white-space: nowrap;
+}
+
+.range-clear {
+  background: none;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+  padding: 0;
+}
+
+.range-custom {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.range-input {
+  background: rgba(255, 255, 255, 0.06);
+  border: 0.5px solid rgba(255, 255, 255, 0.16);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 11px;
+  padding: 3px 5px;
+}
+
+.range-input::-webkit-calendar-picker-indicator { filter: invert(0.8); }
+
+.range-arrow { color: var(--text-dim); font-size: 11px; }
+
+@media (max-width: 560px) {
+  .range-selector { gap: 4px; }
+  .range-input { max-width: 110px; }
+}
+
 .scrubber-wrap { overflow: hidden; display: grid; grid-template-rows: 1fr; transition: grid-template-rows 0.3s ease; }
 .time-panel.collapsed .scrubber-wrap { grid-template-rows: 0fr; }
 .scrubber-wrap > * { min-height: 0; }

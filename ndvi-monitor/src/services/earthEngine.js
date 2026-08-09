@@ -359,11 +359,13 @@ export function getRainfallMm(geometry, daysBack, cb) {
 //   - < 40 but older than 21 days (the existing CONFIDENCE_STALE_DAYS) → 'low'
 //   - otherwise                        → 'clear'
 // These two constants MUST stay in sync with store.js getConfidenceTier().
-export function getObservations(geometry, cb) {
+export function getObservations(geometry, startISO, endISO, cb) {
   const e = ee()
   if (!geometry) { cb([]); return }
-  const end = e.Date(Date.now())
-  const start = end.advance(-14, 'month') // same window as the trend time series
+  const end = endISO && !isNaN(new Date(endISO)) ? e.Date(endISO) : e.Date(Date.now())
+  const start = startISO && !isNaN(new Date(startISO))
+    ? e.Date(startISO)
+    : end.advance(-14, 'month') // same window as the trend time series
   const collection = e.ImageCollection('COPERNICUS/S2_SR_HARMONIZED')
     .filterBounds(geometry)
     .filterDate(start, end)

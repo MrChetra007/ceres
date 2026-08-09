@@ -43,7 +43,7 @@ export default {
   'obs.title': 'Browse Observations',
   'obs.short': 'Observations',
   'obs.no_field': 'Select a field to browse its satellite passes.',
-  'obs.no_observations': 'No satellite passes found for this field in the last 14 months.',
+  'obs.no_observations': 'No satellite passes found for this field in this period.',
   'obs.date_cap': 'Date',
   'obs.source_cap': 'Source',
   'obs.cloud_cap': 'Cloud',
@@ -96,6 +96,10 @@ export default {
   'time.ndvi_unreliable': "NDVI can't be reliably calculated.",
   'time.jump_last_valid': 'Last reading {date}',
   'time.jump_last_valid_tip': 'Jump the slider to the last cloud-free reading ({date})',
+  'time.full_window': 'Full window',
+  'time.custom_range': 'Custom range',
+  'time.range_tip': 'Scope the weather events, observations and trend chart to a date range',
+  'time.clear_range': 'Clear date range',
 
   // Field detail / sidebar
   'field.growth_stage': 'Growth stage',

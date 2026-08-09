@@ -43,7 +43,7 @@ export default {
   'obs.title': 'រុករករូបភាពផ្កាយរណប',
   'obs.short': 'រូបភាព',
   'obs.no_field': 'សូមជ្រើសរើសវាលដើម្បីមើលរូបភាពផ្កាយរណបរបស់វា។',
-  'obs.no_observations': 'រកមិនឃើញរូបភាពផ្កាយរណបសម្រាប់វាលនេះក្នុងរយៈពេល ១៤ ខែចុងក្រោយទេ។',
+  'obs.no_observations': 'រកមិនឃើញរូបភាពផ្កាយរណបសម្រាប់វាលនេះក្នុងរយៈពេលនេះទេ។',
   'obs.date_cap': 'កាលបរិច្ឆេទ',
   'obs.source_cap': 'ប្រភព',
   'obs.cloud_cap': 'ពពក',
@@ -97,6 +97,10 @@ export default {
   'time.ndvi_unreliable': 'មិនអាចគណនា NDVI បានត្រឹមត្រូវទេ។',
   'time.jump_last_valid': 'អានចុងក្រោយ {date}',
   'time.jump_last_valid_tip': 'រំកិលរបារទៅកាលបរិច្ឆេទគ្មានពពកចុងក្រោយ ({date})',
+  'time.full_window': 'បង្អួចពេញ',
+  'time.custom_range': 'ជួរកំណត់ផ្ទាល់',
+  'time.range_tip': 'កំណត់ព្រឹត្តិការណ៍អាកាសធាតុ ការសង្កេត និងក្រាហ្វបន្ទាត់ទិន្នន័យ',
+  'time.clear_range': 'លុបជួរកាលបរិច្ឆេទ',
 
   // Field detail / sidebar
   'field.growth_stage': 'ដំណាក់កាលលូតលាស់',
