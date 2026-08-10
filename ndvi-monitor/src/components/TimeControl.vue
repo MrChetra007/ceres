@@ -432,7 +432,7 @@ function startPlay() {
       state.rightMonth = next;
       store.loadIndexForMonthRight(next, true);
     }
-  }, 900);
+  }, 2500);
 }
 
 function stopPlay() {

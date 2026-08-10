@@ -12,6 +12,42 @@ button{
   font-family: var(--font-ui);
 }
 
+h1{
+  font-family: var(--font-ui);
+}
+
+h2{
+  font-family: var(--font-ui);
+}
+
+h3{
+  font-family: var(--font-ui);
+}
+
+h4{
+  font-family: var(--font-ui);
+}
+
+h5{
+  font-family: var(--font-ui);
+}
+
+h6{
+  font-family: var(--font-ui);
+}
+
+p{
+  font-family: var(--font-ui);
+}
+
+span{
+  font-family: var(--font-ui);
+}
+
+div{
+  font-family: var(--font-ui);
+}
+
 #app {
   height: 100%;
   width: 100%;
