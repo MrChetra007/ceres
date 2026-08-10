@@ -4,6 +4,29 @@ function ee() {
   return window.ee
 }
 
+// Sentinel-2 sometimes has overlapping orbital passes on the SAME day, producing
+// 2+ scenes for one date with different cloud percentages. "The scene for date
+// X" must ALWAYS resolve to the LEAST-cloudy of those duplicates — Earth Engine
+// returns rows in arbitrary order, so without this a cloudier twin orbit could
+// win and skew the NDVI value, the cloud-blocked/confidence status, or the scene
+// picker. Callers that resolve a single scene per date must funnel through this.
+function dedupeLowestCloud(points) {
+  const byDate = new Map()
+  for (const p of points) {
+    if (p.date == null) continue
+    const prev = byDate.get(p.date)
+    // Keep the best (lowest cloudPct) scene seen for this date; never replace a
+    // known-cloud value with an unknown one.
+    if (
+      !prev ||
+      (p.cloudPct != null && (prev.cloudPct == null || p.cloudPct < prev.cloudPct))
+    ) {
+      byDate.set(p.date, p)
+    }
+  }
+  return Array.from(byDate.values()).sort((a, b) => a.date.localeCompare(b.date))
+}
+
 export function eeAvailable() {
   return typeof window !== 'undefined' && !!window.ee
 }
@@ -138,7 +161,17 @@ export function loadTrueColor(month, geometry, sceneDate, cb) {
       cb({ mode: 'no_data', count: 0, scenes: [], chosen: null, url: null, err: 'none' })
       return
     }
-    let chosen = (sceneDate && scenes.find((s) => s.date === sceneDate)) || null
+    // Resolve "the scene for the chosen date" to the LEAST-cloudy of any
+    // same-day duplicate Sentinel-2 orbits: `find` would just take whatever
+    // Earth Engine returned first, but the rendered image below sorts the same
+    // day by cloud, so this keeps `chosen.cloudPct` (the value shown in the
+    // scene picker and used for the cloud-blocked status) in sync with what is
+    // actually displayed.
+    let chosen = null
+    if (sceneDate) {
+      const sameDate = scenes.filter((s) => s.date === sceneDate)
+      if (sameDate.length) chosen = sameDate.reduce((a, b) => (b.cloudPct < a.cloudPct ? b : a))
+    }
     if (!chosen) chosen = scenes.reduce((a, b) => (b.cloudPct < a.cloudPct ? b : a))
     const day = e.Date(chosen.date)
     // Wide stretch (max 5000) so bright Cloud-free areas of a rice scene don't
@@ -245,11 +278,23 @@ export function getIndexTimeSeries(lat, lng, index, months, cb) {
   const series = all.map((img) => {
     const idxImg = img.normalizedDifference(cfg.bands).rename(cfg.name)
     const value = idxImg.reduceRegion({ reducer: e.Reducer.mean(), geometry: point, scale: 10 })
-    return e.Feature(null, { date: img.date().format('YYYY-MM-dd'), value: value.get(cfg.name) })
+    return e.Feature(null, {
+      date: img.date().format('YYYY-MM-dd'),
+      cloudPct: e.Number(img.get('CLOUDY_PIXEL_PERCENTAGE')),
+      value: value.get(cfg.name),
+    })
   })
   series.filter(e.Filter.notNull(['value'])).evaluate((result) => {
     if (!result || !result.features) { cb([]); return }
-    cb(result.features.map((f) => ({ date: f.properties.date, value: f.properties.value })))
+    // Same-day duplicate S2 orbits: collapse to one entry per date, keeping the
+    // LOWEST-cloud scene (see dedupeLowestCloud) so the trend/hero can't vary
+    // with Earth Engine's arbitrary row order.
+    const points = result.features.map((f) => ({
+      date: f.properties.date,
+      cloudPct: f.properties.cloudPct,
+      value: f.properties.value,
+    }))
+    cb(dedupeLowestCloud(points))
   })
 }
 
@@ -263,11 +308,23 @@ export function getIndexTimeSeriesForGeometry(geometry, index, months, cb) {
   const series = all.map((img) => {
     const idxImg = img.normalizedDifference(cfg.bands).rename(cfg.name)
     const value = idxImg.reduceRegion({ reducer: e.Reducer.mean(), geometry, scale: 10, maxPixels: 1e9 })
-    return e.Feature(null, { date: img.date().format('YYYY-MM-dd'), value: value.get(cfg.name) })
+    return e.Feature(null, {
+      date: img.date().format('YYYY-MM-dd'),
+      cloudPct: e.Number(img.get('CLOUDY_PIXEL_PERCENTAGE')),
+      value: value.get(cfg.name),
+    })
   })
   series.filter(e.Filter.notNull(['value'])).evaluate((result) => {
     if (!result || !result.features) { cb([]); return }
-    cb(result.features.map((f) => ({ date: f.properties.date, value: f.properties.value })))
+    // Same-day duplicate S2 orbits: collapse to one entry per date, keeping the
+    // LOWEST-cloud scene (see dedupeLowestCloud). This is the SHARED source of
+    // truth for the hero NDVI panel, growth-stage box and pre-planting badge.
+    const points = result.features.map((f) => ({
+      date: f.properties.date,
+      cloudPct: f.properties.cloudPct,
+      value: f.properties.value,
+    }))
+    cb(dedupeLowestCloud(points))
   })
 }
 
@@ -378,40 +435,61 @@ export function getRecentIndexValue(geometry, index, cb) {
     .filterBounds(geometry)
     .filterDate(start, end)
     .sort('system:time_start', false)
-  all.size().evaluate((totalCount) => {
+all.size().evaluate((totalCount) => {
     if (totalCount === 0) { cb({ count: 0, value: null, date: null, cloudBlocked: false }); return }
-    // Is the freshest scene itself cloud-blocked? If so the last valid reading
-    // is older than the freshest imagery — the data is effectively masked.
-    all.first().get('CLOUDY_PIXEL_PERCENTAGE').evaluate((cloudPct) => {
-      const cloudBlocked = cloudPct != null && cloudPct >= 40
-      const clean = all.filter(e.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', 40))
-      clean.size().evaluate((count) => {
-        if (count === 0) { cb({ count: 0, value: null, date: null, cloudBlocked }); return }
-        const recent = clean.first()
-        const idxImg = recent.normalizedDifference(cfg.bands).rename(cfg.name)
-        recent.get('system:time_start').evaluate((ts) => {
-          const date = ts == null ? null : new Date(ts).toISOString().slice(0, 10)
-          idxImg.reduceRegion({ reducer: e.Reducer.mean(), geometry, scale: 10, maxPixels: 1e9 })
-            .evaluate(
-              (result) => {
-                const value = result && result[cfg.name]
-                cb({ count, value: value == null || value === undefined ? null : value, date, cloudBlocked })
-              },
-              (err) => {
-                console.error('getRecentIndexValue.reduceRegion failed:', err)
-                cb({ count: 0, value: null, date, cloudBlocked })
-              },
-            )
+    // Is the freshest imagery itself cloud-blocked? Same-day duplicate S2 orbits
+    // (2+ scenes on one date, different cloud %) make `all.first()` an arbitrary
+    // pick, so resolve "the scene for the freshest date" to the LEAST-cloudy
+    // image of that day FIRST — otherwise a cloudier twin could flag the reading
+    // Cloud-blocked when a clean scene of the same date exists, and the reported
+    // value below would come from the wrong orbit.
+    all.first().get('system:time_start').evaluate((ts) => {
+      let dayStart = null
+      try {
+        const f = new Date(ts)
+        dayStart = new Date(Date.UTC(f.getUTCFullYear(), f.getUTCMonth(), f.getUTCDate()))
+      } catch (err) { dayStart = null }
+      if (!dayStart || isNaN(dayStart.getTime())) {
+        cb({ count: 0, value: null, date: null, cloudBlocked: false })
+        return
+      }
+      const freshestDay = all
+        .filterDate(dayStart, new Date(dayStart.getTime() + 86400000))
+        .sort('CLOUDY_PIXEL_PERCENTAGE')
+      freshestDay.first().get('CLOUDY_PIXEL_PERCENTAGE').evaluate((cloudPct) => {
+        const cloudBlocked = cloudPct != null && cloudPct >= 40
+        const clean = all.filter(e.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', 40))
+        clean.size().evaluate((count) => {
+          if (count === 0) { cb({ count: 0, value: null, date: null, cloudBlocked }); return }
+          const recent = clean.first()
+          const idxImg = recent.normalizedDifference(cfg.bands).rename(cfg.name)
+          recent.get('system:time_start').evaluate((ts) => {
+            const date = ts == null ? null : new Date(ts).toISOString().slice(0, 10)
+            idxImg.reduceRegion({ reducer: e.Reducer.mean(), geometry, scale: 10, maxPixels: 1e9 })
+              .evaluate(
+                (result) => {
+                  const value = result && result[cfg.name]
+                  cb({ count, value: value == null || value === undefined ? null : value, date, cloudBlocked })
+                },
+                (err) => {
+                  console.error('getRecentIndexValue.reduceRegion failed:', err)
+                  cb({ count: 0, value: null, date, cloudBlocked })
+                },
+              )
+          }, (err) => {
+            console.error('getRecentIndexValue.time_start failed:', err)
+            cb({ count: 0, value: null, date, cloudBlocked })
+          })
         }, (err) => {
-          console.error('getRecentIndexValue.time_start failed:', err)
-          cb({ count: 0, value: null, date: null, cloudBlocked })
+          console.error('getRecentIndexValue.size failed:', err)
+          cb({ count: 0, value: null, date, cloudBlocked })
         })
       }, (err) => {
-        console.error('getRecentIndexValue.size failed:', err)
-        cb({ count: 0, value: null, date: null, cloudBlocked })
+        console.error('getRecentIndexValue.cloud failed:', err)
+        cb({ count: 0, value: null, date: null, cloudBlocked: false })
       })
     }, (err) => {
-      console.error('getRecentIndexValue.cloud failed:', err)
+      console.error('getRecentIndexValue.freshest_time failed:', err)
       cb({ count: 0, value: null, date: null, cloudBlocked: false })
     })
   }, (err) => {
@@ -483,15 +561,22 @@ export function getObservations(geometry, startISO, endISO, cb) {
   })
   series.evaluate((result) => {
     const feats = (result && result.features) || []
-    const rows = feats
-      .map((f) => ({
-        date: f.properties.date,
-        source: f.properties.source,
-        cloudCover: f.properties.cloudCover,
-        status: f.properties.status,
-        ndvi: f.properties.ndvi,
-      }))
-      .filter((r) => r.date != null)
+    // Same-day duplicate S2 orbits produce 2+ rows for one date; collapse them
+    // to the LEAST-cloudy row (via dedupeLowestCloud) so the Observations log,
+    // hero panel and true-color picker always agree on "the scene for that date".
+    const rows = dedupeLowestCloud(
+      feats
+        .map((f) => ({
+          date: f.properties.date,
+          source: f.properties.source,
+          cloudCover: f.properties.cloudCover,
+          status: f.properties.status,
+          ndvi: f.properties.ndvi,
+          cloudPct: f.properties.cloudCover, // key dedupeLowestCloud compares on
+        }))
+        .filter((r) => r.date != null),
+    )
+      .map(({ cloudPct, ...r }) => r) // drop the temporary alias
       .sort((a, b) => b.date.localeCompare(a.date)) // newest first
     cb(rows)
   }, (err) => {

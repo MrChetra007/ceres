@@ -152,6 +152,11 @@ const noSceneData = computed(() => !state.loading && state.sceneCount.main === 0
 // series that drives the trend chart — deriving the hero from THIS, rather than
 // the one-shot 90-day `fieldStatus` query, is what makes the sidebar follow the
 // slider date exactly like the map does.
+//
+// Same-day resolution rule: within the month window pick the LEAST-cloudy scene.
+// The series generator (dedupeLowestCloud in ee) already collapses same-day
+// duplicate Sentinel-2 orbits to the cleanest one, so this find just needs to
+// honor cloudPct as a tie-break in case a duplicate ever slips through.
 const selectedMonthWindow = computed(() => {
   const m = MONTHS[state.mainMonth]
   if (!m) return null
@@ -161,6 +166,20 @@ const selectedMonthWindow = computed(() => {
   const end = Date.UTC(m.year, m.month, 1)
   return { start, end }
 })
+
+function pickLowestCloud(rows) {
+  if (!rows.length) return null
+  return rows.reduce((best, r) => {
+    if (r.value == null) return best
+    if (best == null) return r
+    const bestCloud = best.cloudPct == null ? Infinity : best.cloudPct
+    const rCloud = r.cloudPct == null ? Infinity : r.cloudPct
+    if (rCloud < bestCloud) return r
+    // Equal or unknown cloud — later date wins, matching the pre-fix "last".
+    if (rCloud === bestCloud && r.date >= best.date) return r
+    return best
+  }, null)
+}
 
 const activeObservation = computed(() => {
   const data = state.chartData
@@ -172,9 +191,8 @@ const activeObservation = computed(() => {
     return ts >= w.start && ts < w.end
   })
   if (!within.length) return null
-  const sorted = within.slice().sort((a, b) => a.date.localeCompare(b.date))
-  const last = sorted[sorted.length - 1]
-  return { value: last.value, date: last.date }
+  const obs = pickLowestCloud(within)
+  return obs ? { value: obs.value, date: obs.date } : null
 })
 
 // Reconstruct a date-only string (YYYY-MM-DD) in UTC without the ISO UTC shift
