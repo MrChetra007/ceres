@@ -210,10 +210,64 @@
     background:radial-gradient(circle, rgba(227,167,46,.18), transparent 65%);
     filter:blur(6px);
   }
-  .sat-orbit-ring{
-    position:absolute; top:50%; left:50%; width:230px; height:230px; margin:-115px 0 0 -115px;
-    border:1px dashed rgba(243,238,220,.16); border-radius:50%;
-    transform:rotateX(72deg);
+  .orbit-svg{
+    position:absolute; left:50%; top:50%; width:420px; height:150px;
+    transform:translate(-50%,-50%); overflow:visible; z-index:1; pointer-events:none;
+  }
+  .orbit-svg ellipse{ fill:none; stroke:rgba(243,238,220,.16); stroke-width:1; stroke-dasharray:2 7; }
+
+  /* ---- satellite moves along the orbit; sat3d keeps its own spin/tilt inside ---- */
+  .sat-orbiter{ position:absolute; inset:0; will-change:transform; z-index:2; }
+  .trail-dot{
+    position:absolute; left:50%; top:50%; width:5px; height:5px; margin:-2.5px 0 0 -2.5px;
+    border-radius:50%; background:var(--ripening-gold);
+    z-index:1; pointer-events:none; opacity:0;
+    box-shadow:0 0 6px 1px rgba(227,167,46,.55);
+    will-change:transform, opacity;
+  }
+
+  /* ---- light cast from satellite to ground ---- */
+  .sat-beam{
+    position:absolute; left:50%; top:98px; width:240px; height:280px; margin-left:-120px;
+    transform-origin:top center;
+    transform: skewX(var(--beamskew, 0deg));
+    clip-path: polygon(48.5% 0%, 51.5% 0%, 100% 100%, 0% 100%);
+    background:linear-gradient(to bottom,
+      rgba(227,167,46,.62) 0%,
+      rgba(227,167,46,.22) 40%,
+      rgba(227,167,46,.06) 75%,
+      rgba(227,167,46,0) 100%);
+    mix-blend-mode:screen;
+    z-index:2; pointer-events:none;
+    animation:beamPulse 3.6s ease-in-out infinite;
+  }
+  .sat-beam::after{
+    content:''; position:absolute; inset:0;
+    background:repeating-linear-gradient(100deg, rgba(255,255,255,.12) 0 1px, transparent 1px 9px);
+    mix-blend-mode:overlay; opacity:.5;
+  }
+  @keyframes beamPulse{
+    0%,100%{ opacity:.55; filter:brightness(1); }
+    50%{ opacity:.95; filter:brightness(1.25); }
+  }
+  .beam-target{
+    position:absolute; left:50%; top:376px; width:64px; height:64px; margin:-32px 0 0 -32px;
+    z-index:2; pointer-events:none;
+  }
+  .beam-target i{
+    position:absolute; inset:0; border:1.4px solid rgba(227,167,46,.6); border-radius:50%;
+    animation:pingRing 3.6s ease-out infinite;
+  }
+  .beam-target i:nth-child(2){ animation-delay:1.2s; }
+  .beam-target i:nth-child(3){ animation-delay:2.4s; }
+  .beam-target .dot{
+    position:absolute; left:50%; top:50%; width:6px; height:6px; margin:-3px 0 0 -3px;
+    background:var(--ripening-gold); border-radius:50%;
+    box-shadow:0 0 14px 3px rgba(227,167,46,.85);
+  }
+  @keyframes pingRing{
+    0%{ transform:scale(.15); opacity:.85; }
+    100%{ transform:scale(1); opacity:0; }
   }
 
   .scroll-cue{
@@ -382,8 +436,11 @@
     </div>
 
     <div class="sat-stage" id="satStage">
-      <div class="sat-orbit-ring"></div>
+      <svg class="orbit-svg" viewBox="0 0 420 150"><ellipse cx="210" cy="75" rx="205" ry="58"/></svg>
+      <div class="sat-orbiter" id="satOrbiter">
       <div class="sat-glow"></div>
+      <div class="sat-beam" id="satBeam"></div>
+      <div class="beam-target"><i></i><i></i><i></i><div class="dot"></div></div>
       <div class="sat3d" id="sat3d">
         <div class="sat-panel left"></div>
         <div class="sat-panel right"></div>
@@ -396,6 +453,7 @@
           <div class="sat-face d"></div>
         </div>
         <div class="sat-dish"></div>
+      </div>
       </div>
     </div>
 
@@ -709,7 +767,51 @@
       var py = (e.clientY - r.top) / r.height - 0.5;
       sat3d.style.setProperty('--my', (22 + px * 26) + 'deg');
       sat3d.style.setProperty('--mx', (-14 - py * 18) + 'deg');
+      satStage.style.setProperty('--beamskew', (px * 9) + 'deg');
     });
+  }
+
+  // ---- satellite orbital motion + fading trajectory-dot trail ----
+  var satOrbiter = document.getElementById('satOrbiter');
+  if (satOrbiter){
+    var ORBIT_RX = 205, ORBIT_RY = 58, ORBIT_PERIOD = 16000; // ms per full loop
+    var TRAIL_COUNT = 14, SAMPLE_EVERY = 3; // frames between trail samples
+    var trailPool = [];
+    var trailHistory = [];
+    var frameCount = 0;
+
+    for (var i = 0; i < TRAIL_COUNT; i++){
+      var d = document.createElement('div');
+      d.className = 'trail-dot';
+      satStage.appendChild(d);
+      trailPool.push(d);
+    }
+
+    function orbitTick(now){
+      var angle = (now % ORBIT_PERIOD) / ORBIT_PERIOD * Math.PI * 2;
+      var dx = Math.cos(angle) * ORBIT_RX;
+      var dy = Math.sin(angle) * ORBIT_RY;
+
+      satOrbiter.style.transform = 'translate(' + dx.toFixed(1) + 'px,' + dy.toFixed(1) + 'px)';
+
+      frameCount++;
+      if (frameCount % SAMPLE_EVERY === 0){
+        trailHistory.unshift({ x: dx, y: dy });
+        if (trailHistory.length > TRAIL_COUNT) trailHistory.pop();
+      }
+      for (var j = 0; j < trailPool.length; j++){
+        var p = trailHistory[j];
+        if (p){
+          var fade = 1 - j / trailPool.length;
+          trailPool[j].style.opacity = (fade * 0.55).toFixed(2);
+          trailPool[j].style.transform = 'translate(' + p.x.toFixed(1) + 'px,' + p.y.toFixed(1) + 'px) scale(' + (0.4 + fade * 0.6).toFixed(2) + ')';
+        } else {
+          trailPool[j].style.opacity = 0;
+        }
+      }
+      requestAnimationFrame(orbitTick);
+    }
+    requestAnimationFrame(orbitTick);
   }
 
   // ---- scroll reveal ----
