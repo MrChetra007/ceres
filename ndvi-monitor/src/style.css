@@ -3,10 +3,13 @@
   padding: 0;
   box-sizing: border-box;
 }
-
 html, body {
   height: 100%;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Kantumruy Pro', 'Noto Sans Khmer', 'Hanuman', sans-serif;
+  font-family: var(--font-ui);
+}
+
+button{
+  font-family: var(--font-ui);
 }
 
 #app {
@@ -1507,12 +1510,14 @@ html, body {
   --radius-sm: 8px;
   --shadow: 0 8px 32px rgba(0, 0, 0, 0.45), 0 1px 0 rgba(255, 255, 255, 0.04) inset;
   --ease: cubic-bezier(.4, 0, .2, 1);
+  --font-ui: 'Inter', 'Kantumruy Pro', 'Noto Sans Khmer', 'Hanuman',
+             -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
 }
 
 body {
   background: #0b0f14;
   color: var(--text);
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: var(--font-ui);
 }
 
 .mono {
