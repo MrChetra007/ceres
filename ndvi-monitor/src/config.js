@@ -64,6 +64,35 @@ export const INDICES = {
   },
 }
 
+// Health Zone Breakdown — 10 pixel buckets per band family. NDVI spans -1..1
+// (first bucket covers everything from -1 to 0.1); RVI (Sentinel-1 radar
+// fallback) is a 0..1 ratio, so its buckets start at 0. Both arrays share the
+// { lo, hi } shape consumed by getZoneBreakdown() in earthEngine.js.
+export const NDVI_ZONE_BUCKETS = (() => {
+  const arr = [{ lo: -1.0, hi: 0.1 }]
+  for (let i = 1; i < 10; i++) arr.push({ lo: i * 0.1, hi: (i + 1) * 0.1 })
+  return arr
+})()
+
+export const RVI_ZONE_BUCKETS = (() => {
+  const arr = []
+  for (let i = 0; i < 10; i++) arr.push({ lo: i * 0.1, hi: (i + 1) * 0.1 })
+  return arr
+})()
+
+// Visual scale the Analysis-Scale bar renders along (0..1 for both band
+// families — the app's rule-based thresholds all live in this range).
+export const ZONE_SCALE = { min: 0, max: 1, step: 0.1 }
+
+// Flat fallback thresholds (no growth stage available) — mirrors the
+// buildStatusObject() fallback in store.js so the Good/Medium/Bad markers and
+// the health badge can never disagree.
+export const FLAT_THRESHOLDS = { bad: 0.3, good: 0.6 }
+
+// Deficit below the growth stage's expected minimum that flips Medium -> Bad,
+// kept in sync with store.js buildStatusObject() (deficit > 0.15 -> stressed).
+export const STAGE_DEFICIT_BAD = 0.15
+
 export const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
 
 export function buildMonths() {

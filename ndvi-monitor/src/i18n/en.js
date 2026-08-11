@@ -159,6 +159,27 @@ export default {
   'field.cancel_edits': 'Discard changes and stop editing',
   'field.radar_map_note': 'Map showing satellite radar signal (RVI) — a different measurement from the NDVI value above, not directly comparable.',
 
+  // Health zones
+  'hz.title': 'Health zones',
+  'hz.open': 'Zones',
+  'hz.not_available': 'No zone breakdown for this view — try the NDVI or radar (RVI) view.',
+  'hz.scale': 'Analysis scale',
+  'hz.scale_note_stage': 'Thresholds follow the {stage} stage (day {day}): ⚠️ from {bad}, ✅ from {good}.',
+  'hz.scale_note_flat': 'No planting date — flat thresholds: ⚠️ from {bad}, ✅ from {good}.',
+  'hz.scale_note_rvi': 'Radar (RVI) uses a flat scale — not comparable to NDVI: ⚠️ from {bad}, ✅ from {good}.',
+  'hz.good_starts': 'Good starts here (≥ {v})',
+  'hz.bad_starts': 'Bad below here (< {v})',
+  'hz.good': 'Good',
+  'hz.medium': 'Medium',
+  'hz.bad': 'Bad',
+  'hz.zones': 'Zone breakdown',
+  'hz.for_month': 'For {month}',
+  'hz.loading': 'Loading…',
+  'hz.nodata': 'No usable imagery for this month — try a recent month with data.',
+  'hz.range': 'Value',
+  'hz.area': 'Area',
+  'hz.total': 'Total',
+
   // Sidebar
   'sidebar.monitored_fields': 'Monitored Fields',
   'sidebar.parcels': 'parcels',

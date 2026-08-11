@@ -104,6 +104,18 @@ export const state = reactive({
   telegramLinking: false,
   preferredLanguage: 'km',
   photosLightboxIndex: null,
+  // Health Zone Breakdown panel (default closed). `view` tracks which band
+  // family the breakdown describes: 'ndvi' | 'rvi' | 'other' (ndwi/lswi/truecolor
+  // have no zone breakdown — the UI shows a note instead).
+  healthZone: {
+    visible: false,
+    loading: false,
+    view: 'ndvi',
+    buckets: null,
+    totalAreaSqm: 0,
+    monthKey: '',
+    err: null,
+  },
   landingVisible: (() => {
     try { return !localStorage.getItem('ndvi_landing_done') } catch { return true }
   })(),
@@ -997,6 +1009,49 @@ export function fetchDryMonths() {
   const geom = window.ee.Geometry.Rectangle(state.aoiCoords)
   ee.getDryMonths(MONTHS, geom, (drySet) => {
     state.dryMonthSet = drySet
+  })
+}
+
+// ---------------------------------------------------------------------------
+// Health Zone Breakdown — bucket the current month's NDVI/RVI into 10 areas.
+// Follows whatever the main map is showing: radar fallback (RVI) view uses RVI
+// buckets; NDVI uses NDVI buckets; other indices have no breakdown. Deduped by
+// a month|index|geometry key so scrubbing the slider doesn't re-fire the batch
+// query for the same data.
+// ---------------------------------------------------------------------------
+export function fetchHealthZone(force) {
+  if (!state.eeReady) return
+  const geom = currentGeometry.value || window.ee.Geometry.Rectangle(state.aoiCoords)
+  if (!geom) return
+  const m = MONTHS[state.mainMonth]
+  if (!m) return
+  const view = state.radarFallback.main ? 'rvi' : state.currentIndex === 'ndvi' ? 'ndvi' : 'other'
+  const key = state.mainMonth + '|' + view + '|' + (state.currentFieldId || 'aoi')
+  if (!force && state.healthZone.monthKey === key) return
+  if (view === 'other') {
+    state.healthZone.view = 'other'
+    state.healthZone.buckets = null
+    state.healthZone.totalAreaSqm = 0
+    state.healthZone.err = null
+    state.healthZone.loading = false
+    state.healthZone.monthKey = key
+    return
+  }
+  state.healthZone.view = view
+  state.healthZone.loading = true
+  state.healthZone.err = null
+  ee.getZoneBreakdown(geom, m, view, (res) => {
+    state.healthZone.loading = false
+    if (!res) {
+      state.healthZone.buckets = null
+      state.healthZone.totalAreaSqm = 0
+      state.healthZone.err = 'nodata'
+      state.healthZone.monthKey = key
+      return
+    }
+    state.healthZone.buckets = res.buckets
+    state.healthZone.totalAreaSqm = res.totalAreaSqm
+    state.healthZone.monthKey = key
   })
 }
 

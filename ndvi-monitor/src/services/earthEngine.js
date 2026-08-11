@@ -1,4 +1,4 @@
-import { INDICES, DRY_MONTH_THRESHOLD, TRUE_COLOR_VIS, TRUE_COLOR } from '../config'
+import { INDICES, DRY_MONTH_THRESHOLD, TRUE_COLOR_VIS, TRUE_COLOR, NDVI_ZONE_BUCKETS, RVI_ZONE_BUCKETS } from '../config'
 
 function ee() {
   return window.ee
@@ -265,6 +265,94 @@ export function getRadarVegetationIndex(geometry, startDate, endDate, cb) {
     console.error('getRadarVegetationIndex.size failed:', err)
     cb({ count: 0, url: null, indexUsed: 'RVI' })
   })
+}
+
+// Health Zone Breakdown — bucket every pixel of the currently-viewed month's
+// index composite (NDVI or the Sentinel-1 radar RVI fallback) into 10 ranges,
+// returning the AREA in each bucket. Batched into a SINGLE server call (one
+// .evaluate()), mirroring the fetchDryMonths fix: each bucket is a binary mask
+// that updates the EE pixelArea() image, all stacked into one multi-band image
+// and summed in one reduceRegion. Never loop per-bucket client-side.
+//
+//   index: 'ndvi' (Sentinel-2 monthly composite) | 'rvi' (Sentinel-1 radar)
+//   cb(res|null): { buckets: [{lo, hi, areaSqm}], totalAreaSqm }
+//                 null when no usable scenes for that month (cloud-blocked/no-data).
+export function getZoneBreakdown(geometry, month, index, cb) {
+  const e = ee()
+  const buckets = index === 'rvi' ? RVI_ZONE_BUCKETS : NDVI_ZONE_BUCKETS
+  const start = e.Date.fromYMD(month.year, month.month, 1)
+  const end = start.advance(1, 'month')
+
+  if (index === 'rvi') {
+    // Same query as getRadarVegetationIndex: S1 IW, both polarizations, median,
+    // RVI on LINEAR power (dB saturates into a flat image). ±15 day window keeps
+    // the breakdown consistent with the radar fallback the map is showing.
+    const s1 = e.ImageCollection('COPERNICUS/S1_GRD')
+      .filterBounds(geometry)
+      .filterDate(start.advance(-15, 'day'), end.advance(15, 'day'))
+      .filter(e.Filter.eq('instrumentMode', 'IW'))
+      .filter(e.Filter.listContains('transmitterReceiverPolarisation', 'VV'))
+      .filter(e.Filter.listContains('transmitterReceiverPolarisation', 'VH'))
+    s1.size().evaluate((count) => {
+      if (count === 0) { cb(null); return }
+      const composite = s1.median().clip(geometry)
+      const vvLinear = e.Image(10).pow(composite.select('VV').divide(10))
+      const vhLinear = e.Image(10).pow(composite.select('VH').divide(10))
+      const rvi = vhLinear.multiply(4).divide(vvLinear.add(vhLinear)).rename('z')
+      reduceZoneBands(e, rvi, buckets, geometry, cb)
+    }, (err) => {
+      console.error('getZoneBreakdown.rvi.size failed:', err)
+      cb(null)
+    })
+    return
+  }
+
+  // NDVI — the exact monthly composite the map shows for this month.
+  const clean = e.ImageCollection('COPERNICUS/S2_SR_HARMONIZED')
+    .filterBounds(geometry)
+    .filterDate(start, end)
+    .filter(e.Filter.lt('CLOUDY_PIXEL_PERCENTAGE', 40))
+  clean.size().evaluate((count) => {
+    if (count === 0) { cb(null); return }
+    const ndvi = clean.median().clip(geometry).normalizedDifference(['B8', 'B4']).rename('z')
+    reduceZoneBands(e, ndvi, buckets, geometry, cb)
+  }, (err) => {
+    console.error('getZoneBreakdown.ndvi.size failed:', err)
+    cb(null)
+  })
+}
+
+// Shared tail of getZoneBreakdown: stack one pixelArea()-masked band per bucket
+// plus a total-area band, sum them all in a single reduceRegion.
+function reduceZoneBands(e, indexImage, buckets, geometry, cb) {
+  const area = e.Image.pixelArea()
+  const parts = []
+  const names = []
+  buckets.forEach((b, i) => {
+    const name = 'a' + i
+    names.push(name)
+    // updateMask() keeps only pixels whose NDVI/RVI falls in this bucket; the
+    // reducer then sums their true ground area (m²).
+    const mask = indexImage.gte(b.lo).and(indexImage.lt(b.hi))
+    parts.push(area.updateMask(mask).rename(name))
+  })
+  names.push('total')
+  parts.push(area.updateMask(indexImage.mask()).rename('total'))
+  e.Image(parts)
+    .reduceRegion({ reducer: e.Reducer.sum(), geometry, scale: 10, maxPixels: 1e9, bestEffort: true })
+    .evaluate(
+      (result) => {
+        if (!result) { cb(null); return }
+        cb({
+          buckets: buckets.map((b, i) => ({ lo: b.lo, hi: b.hi, areaSqm: result['a' + i] || 0 })),
+          totalAreaSqm: result.total || 0,
+        })
+      },
+      (err) => {
+        console.error('getZoneBreakdown.reduceRegion failed:', err)
+        cb(null)
+      },
+    )
 }
 
 export function getIndexTimeSeries(lat, lng, index, months, cb) {
