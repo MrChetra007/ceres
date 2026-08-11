@@ -8,6 +8,10 @@ import {
 } from './config'
 import * as ee from './services/earthEngine'
 import { loadTrueColor } from './services/earthEngine'
+import {
+  toKhmerDigits, stageName, statusLabel, futurePlantingText, noReadingText,
+  observationCount, confReason, daySinceLabel,
+} from './services/format'
 import { sb } from './services/supabase'
 import * as supabase from './services/supabase'
 
@@ -184,9 +188,11 @@ export function getFieldAreaHectares(geojson) {
   return turfArea(geojson) / 10000
 }
 
-export function formatHectares(ha) {
-  if (ha < 0.1) return ha.toFixed(3) + ' ha'
-  return ha.toFixed(1) + ' ha'
+export function formatHectares(ha, lang) {
+  const isKm = (lang || state.preferredLanguage) === 'km'
+  const txt = ha < 0.1 ? ha.toFixed(3) : ha.toFixed(1)
+  if (isKm) return toKhmerDigits(txt) + ' ហិកតា'
+  return txt + ' ha'
 }
 
 function getOrComputeArea(field) {
@@ -1008,7 +1014,7 @@ export function loadChartForPoint(lat, lng, index, onEmpty) {
     }
     state.chartData = data
     state.chartIndex = index
-    state.chartSubtitle = lat.toFixed(4) + ', ' + lng.toFixed(4) + ' \u00b7 ' + data.length + ' observations'
+    state.chartSubtitle = lat.toFixed(4) + ', ' + lng.toFixed(4) + ' \u00b7 ' + observationCount(state.preferredLanguage, data.length)
     checkStress(data, lat, lng, index)
     setStatus('ready', cfg.name + ' trend loaded \u2014 ' + data.length + ' observations')
   })
@@ -1024,7 +1030,7 @@ export function loadChartForGeometry(geometry, index, label) {
     }
     state.chartData = data
     state.chartIndex = index
-    state.chartSubtitle = label + ' \u00b7 ' + data.length + ' observations'
+    state.chartSubtitle = label + ' \u00b7 ' + observationCount(state.preferredLanguage, data.length)
     checkStress(data, null, null, index)
     setStatus('ready', cfg.name + ' trend loaded \u2014 ' + data.length + ' observations')
   })
@@ -1646,12 +1652,13 @@ export function cancelDate() {
 // Field status / dashboard
 // ---------------------------------------------------------------------------
 export function buildStatusObject(field, value, index, asOfDate) {
+  const lang = state.preferredLanguage
   index = index || 'ndvi'
   if (index !== 'ndvi') {
     if (index === 'ndwi') {
       const cls = value > 0.3 ? 'water' : value > 0 ? 'moist' : 'dry'
       const lbl = value > 0.3 ? 'Water' : value > 0 ? 'Moist' : 'Dry'
-      return { badgeClass: cls, badgeText: lbl, stageLabel: 'NDWI ' + value.toFixed(2) }
+      return { badgeClass: cls, badgeText: statusLabel(lang, lbl), stageLabel: 'NDWI ' + value.toFixed(2) }
     }
     if (index === 'lswi') {
       return { badgeClass: 'lswi', badgeText: 'LSWI', stageLabel: 'LSWI ' + value.toFixed(2) }
@@ -1663,11 +1670,13 @@ export function buildStatusObject(field, value, index, asOfDate) {
     if (value > 0.6) { cls2 = 'healthy'; lbl2 = 'Healthy' }
     else if (value > 0.3) { cls2 = 'moderate'; lbl2 = 'Moderate' }
     else { cls2 = 'stressed'; lbl2 = 'Stressed' }
-    return { badgeClass: cls2, badgeText: lbl2, stageLabel: 'NDVI ' + value.toFixed(2) }
+    return { badgeClass: cls2, badgeText: statusLabel(lang, lbl2), stageLabel: 'NDVI ' + value.toFixed(2) }
   }
   const asOf = asOfDate ? new Date(asOfDate).getTime() : Date.now()
   const daysSincePlanting = Math.floor((asOf - new Date(field.plantingDate).getTime()) / 86400000)
-  if (daysSincePlanting < 0) return { badgeClass: 'moderate', badgeText: 'Check date', stageLabel: 'Planting date is in the future' }
+  if (daysSincePlanting < 0) {
+    return { badgeClass: 'moderate', badgeText: statusLabel(lang, 'Check date'), stageLabel: futurePlantingText(lang) }
+  }
   const stage = getGrowthStage(daysSincePlanting)
   let cls3, lbl3
   if (value >= stage.min && value <= stage.max) {
@@ -1681,8 +1690,8 @@ export function buildStatusObject(field, value, index, asOfDate) {
   }
   return {
     badgeClass: cls3,
-    badgeText: lbl3,
-    stageLabel: stage.stage + ' \u00b7 Day ' + daysSincePlanting + ' \u00b7 NDVI ' + value.toFixed(2),
+    badgeText: statusLabel(lang, lbl3),
+    stageLabel: stageName(lang, stage.stage) + ' \u00b7 ' + daySinceLabel(lang, daysSincePlanting) + ' \u00b7 NDVI ' + value.toFixed(2),
   }
 }
 
@@ -1692,28 +1701,29 @@ export function buildStatusObject(field, value, index, asOfDate) {
 export const CONFIDENCE_STALE_DAYS = 21
 
 export function getConfidenceTier(signals) {
+  const lang = state.preferredLanguage
   const cloudBlocked = !!signals.cloudBlocked
   const sceneCount = signals.sceneCount
   const plantingDateSource = signals.plantingDateSource
   const lastValidDate = signals.lastValidDate
 
   if (cloudBlocked) {
-    return { tier: 'low', reason: 'Cloud-blocked' }
+    return { tier: 'low', reason: confReason(lang, 'cloudBlocked') }
   }
   if (sceneCount === 0) {
-    return { tier: 'low', reason: 'No cloud-free imagery available' }
+    return { tier: 'low', reason: confReason(lang, 'noData') }
   }
   if (lastValidDate) {
     const ageDays = Math.floor((Date.now() - new Date(lastValidDate).getTime()) / 86400000)
     if (ageDays > CONFIDENCE_STALE_DAYS) {
-      return { tier: 'low', reason: 'Last valid reading is ' + ageDays + ' days old' }
+      return { tier: 'low', reason: confReason(lang, 'stale', { days: ageDays }) }
     }
   }
   if (sceneCount != null && sceneCount > 0 && sceneCount <= 2) {
-    return { tier: 'medium', reason: 'Only ' + sceneCount + ' cloud-free scene' + (sceneCount === 1 ? '' : 's') + ' this period' }
+    return { tier: 'medium', reason: confReason(lang, 'fewScenes', { count: sceneCount, s: sceneCount === 1 ? '' : 's' }) }
   }
   if (plantingDateSource === 'estimated') {
-    return { tier: 'medium', reason: 'Planting date estimated from satellite data' }
+    return { tier: 'medium', reason: confReason(lang, 'estimatedDate') }
   }
   return { tier: 'high', reason: '' }
 }
@@ -1730,6 +1740,7 @@ export function fieldConfidence(field) {
 }
 
 export function viewConfidence(side) {
+  const lang = state.preferredLanguage
   // When a field is active on the main map, the view IS the field — use the
   // same signals as the dashboard/detail panel so the badge never disagrees.
   if (side === 'main' && state.currentFieldId) {
@@ -1738,16 +1749,16 @@ export function viewConfidence(side) {
       // A radar-fallback or cloud-blocked current view always dominates the
       // field's own signals.
       if (state.radarFallback.main) {
-        return { tier: 'medium', reason: 'Radar view (RVI) — optical blocked by cloud' }
+        return { tier: 'medium', reason: confReason(lang, 'radarBlocked') }
       }
       if (state.cloudBlock.main) {
-        return { tier: 'low', reason: 'Cloud-blocked' }
+        return { tier: 'low', reason: confReason(lang, 'cloudBlocked') }
       }
       return fieldConfidence(field)
     }
   }
   if (state.radarFallback[side]) {
-    return { tier: 'medium', reason: 'Radar view (RVI) — real data from Sentinel-1' }
+    return { tier: 'medium', reason: confReason(lang, 'radarReal') }
   }
   const block = state.cloudBlock[side]
   return getConfidenceTier({
@@ -1785,7 +1796,7 @@ export function updateFieldStatus(field) {
   ee.getRecentIndexValue(geometry, state.currentIndex, ({ count, value, date, cloudBlocked }) => {
     if (count === 0 || value == null) {
       fieldStatus[field.id] = {
-        badgeText: '\u2014', badgeClass: '', stageLabel: 'No usable reading in the last 90 days',
+        badgeText: '\u2014', badgeClass: '', stageLabel: noReadingText(state.preferredLanguage),
         value: null, count: 0, date: date || null, cloudBlocked: !!cloudBlocked,
       }
       if (field.id === state.currentFieldId) applyFieldStyle()

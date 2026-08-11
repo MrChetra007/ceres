@@ -1,4 +1,6 @@
-import { INDICES, MONTH_NAMES } from '../config'
+import { INDICES } from '../config'
+import { state } from '../store'
+import { monthAxisLabel, formatTooltipDate, benchmarkLabel } from './format'
 
 export function hexToRgba(hex, alpha) {
   const r = parseInt(hex.slice(1, 3), 16)
@@ -7,9 +9,8 @@ export function hexToRgba(hex, alpha) {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`
 }
 
-export function formatAxisMonth(ts) {
-  const d = new Date(ts)
-  return MONTH_NAMES[d.getMonth()]
+export function formatAxisMonth(ts, lang) {
+  return monthAxisLabel(ts, lang)
 }
 
 export function buildYearLabel(data) {
@@ -92,7 +93,7 @@ export function buildChartConfig(ctx, data, index, large, getStageLabel, benchma
   }]
   if (typeof benchmarkValue === 'number') {
     datasets.push({
-      label: 'Benchmark',
+      label: benchmarkLabel(state.preferredLanguage),
       data: data.map((d) => ({ x: new Date(d.date).getTime(), y: benchmarkValue })),
       borderColor: '#4fa8ff',
       borderDash: [6, 4],
@@ -131,9 +132,7 @@ export function buildChartConfig(ctx, data, index, large, getStageLabel, benchma
           callbacks: {
             title(items) {
               if (!items || !items.length) return ''
-              return new Date(items[0].parsed.x).toLocaleDateString('en-US', {
-                weekday: 'short', year: 'numeric', month: 'short', day: 'numeric',
-              })
+              return formatTooltipDate(items[0].parsed.x, state.preferredLanguage)
             },
             label(item) {
               const parts = [cfg.name + ': ' + item.parsed.y.toFixed(2)]
@@ -155,7 +154,7 @@ export function buildChartConfig(ctx, data, index, large, getStageLabel, benchma
             color: '#555',
             maxRotation: 0,
             autoSkip: false,
-            callback: (value) => formatAxisMonth(value),
+            callback: (value) => formatAxisMonth(value, state.preferredLanguage),
           },
           grid: { display: false },
           afterBuildTicks(axis) {

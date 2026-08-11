@@ -64,7 +64,7 @@
               :class="{ active: a.id === state.selectedAoiId }"
               @click="pick(a)"
             >
-              <span class="areas-item-name">{{ a.name }}</span>
+              <span class="areas-item-name">{{ displayAoiName(a) }}</span>
               <i class="ti ti-trash" :title="t('band.delete_area')" @click.stop="remove(a)"></i>
             </button>
             <div class="areas-empty" v-if="state.aois.length === 0">{{ t('band.no_areas') }}</div>
@@ -104,8 +104,12 @@ const explainerText = computed(() => {
 
 const selectedAoiLabel = computed(() => {
   const aoi = state.aois.find((a) => a.id === state.selectedAoiId)
-  return aoi ? aoi.name : t('band.areas')
+  return aoi ? displayAoiName(aoi) : t('band.areas')
 })
+
+function displayAoiName(aoi) {
+  return aoi.name === 'Battambang (default)' ? t('band.default_area') : aoi.name
+}
 
 function indexTitle(idx) {
   const map = {

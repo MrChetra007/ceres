@@ -127,6 +127,7 @@ import { INDICES, MONTHS, CONSULT_AI_URL } from '../config'
 import { sb, requireSession } from '../services/supabase'
 import { loadFieldPhotos, createSignedPhotoUrl } from '../services/supabase'
 import { getRecentIndexValue, getRainfallMm } from '../services/earthEngine'
+import { formatMonthYear, stageName as stageNameKm, daySinceLabel } from '../services/format'
 import { useI18n } from '../i18n'
 
 const chartCanvas = ref(null)
@@ -288,7 +289,7 @@ const stageText = computed(() => {
   if (state.currentIndex === 'ndvi' && f && f.plantingDate && days != null && !prePlanting.value) {
     const stage = store.getGrowthStage(days).stage
     const val = st.value != null ? ' \u00b7 NDVI ' + st.value.toFixed(2) : ''
-    return stage + ' \u00b7 Day ' + days + val
+    return stageNameKm(state.preferredLanguage, stage) + ' \u00b7 ' + daySinceLabel(state.preferredLanguage, days) + val
   }
   return st.stageLabel
 })
@@ -351,7 +352,7 @@ const stageName = computed(() => {
   const d = growthStageDays.value
   if (d == null) return t('field.no_planting_date')
   if (prePlanting.value) return t('field.stage_future')
-  return store.getGrowthStage(d).stage
+  return stageNameKm(state.preferredLanguage, store.getGrowthStage(d).stage)
 })
 const stageDaysText = computed(() => {
   const d = growthStageDays.value
@@ -408,7 +409,7 @@ function updateMarker() {
   const m = MONTHS[state.mainMonth]
   chart.options.plugins.currentDateMarker = {
     xValue: new Date(m.year, m.month - 1, 1).getTime(),
-    label: m.label,
+    label: formatMonthYear(m.year, m.month, state.preferredLanguage),
   }
   chart.update('none')
 }

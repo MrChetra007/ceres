@@ -18,6 +18,7 @@ import Chart from 'chart.js/auto'
 import { state, getStageAtDate } from '../store'
 import { buildChartConfig } from '../services/chart'
 import { INDICES, MONTHS } from '../config'
+import { formatMonthYear } from '../services/format'
 import { useI18n } from '../i18n'
 
 const { t } = useI18n()
@@ -39,7 +40,7 @@ function updateMarker() {
   const m = MONTHS[state.mainMonth]
   chart.options.plugins.currentDateMarker = {
     xValue: new Date(m.year, m.month - 1, 1).getTime(),
-    label: m.label,
+    label: formatMonthYear(m.year, m.month, state.preferredLanguage),
   }
   chart.update('none')
 }

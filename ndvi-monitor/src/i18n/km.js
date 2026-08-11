@@ -76,6 +76,7 @@ export default {
   'band.no_areas': 'មិនទាន់មានតំបន់',
   'band.new_area': 'តំបន់ថ្មី',
   'band.areas': 'តំបន់',
+  'band.default_area': 'បាត់ដំបង (លំនាំដើម)',
   'band.area_monitoring': 'តំបន់',
   'band.edit_area_bounds': 'កែព្រំដែនតំបន់',
   'band.areas_cap': 'ឈានដល់ដែនកំណត់ ៥ តំបន់',

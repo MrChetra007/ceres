@@ -81,7 +81,7 @@
         <div class="sidebar-header">
           <div>
             <h3>{{ t('sidebar.monitored_fields') }}</h3>
-            <span class="sidebar-count mono">{{ state.fields.length }} {{ t('sidebar.parcels') }} · {{ totalHa }} ha</span>
+            <span class="sidebar-count mono">{{ state.fields.length }} {{ t('sidebar.parcels') }} · {{ totalHaText }}</span>
           </div>
         </div>
 
@@ -168,6 +168,7 @@ import * as store from '../store'
 import { getOrComputeArea, formatHectares, getAreaWarning, fieldConfidence } from '../store'
 import ConfidenceBadge from './ConfidenceBadge.vue'
 import { useI18n } from '../i18n'
+import { toKhmerDigits } from '../services/format'
 
 const { t } = useI18n()
 const open = ref(false)
@@ -193,6 +194,11 @@ const totalHa = computed(() => {
   let ha = 0
   state.fields.forEach((f) => { ha += getOrComputeArea(f) })
   return ha.toFixed(1)
+})
+
+const totalHaText = computed(() => {
+  if (state.preferredLanguage === 'km') return toKhmerDigits(totalHa.value) + ' ហិកតា'
+  return totalHa.value + ' ha'
 })
 
 const filtered = computed(() => {

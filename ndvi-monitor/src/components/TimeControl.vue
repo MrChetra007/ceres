@@ -140,12 +140,12 @@
         </div>
         <div class="scrubber-ticks">
           <span>{{
-            rangeActive ? monthTick(firstMonthInRange) : MONTHS[0].label
+            rangeActive ? monthTick(firstMonthInRange) : monthTick(MONTHS[0])
           }}</span>
           <span>{{
             rangeActive
               ? monthTick(lastMonthInRange)
-              : MONTHS[MONTHS.length - 1].label
+              : monthTick(MONTHS[MONTHS.length - 1])
           }}</span>
         </div>
       </div>
@@ -233,6 +233,7 @@ import {
 } from "../config";
 import ConfidenceBadge from "./ConfidenceBadge.vue";
 import { useI18n } from "../i18n";
+import { formatMonthYear } from "../services/format";
 
 const { t } = useI18n();
 const playing = ref(false);
@@ -268,7 +269,7 @@ const customStart = computed(() => state.rangeStart || "");
 const customEnd = computed(() => state.rangeEnd || "");
 
 function monthTick(m) {
-  return m ? m.label : "";
+  return m ? formatMonthYear(m.year, m.month, state.preferredLanguage) : "";
 }
 function isInRange(i) {
   if (!rangeActive.value) return true;
@@ -306,11 +307,7 @@ const mainMonthLabel = computed(() => fullLabel(MONTHS[state.mainMonth]));
 const rightMonthLabel = computed(() => fullLabel(MONTHS[state.rightMonth]));
 
 function fullLabel(m) {
-  const d = new Date(m.year, m.month - 1, 1);
-  if (state.preferredLanguage === "km") {
-    return d.toLocaleDateString("km-KH", { month: "long", year: "numeric" });
-  }
-  return d.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+  return formatMonthYear(m.year, m.month, state.preferredLanguage, { prefix: true, long: true });
 }
 
 const seasonTag = computed(() => seasonForMonth(MONTHS[state.mainMonth].month));

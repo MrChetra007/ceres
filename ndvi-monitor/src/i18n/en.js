@@ -76,6 +76,7 @@ export default {
   'band.no_areas': 'No areas yet',
   'band.new_area': 'New area',
   'band.areas': 'Areas',
+  'band.default_area': 'Battambang (default)',
   'band.area_monitoring': 'Area',
   'band.edit_area_bounds': 'Edit area bounds',
   'band.areas_cap': 'Limit of 5 areas reached',
