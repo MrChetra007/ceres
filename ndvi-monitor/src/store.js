@@ -1297,6 +1297,30 @@ export async function signInWithSupabaseGoogle() {
   return supabase.signInWithGoogle()
 }
 
+// Email/password auth (Phase: add-email-password-auth). Both wrap the same
+// supabase-js calls used by Google auth — the existing `onAuthStateChange`
+// listener picks up the resulting session (SIGNED_IN) and loads fields/AOIs.
+// Returns { error } on failure so the auth overlay can render it inline.
+export async function signInWithEmailPassword(email, password) {
+  try {
+    const { error } = await supabase.signInWithEmailPassword(email, password)
+    if (error) return { error }
+    return {}
+  } catch (err) {
+    return { error: err }
+  }
+}
+
+export async function signUpWithEmail(email, password) {
+  try {
+    const { error } = await supabase.signUpWithEmail(email, password)
+    if (error) return { error }
+    return {}
+  } catch (err) {
+    return { error: err }
+  }
+}
+
 export async function signOut() {
   await supabase.signOut()
 }

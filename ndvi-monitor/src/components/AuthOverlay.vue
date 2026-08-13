@@ -24,6 +24,59 @@
           <p class="auth-hint">{{ t('auth.sync_hint') }}</p>
         </div>
 
+        <div v-if="!state.supabaseUser" class="auth-divider"><span>{{ t('auth.or_email') }}</span></div>
+
+        <div v-if="!state.supabaseUser" class="auth-section">
+          <div class="auth-tabs" role="tablist">
+            <button
+              class="auth-tab"
+              :class="{ active: authMode === 'signin' }"
+              :aria-selected="authMode === 'signin'"
+              @click="setAuthMode('signin')"
+            >{{ t('auth.tab_sign_in') }}</button>
+            <button
+              class="auth-tab"
+              :class="{ active: authMode === 'signup' }"
+              :aria-selected="authMode === 'signup'"
+              @click="setAuthMode('signup')"
+            >{{ t('auth.tab_create_account') }}</button>
+          </div>
+
+          <div class="auth-field">
+            <label class="auth-label" for="auth-email">{{ t('auth.email') }}</label>
+            <input
+              id="auth-email"
+              class="auth-input"
+              type="email"
+              autocomplete="email"
+              :placeholder="t('auth.email_placeholder')"
+              v-model="email"
+              @input="authError = ''"
+            />
+          </div>
+
+          <div class="auth-field">
+            <label class="auth-label" for="auth-password">{{ t('auth.password') }}</label>
+            <input
+              id="auth-password"
+              class="auth-input"
+              type="password"
+              :autocomplete="authMode === 'signup' ? 'new-password' : 'current-password'"
+              :placeholder="t('auth.password_placeholder')"
+              v-model="password"
+              @input="authError = ''"
+              @keydown.enter="submitEmailAuth"
+            />
+          </div>
+
+          <p v-if="authError" class="auth-error" role="alert">{{ authError }}</p>
+
+          <button class="auth-email-btn" :disabled="authSubmitting" @click="submitEmailAuth">
+            <span v-if="authSubmitting" class="auth-spinner" aria-hidden="true"></span>
+            {{ authSubmitting ? t('auth.submitting') : (authMode === 'signin' ? t('auth.tab_sign_in') : t('auth.tab_create_account')) }}
+          </button>
+        </div>
+
         <div v-if="!state.eeReady && !state.supabaseUser" class="auth-divider"><span>{{ t('auth.or') }}</span></div>
 
         <div v-if="!state.eeReady" class="auth-section">
@@ -48,9 +101,59 @@
 </template>
 
 <script setup>
+import { ref } from 'vue'
 import { state } from '../store'
 import * as store from '../store'
 import { useI18n } from '../i18n'
 
 const { t } = useI18n()
+
+const authMode = ref('signin')
+const email = ref('')
+const password = ref('')
+const authError = ref('')
+const authSubmitting = ref(false)
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+
+function setAuthMode(mode) {
+  authMode.value = mode
+  authError.value = ''
+}
+
+function validate() {
+  const em = email.value.trim()
+  if (!EMAIL_RE.test(em)) {
+    authError.value = t('auth.err_email')
+    return false
+  }
+  if (password.value.length < 6) {
+    authError.value = t('auth.err_password')
+    return false
+  }
+  return true
+}
+
+async function submitEmailAuth() {
+  if (authSubmitting.value) return
+  authError.value = ''
+  if (!validate()) return
+  authSubmitting.value = true
+  try {
+    const res = authMode.value === 'signin'
+      ? await store.signInWithEmailPassword(email.value.trim(), password.value)
+      : await store.signUpWithEmail(email.value.trim(), password.value)
+    if (res && res.error) {
+      authError.value = res.error.message || t('auth.err_generic')
+      return
+    }
+    // Success: the store's onAuthStateChange listener fires SIGNED_IN and
+    // loads fields/AOIs. The overlay stays visible only until EE is also
+    // ready (initializeEE hides it), so a fresh email account lands on the
+    // same post-sign-in experience as Google.
+    password.value = ''
+  } finally {
+    authSubmitting.value = false
+  }
+}
 </script>

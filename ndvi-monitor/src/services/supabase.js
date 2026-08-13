@@ -117,6 +117,14 @@ export async function signInWithGoogle() {
   return sb.auth.signInWithOAuth({ provider: 'google' })
 }
 
+export async function signInWithEmailPassword(email, password) {
+  return sb.auth.signInWithPassword({ email, password })
+}
+
+export async function signUpWithEmail(email, password) {
+  return sb.auth.signUp({ email, password })
+}
+
 export async function signOut() {
   return sb.auth.signOut()
 }
