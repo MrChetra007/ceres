@@ -68,13 +68,21 @@ function toEeGeometry(geojson: any) {
   return ee.Geometry(geometry);
 }
 
-function getNdviForGeometry(geojson: any): Promise<number | null> {
-  // 90-day window (wider than the app's 30-day so rainy-season fields with
-  // sporadic cloud-free scenes still yield a real NDVI for the status check).
+// ── NDVI: tight-window-first, widen-on-empty ────────────────────────────
+// A single flat 90-day median masks recent-onset stress (e.g. healthy for
+// 75 days + stressed for the last 10 still reads "healthy" after median).
+// So: try a tight 14-day window first (reflects *current* health). Only
+// widen to 90 days — and mark the result low-confidence — when the short
+// window has zero clean scenes at all (this is what the wide window is
+// legitimately for: coverage during a cloudy stretch, not "current status").
+
+function computeNdviOverWindow(
+  geom: any,
+  days: number,
+): Promise<number | null> {
   return new Promise((resolve, reject) => {
-    const geom = toEeGeometry(geojson);
     const end = ee.Date(Date.now());
-    const start = end.advance(-90, "day");
+    const start = end.advance(-days, "day");
     const collection = ee
       .ImageCollection("COPERNICUS/S2_SR_HARMONIZED")
       .filterBounds(geom)
@@ -96,6 +104,26 @@ function getNdviForGeometry(geojson: any): Promise<number | null> {
           else resolve(result?.nd ?? 0);
         });
     });
+  });
+}
+
+function getNdviForGeometry(
+  geojson: any,
+): Promise<{
+  ndvi: number | null;
+  confidence: "high" | "low";
+  windowDays: number;
+}> {
+  const geom = toEeGeometry(geojson);
+  return computeNdviOverWindow(geom, 14).then((ndvi) => {
+    if (ndvi !== null) {
+      return { ndvi, confidence: "high" as const, windowDays: 14 };
+    }
+    return computeNdviOverWindow(geom, 90).then((wideNdvi) => ({
+      ndvi: wideNdvi,
+      confidence: "low" as const,
+      windowDays: 90,
+    }));
   });
 }
 
@@ -210,8 +238,8 @@ function getNdviTrendPct(geojson: any): Promise<number | null> {
   });
 }
 
-// The original flat template — now the fallback if every LLM provider fails, so
-// a worker run never sends nothing or crashes just because the LLM is down.
+// The original flat template — still the fallback if every LLM provider fails,
+// so a worker run never sends nothing or crashes just because the LLM is down.
 function buildAlertMessage(
   fieldName: string,
   status: string,
@@ -262,13 +290,6 @@ async function sendTelegram(chatId: string, text: string): Promise<boolean> {
   }
 }
 
-const SEVERITY: Record<string, number> = {
-  no_data: -1,
-  healthy: 0,
-  below_expected: 1,
-  stressed: 2,
-};
-
 // Guard against a provider returning empty/whitespace text.
 function safeText(text: string | null, fallback: string): string {
   return text && text.trim().length > 0 ? text.trim() : fallback;
@@ -318,146 +339,32 @@ Deno.serve(async (_req) => {
     if (error) throw error;
 
     const results = [];
-    // for (const field of fields || []) {
-    //   const chatId = (field as any).profiles?.telegram_chat_id;
-    //   const lang = (field as any).profiles?.preferred_language || "en";
-    //   if (!chatId) continue;
 
-    //   const ndvi = await getNdviForGeometry(field.geojson);
-
-    //   const { data: lastAlert } = await supabase
-    //     .from("alerts_log")
-    //     .select("status")
-    //     .eq("field_id", field.id)
-    //     .order("sent_at", { ascending: false })
-    //     .limit(1)
-    //     .maybeSingle();
-
-    //   const lastStatus = lastAlert?.status ?? null;
-
-    //   if (ndvi === null) {
-    //     // Cloud-blocked / no usable clean scenes (the <40% gate filtered out
-    //     // everything). Log a no_data row every run, but send exactly one
-    //     // "can't monitor" Telegram message on the transition INTO extended
-    //     // no_data (from any other status), never on every run — matches the
-    //     // alert-fatigue guidance in the Data Trust Layer spec.
-    //     const sendNoDataMsg = lastStatus !== "no_data";
-    //     const message = sendNoDataMsg
-    //       ? lang === "km"
-    //         ? `វាល ${field.name}: មិនទាន់មានរូបភាពផ្កាយរណបច្បាស់លាស់នៃវាលរបស់អ្នកលើសពី 3 សប្តាហ៍ ដូច្នេះមិនអាចបញ្ជាក់ស្ថានភាពសុខភាពបច្ចុប្បន្នបានទេ។`
-    //         : `${field.name}: We haven't had a clear satellite view of your field in over 3 weeks, so we can't confirm its current health.`
-    //       : null;
-    //     if (sendNoDataMsg) await sendTelegram(chatId, message);
-    //     await supabase.from("alerts_log").insert({
-    //       field_id: field.id,
-    //       status: "no_data",
-    //       ndvi_value: null,
-    //       message,
-    //       chat_id: chatId,
-    //     });
-    //     results.push({
-    //       field: field.name,
-    //       status: "no_data",
-    //       sent: sendNoDataMsg,
-    //     });
-    //     continue;
-    //   }
-    //   const { status, stage } = statusFromNdvi(ndvi, field.planting_date);
-    //   const changed = status !== lastStatus;
-    //   const worse =
-    //     lastStatus === null
-    //       ? status !== "healthy"
-    //       : SEVERITY[status] > SEVERITY[lastStatus];
-
-    //   let message = null;
-    //   let modelUsed = null;
-    //   if (changed && worse) {
-    //     const rainfall = await getRainfallMm(field.geojson);
-    //     const prompt = await buildAdvisoryPrompt(
-    //       field,
-    //       ndvi,
-    //       status,
-    //       stage,
-    //       rainfall,
-    //       lang,
-    //     );
-    //     const result = await generateExplanation(prompt);
-    //     // Let the platform's LLM draft the advisory, but never let an LLM outage
-    //     // block the alert — fall back to the flat template.
-    //     if (result && !result.truncated) {
-    //       modelUsed = result.model;
-    //       message = safeText(
-    //         result.text,
-    //         buildAlertMessage(field.name, status, stage, ndvi, rainfall, lang),
-    //       );
-    //     } else if (result && result.truncated) {
-    //       // finish_reason "length"/"MAX_TOKENS" — the LLM trailed off mid-answer.
-    //       // Prefer the flat, complete template over a dangling sentence.
-    //       modelUsed = result.model;
-    //       console.log(
-    //         `Advisory truncated (${modelUsed}) — using flat template`,
-    //       );
-    //       message = buildAlertMessage(
-    //         field.name,
-    //         status,
-    //         stage,
-    //         ndvi,
-    //         rainfall,
-    //         lang,
-    //       );
-    //     } else {
-    //       modelUsed = null;
-    //       console.log(
-    //         "Advisory fell back to flat template (no LLM provider returned text)",
-    //       );
-    //       message = buildAlertMessage(
-    //         field.name,
-    //         status,
-    //         stage,
-    //         ndvi,
-    //         rainfall,
-    //         lang,
-    //       );
-    //     }
-    //     await sendTelegram(chatId, message);
-    //   }
-
-    //   await supabase.from("alerts_log").insert({
-    //     field_id: field.id,
-    //     status,
-    //     ndvi_value: ndvi,
-    //     message,
-    //     chat_id: chatId,
-    //   });
-
-    //   if (modelUsed)
-    //     console.log(`Advisory served by: ${modelUsed} for field ${field.name}`);
-    //   results.push({
-    //     field: field.name,
-    //     status,
-    //     sent: !!message,
-    //     model: modelUsed,
-    //   });
-    // }
     for (const field of fields || []) {
       try {
         const chatId = (field as any).profiles?.telegram_chat_id;
         const lang = (field as any).profiles?.preferred_language || "en";
         if (!chatId) continue;
 
-        const ndvi = await getNdviForGeometry(field.geojson);
-
-        const { data: lastAlert } = await supabase
-          .from("alerts_log")
-          .select("status")
-          .eq("field_id", field.id)
-          .order("sent_at", { ascending: false })
-          .limit(1)
-          .maybeSingle();
-
-        const lastStatus = lastAlert?.status ?? null;
+        const { ndvi, confidence, windowDays } = await getNdviForGeometry(
+          field.geojson,
+        );
 
         if (ndvi === null) {
+          // No clean scene even in the widened 90-day window. Look up the
+          // last logged status so we still only send the "can't monitor"
+          // notice once on transition into no_data, not every run — this
+          // one stays deliberately quiet on repeat, unlike the always-send
+          // policy below, because a daily "still can't see your field"
+          // message adds no information after the first one.
+          const { data: lastAlert } = await supabase
+            .from("alerts_log")
+            .select("status")
+            .eq("field_id", field.id)
+            .order("sent_at", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          const lastStatus = lastAlert?.status ?? null;
           const sendNoDataMsg = lastStatus !== "no_data";
           const message = sendNoDataMsg
             ? lang === "km"
@@ -487,71 +394,61 @@ Deno.serve(async (_req) => {
         }
 
         const { status, stage } = statusFromNdvi(ndvi, field.planting_date);
-        const changed = status !== lastStatus;
-        const worse =
-          lastStatus === null
-            ? status !== "healthy"
-            : SEVERITY[status] > SEVERITY[lastStatus];
 
-        let message = null;
-        let modelUsed = null;
-        let telegramSent = false;
+        // Always send — every run, regardless of whether status changed or
+        // improved. (This intentionally removes the Part 5 dedup/"only on
+        // worsening" guard — every field with a linked chat gets a message
+        // on every worker run.)
+        const rainfall = await getRainfallMm(field.geojson);
+        const prompt = await buildAdvisoryPrompt(
+          field,
+          ndvi,
+          status,
+          stage,
+          rainfall,
+          lang,
+        );
+        const result = await generateExplanation(prompt);
 
-        if (changed && worse) {
-          const rainfall = await getRainfallMm(field.geojson);
-          const prompt = await buildAdvisoryPrompt(
-            field,
-            ndvi,
-            status,
-            stage,
-            rainfall,
-            lang,
+        let modelUsed: string | null = null;
+        let message: string;
+        if (result && !result.truncated) {
+          modelUsed = result.model;
+          message = safeText(
+            result.text,
+            buildAlertMessage(field.name, status, stage, ndvi, rainfall, lang),
           );
-          const result = await generateExplanation(prompt);
-
-          if (result && !result.truncated) {
-            modelUsed = result.model;
-            message = safeText(
-              result.text,
-              buildAlertMessage(
-                field.name,
-                status,
-                stage,
-                ndvi,
-                rainfall,
-                lang,
-              ),
-            );
-          } else if (result && result.truncated) {
+        } else {
+          if (result?.truncated) {
             modelUsed = result.model;
             console.log(
               `Advisory truncated (${modelUsed}) — using flat template`,
             );
-            message = buildAlertMessage(
-              field.name,
-              status,
-              stage,
-              ndvi,
-              rainfall,
-              lang,
-            );
           } else {
-            modelUsed = null;
             console.log(
               "Advisory fell back to flat template (no LLM provider returned text)",
             );
-            message = buildAlertMessage(
-              field.name,
-              status,
-              stage,
-              ndvi,
-              rainfall,
-              lang,
-            );
           }
-
-          telegramSent = await sendTelegram(chatId, message);
+          message = buildAlertMessage(
+            field.name,
+            status,
+            stage,
+            ndvi,
+            rainfall,
+            lang,
+          );
         }
+
+        // Flag low-confidence (90-day fallback) readings so they're never
+        // presented with the same certainty as a fresh 14-day reading.
+        if (confidence === "low") {
+          message +=
+            lang === "km"
+              ? " (ការវាយតម្លៃនេះផ្អែកលើទិន្នន័យចាស់ជាង ដោយសារគ្មានរូបភាពថ្មីច្បាស់លាស់)"
+              : " (based on older data — no recent clear satellite scene)";
+        }
+
+        const telegramSent = await sendTelegram(chatId, message);
 
         await supabase.from("alerts_log").insert({
           field_id: field.id,
@@ -569,9 +466,11 @@ Deno.serve(async (_req) => {
         results.push({
           field: field.name,
           status,
-          sent: !!message,
+          sent: true,
           model: modelUsed,
           telegramSent,
+          confidence,
+          windowDays,
         });
       } catch (fieldErr) {
         console.error(

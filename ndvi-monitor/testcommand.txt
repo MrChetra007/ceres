@@ -1,0 +1,11 @@
+curl.exe -i --request POST "https://wopwwtnvqyomiwbsxiks.functions.supabase.co/ee-alerts-worker" --header "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndvcHd3dG52cXlvbWl3YnN4aWtzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk1NjAyMzcsImV4cCI6MjA5NTEzNjIzN30.2Wl7erPZYi5iuqrF-4UvMObDEYMmt6M86Pg3p89YGeU" --header "Content-Type: application/json" --data "{}"
+
+
+$botToken = "8847659084:AAGfrNB5DbmvCNZmEfcaVK1BQXVIuTreZOo"
+$chatId = "1652129118"
+$text = "Svay Cheat Rice Field: Experiencing stress (Vegetative) — NDVI 0.35, Rainfall 8mm (21 days)"
+
+Invoke-WebRequest -Uri "https://api.telegram.org/bot$botToken/sendMessage" `
+  -Method POST `
+  -Headers @{ "Content-Type" = "application/json" } `
+  -Body (@{ chat_id = $chatId; text = $text } | ConvertTo-Json)
