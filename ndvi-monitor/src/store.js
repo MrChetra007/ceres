@@ -47,7 +47,10 @@ export const mapReg = {
 export const state = reactive({
   eeReady: false,
   currentIndex: 'ndvi',
-  mainMonth: Math.max(0, MONTHS.length - 2),
+  // Default to the CURRENT month (not the last complete one): the
+  // cloud-blocked/radar fallbacks handle a sparse early-month composite, and
+  // users expect the freshest view after sign-in.
+  mainMonth: Math.max(0, MONTHS.length - 1),
   rightMonth: Math.max(0, MONTHS.length - 5),
   compareMode: false,
   currentBase: 'satellite',
