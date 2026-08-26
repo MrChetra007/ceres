@@ -1690,10 +1690,6 @@ export function loadFieldTrend(field) {
   })
 }
 
-export function refreshAllFieldTrends() {
-  state.fields.forEach(loadFieldTrend)
-}
-
 export function loadRainfall(geometry) {
   if (!state.eeReady || !geometry) { state.rainfallMm = null; return }
   ee.getRainfallMm(geometry, 21, (mm) => { state.rainfallMm = mm })
@@ -1939,8 +1935,54 @@ export function updateFieldStatus(field) {
   })
 }
 
+// Batched login-path refresh: ONE ee-data request covers every field instead
+// of one per field (Earth Engine queues/throttles concurrent interactive
+// calls, so the per-field fan-out got slower as fields accumulated). Fields
+// with invalid geometry are dropped client-side so one bad entry can't fail
+// the whole batch server-side. The single-field updateFieldStatus(field)
+// stays for the save/edit-one-field paths.
+function validGeometryFields() {
+  if (!state.fields.length) return []
+  return state.fields.map((f) => {
+    const geom = f.geojson && (f.geojson.geometry || f.geojson)
+    return geom && geom.coordinates ? { id: f.id, geometry: geom } : null
+  }).filter(Boolean)
+}
+
 export function refreshAllFieldStatuses() {
-  state.fields.forEach(updateFieldStatus)
+  if (!state.eeReady) return
+  const payload = validGeometryFields()
+  if (!payload.length) return
+  ee.getAllFieldStatuses(payload, state.currentIndex, (statuses) => {
+    statuses.forEach(({ id, value, count, date, cloudBlocked }) => {
+      const field = state.fields.find((f) => f.id === id)
+      if (!field) return
+      if (count === 0 || value == null) {
+        fieldStatus[id] = {
+          badgeText: '\u2014', badgeClass: '', stageLabel: noReadingText(state.preferredLanguage),
+          value: null, count: 0, date: date || null, cloudBlocked: !!cloudBlocked,
+        }
+      } else {
+        fieldStatus[id] = {
+          ...buildStatusObject(field, value, state.currentIndex),
+          value, count, date: date || null, cloudBlocked: !!cloudBlocked,
+        }
+      }
+      if (id === state.currentFieldId) applyFieldStyle()
+    })
+  })
+}
+
+export function refreshAllFieldTrends() {
+  if (!state.eeReady) return
+  const payload = validGeometryFields()
+  if (!payload.length) return
+  ee.getAllFieldTrends(payload, 'ndvi', MONTHS, (trends) => {
+    trends.forEach(({ id, points }) => {
+      if (!state.fields.some((f) => f.id === id)) return
+      fieldTrends[id] = points
+    })
+  })
 }
 
 // ---------------------------------------------------------------------------

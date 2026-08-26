@@ -201,6 +201,34 @@ export function getRecentIndexValue(geometry, index, cb) {
     })
 }
 
+// Batched login-path variants — one ee-data request for ALL fields instead of
+// one per field (see refreshAllFieldStatuses/refreshAllFieldTrends in
+// store.js). Fields with invalid geometry are filtered out by the caller.
+export function getAllFieldStatuses(fields, index, cb) {
+  callEE('getAllFieldStatuses', { index, fields })
+    .then((body) => cb(body.statuses || []))
+    .catch((err) => {
+      fail(err)
+      cb([])
+    })
+}
+
+export function getAllFieldTrends(fields, index, months, cb) {
+  callEE('getAllFieldTrends', { index, months, fields })
+    .then((body) => cb(
+      (body.trends || []).map((t) => ({
+        id: t.id,
+        // Same-day duplicate S2 orbits collapse to the least-cloudy scene,
+        // exactly like the single-field getIndexTimeSeriesForGeometry path.
+        points: dedupeLowestCloud(t.points || []),
+      })),
+    ))
+    .catch((err) => {
+      fail(err)
+      cb([])
+    })
+}
+
 export function getRainfallMm(geometry, daysBack, cb) {
   callEE('getRainfall', { geometry, daysBack: daysBack || 21 })
     .then((body) => cb(body.mm == null ? null : body.mm))

@@ -717,6 +717,174 @@ async function actionGetObservations(payload: any) {
   return { rows };
 }
 
+// ── getAllFieldStatuses ────────────────────────────────────────────────────
+// Batched replacement for N getRecentIndexValue calls on login: one
+// FeatureCollection over all field geometries, one .map(), one evaluate().
+// Mirrors actionGetRecentIndexValue's per-field logic (90-day lookback,
+// least-cloudy scene of the freshest day, cloud-blocked flag, latest clean
+// reading) as pure server-side EE operations.
+//
+// Empty-collection safety: EE's ee.Algorithms.If may evaluate BOTH branches,
+// so an empty per-field collection can't be guarded with If (first() on an
+// empty collection errors). Instead every field's collection is padded with a
+// far-past sentinel image (system:time_start = -100000 days, i.e. sorts last)
+// carrying the expected bands/properties. first() is therefore always
+// defined; sentinel-derived outputs (value 0, cloud 100%, bogus date) are
+// gated away client-side by `count === 0`, where count comes from the REAL
+// (pre-pad) clean collection size.
+async function actionGetAllFieldStatuses(payload: any) {
+  const index = payload.index && BANDS[payload.index] ? payload.index : "ndvi";
+  const bands = BANDS[index];
+  const name = index.toUpperCase();
+  const incoming = Array.isArray(payload.fields) ? payload.fields : [];
+  if (!incoming.length) return { statuses: [] };
+
+  const fc = ee.FeatureCollection(
+    incoming.map((f: any) =>
+      ee.Feature(toEeGeometry(f.geometry), { fid: String(f.id) }),
+    ),
+  );
+  const base = ee.ImageCollection("COPERNICUS/S2_SR_HARMONIZED");
+
+  // Far-past sentinel: sorts last after desc-time sort, passes through
+  // property gets, and its constant [1,1] bands yield a well-defined NDVI of
+  // 0 instead of a divide-by-zero mask. -100000 days ≈ year 1696.
+  const PAD_TS = -8640000000000;
+  const pad = () =>
+    ee
+      .Image.constant([1, 1])
+      .rename(bands)
+      .set("system:time_start", PAD_TS)
+      .set("CLOUDY_PIXEL_PERCENTAGE", 100);
+
+  const statuses = fc.map((ft: any) => {
+    const geom = ee.Feature(ft).geometry();
+    const end = ee.Date(Date.now());
+    const start = end.advance(-90, "day");
+    const raw = base.filterBounds(geom).filterDate(start, end);
+    const clean = raw.filter(ee.Filter.lt("CLOUDY_PIXEL_PERCENTAGE", 40));
+
+    // Cloud-blocked signal: cloud % of the LEAST-cloudy scene of the
+    // freshest day (guards against a cloudier twin orbit flagging a reading
+    // blocked when a clean same-day scene exists). Pad keeps first() defined
+    // for scene-less fields.
+    const allPad = raw
+      .merge(ee.ImageCollection([pad()]))
+      .sort("system:time_start", false);
+    const freshestTs = ee.Number(allPad.first().get("system:time_start"));
+    const dayStart = ee.Date(
+      freshestTs.divide(86400000).floor().multiply(86400000),
+    );
+    const freshestDay = allPad
+      .filterDate(dayStart, dayStart.advance(1, "day"))
+      .sort("CLOUDY_PIXEL_PERCENTAGE");
+    const cloudPct = ee.Number(freshestDay.first().get("CLOUDY_PIXEL_PERCENTAGE"));
+
+    // Latest clean reading (pad appended after filtering, so it can only win
+    // when the field genuinely has zero clean scenes).
+    const recent = clean
+      .merge(ee.ImageCollection([pad()]))
+      .sort("system:time_start", false)
+      .first();
+    const dateStr = ee.Date(
+      ee.Number(recent.get("system:time_start")),
+    ).format("YYYY-MM-dd");
+    const value = recent
+      .normalizedDifference(bands)
+      .rename(name)
+      .reduceRegion({
+        reducer: ee.Reducer.mean(),
+        geometry: geom,
+        scale: 10,
+        maxPixels: 1e9,
+      })
+      // Default null (not 0) so a fully-masked region surfaces as "no
+      // reading" client-side instead of a false stressed value.
+      .get(name, null);
+
+    return ee.Feature(null, {
+      fid: ft.get("fid"),
+      count: clean.size(),
+      value,
+      date: dateStr,
+      cloudBlocked: cloudPct.gte(40),
+    });
+  });
+
+  const result = await evaluate(statuses);
+  const rows = ((result && result.features) || []).map((f: any) => ({
+    id: f.properties.fid,
+    count: f.properties.count,
+    value: f.properties.value,
+    date: f.properties.date,
+    cloudBlocked: !!f.properties.cloudBlocked,
+  }));
+  return { statuses: rows };
+}
+
+// ── getAllFieldTrends ──────────────────────────────────────────────────────
+// Batched replacement for N getIndexTimeSeriesForGeometry calls on login:
+// outer FeatureCollection over fields, inner per-month series (the same
+// mapping actionGetIndexTimeSeries does) nested as a property per field, all
+// resolved in ONE evaluate. Heaviest action here — fields × months
+// reduceRegions in a single graph.
+async function actionGetAllFieldTrends(payload: any) {
+  const index = payload.index && BANDS[payload.index] ? payload.index : "ndvi";
+  const bands = BANDS[index];
+  const name = index.toUpperCase();
+  const months = payload.months || [];
+  const incoming = Array.isArray(payload.fields) ? payload.fields : [];
+  if (!incoming.length || !months.length) return { trends: [] };
+
+  // Every field shares the same window — compute it once, outside the map.
+  const startDate = ee.Date.fromYMD(months[0].year, months[0].month, 1);
+  const last = months[months.length - 1];
+  const endDate = ee.Date.fromYMD(last.year, last.month, 1).advance(1, "month");
+
+  const fc = ee.FeatureCollection(
+    incoming.map((f: any) =>
+      ee.Feature(toEeGeometry(f.geometry), { fid: String(f.id) }),
+    ),
+  );
+
+  const trends = fc.map((ft: any) => {
+    const geom = ee.Feature(ft).geometry();
+    const all = ee
+      .ImageCollection("COPERNICUS/S2_SR_HARMONIZED")
+      .filterBounds(geom)
+      .filterDate(startDate, endDate)
+      .filter(ee.Filter.lt("CLOUDY_PIXEL_PERCENTAGE", 40));
+    const series = all
+      .map((img: any) => {
+        const idxImg = img.normalizedDifference(bands).rename(name);
+        const value = idxImg.reduceRegion({
+          reducer: ee.Reducer.mean(),
+          geometry: geom,
+          scale: 10,
+          maxPixels: 1e9,
+        });
+        return ee.Feature(null, {
+          date: img.date().format("YYYY-MM-dd"),
+          cloudPct: ee.Number(img.get("CLOUDY_PIXEL_PERCENTAGE")),
+          value: value.get(name),
+        });
+      })
+      // Missing-key properties read as null here, so notNull cleanly drops
+      // masked/no-data scenes (same as actionGetIndexTimeSeries).
+      .filter(ee.Filter.notNull(["value"]));
+    return ee.Feature(null, { fid: ft.get("fid"), points: series });
+  });
+
+  const result = await evaluate(trends);
+  const rows = ((result && result.features) || []).map((f: any) => ({
+    id: f.properties.fid,
+    points: ((((f.properties.points || {}).features) || [])).map(
+      (p: any) => p.properties,
+    ),
+  }));
+  return { trends: rows };
+}
+
 // ── Router ─────────────────────────────────────────────────────────────────
 type Handler = (payload: any) => Promise<Record<string, unknown>>;
 const HANDLERS: Record<string, Handler> = {
@@ -729,6 +897,8 @@ const HANDLERS: Record<string, Handler> = {
   getDryMonths: actionGetDryMonths,
   getFieldStatus: actionGetFieldStatus,
   getRecentIndexValue: actionGetRecentIndexValue,
+  getAllFieldStatuses: actionGetAllFieldStatuses,
+  getAllFieldTrends: actionGetAllFieldTrends,
   getRainfall: actionGetRainfall,
   getObservations: actionGetObservations,
 };
