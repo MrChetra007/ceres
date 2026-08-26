@@ -26,12 +26,6 @@
         :title="t('topbar.compare_title')"
         @click="state.compareMode = !state.compareMode"
       ><i class="ti ti-columns-3"></i><span class="pill-text">{{ t('topbar.compare') }}</span></button>
-      <button
-        class="glass-pill"
-        :class="{ active: state.observationsVisible }"
-        :title="t('obs.title')"
-        @click="state.observationsVisible = !state.observationsVisible"
-      ><i class="ti ti-satellite"></i><span class="pill-text">{{ t('obs.short') }}</span></button>
     </div>
 
     <div class="topbar-right">

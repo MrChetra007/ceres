@@ -41,7 +41,8 @@ export default {
 
   // Browse observations
   'obs.title': 'Browse Observations',
-  'obs.short': 'Observations',
+  'obs.expand': 'Expand',
+  'obs.collapse': 'Collapse',
   'obs.no_field': 'Select a field to browse its satellite passes.',
   'obs.no_observations': 'No satellite passes found for this field in this period.',
   'obs.date_cap': 'Date',

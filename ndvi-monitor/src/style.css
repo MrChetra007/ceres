@@ -2248,25 +2248,24 @@ body {
 .jump-btn:hover { background: rgba(125, 180, 255, 0.18); border-color: rgba(138, 182, 255, 0.65); color: #bcd6ff; }
 .jump-btn .ti { font-size: 12px; }
 
-/* ---- Browse Observations panel ---- */
-.obs-panel {
+/* ---- Observations day-strip (docked above the mode selector) ---- */
+.obs-strip {
   position: fixed;
-  top: 76px;
-  left: 16px;
-  width: 400px;
-  max-width: 92vw;
-  max-height: min(60vh, 480px);
-  z-index: 80;
-  padding: 12px;
+  bottom: 78px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(860px, calc(100vw - 24px));
+  z-index: 31;
+  padding: 8px 10px;
   display: flex;
   flex-direction: column;
+  gap: 6px;
 }
 
-.obs-header {
+.obs-strip-head {
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin-bottom: 8px;
+  gap: 8px;
 }
 
 .obs-title {
@@ -2280,43 +2279,47 @@ body {
 
 .obs-title .ti { color: var(--accent); font-size: 15px; }
 
+.obs-strip-count {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-faint);
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 999px;
+  padding: 1px 7px;
+}
+
 .obs-loading {
   font-size: 11px;
   color: var(--text-faint);
-  margin-left: auto;
 }
 
-.obs-header .close-btn {
+.obs-strip-controls {
   margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 2px;
 }
 
-.obs-list {
-  overflow-y: auto;
+.obs-days-wrap { min-width: 0; }
+
+/* Horizontally scrollable row of day-columns (native scroll, like the app's
+   other overflow surfaces). */
+.obs-days {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  scrollbar-width: thin;
+}
+
+.obs-day {
+  flex: 0 0 auto;
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  min-height: 0;
-}
-
-.obs-list-header {
-  display: grid;
-  grid-template-columns: 92px 1fr 44px auto 56px;
-  gap: 8px;
-  padding: 2px 10px 4px;
-  font-size: 9px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--text-faint);
-}
-
-.obs-row {
-  display: grid;
-  grid-template-columns: 92px 1fr 44px auto 56px;
-  gap: 8px;
   align-items: center;
-  text-align: left;
-  padding: 6px 10px;
+  gap: 2px;
+  min-width: 78px;
+  padding: 6px 9px;
   border-radius: var(--radius-sm);
   border: 0.5px solid var(--panel-border);
   background: rgba(255, 255, 255, 0.04);
@@ -2326,45 +2329,43 @@ body {
   transition: background 0.12s, border-color 0.12s;
 }
 
-.obs-row:hover {
+.obs-day:hover {
   background: rgba(255, 255, 255, 0.09);
   border-color: rgba(255, 255, 255, 0.2);
 }
 
-.obs-row.active {
+.obs-day.active {
   background: var(--accent-dim);
   border-color: rgba(34, 201, 142, 0.5);
 }
 
-.obs-date { font-size: 11.5px; }
-.obs-source { font-size: 11px; color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.obs-cloud { font-size: 11px; color: var(--text-faint); text-align: right; }
+.obs-day-date { font-size: 11px; white-space: nowrap; }
 
-.obs-badge {
-  font-size: 10px;
-  font-weight: 600;
-  justify-self: start;
-  padding: 2px 7px;
-  border-radius: 999px;
-  white-space: nowrap;
-}
+/* Cloud icon carries the status tint; opacity ramps with cloud cover
+   (set inline) so heavy overcast reads heavier than a clear pass. */
+.obs-day-icon { font-size: 16px; line-height: 1.2; }
+.obs-day.clear .obs-day-icon { color: var(--accent); }
+.obs-day.low .obs-day-icon { color: var(--amber); }
+.obs-day.blocked .obs-day-icon { color: var(--red); }
 
-.obs-badge.obs-clear { background: var(--accent-dim); color: var(--accent); }
-.obs-badge.obs-low { background: rgba(245, 166, 35, 0.14); color: var(--amber); }
-.obs-badge.obs-blocked { background: var(--red-dim); color: var(--red); }
+.obs-day-sub { font-size: 9.5px; color: var(--text-faint); }
 
-.obs-ndvi { font-size: 11.5px; text-align: right; }
+.obs-day-ndvi { font-size: 10.5px; }
 
 .obs-empty {
-  margin: 12px 4px;
+  margin: 6px 4px 2px;
   font-size: 12px;
   color: var(--text-faint);
   line-height: 1.5;
 }
 
 @media (max-width: 640px) {
-  .obs-panel { width: calc(100vw - 24px); top: 68px; left: 12px; }
-  .obs-row { grid-template-columns: 84px 1fr 40px auto 52px; }
+  .obs-strip {
+    width: calc(100vw - 24px);
+    left: 12px;
+    transform: none;
+    bottom: 84px;
+  }
 }
 
 .scrubber-conf {

@@ -1550,6 +1550,11 @@ export function loadField(field) {
   currentGeometry.value = polygonGeometry(geom.coordinates)
   hideAoiRectangle()
   state.infoPanelVisible = true
+  // Surface the observations day-strip automatically: selecting a field is
+  // what makes the slider's blue observation bands appear, and this strip is
+  // what explains them. Deselecting does NOT force it closed — the user's
+  // last manual toggle wins there.
+  state.observationsVisible = true
   state.chartSubtitle = field.name
   loadIndexForMonth(state.mainMonth, currentGeometry.value)
   if (state.compareMode) loadIndexForMonthRight(state.rightMonth)

@@ -41,7 +41,8 @@ export default {
 
   // Browse observations
   'obs.title': 'រុករករូបភាពផ្កាយរណប',
-  'obs.short': 'រូបភាព',
+  'obs.expand': 'ពង្រីក',
+  'obs.collapse': 'បង្រួម',
   'obs.no_field': 'សូមជ្រើសរើសវាលដើម្បីមើលរូបភាពផ្កាយរណបរបស់វា។',
   'obs.no_observations': 'រកមិនឃើញរូបភាពផ្កាយរណបសម្រាប់វាលនេះក្នុងរយៈពេលនេះទេ។',
   'obs.date_cap': 'កាលបរិច្ឆេទ',
