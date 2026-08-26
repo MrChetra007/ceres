@@ -124,6 +124,25 @@ export const state = reactive({
 export const currentGeometry = shallowRef(null)
 export const fieldStatus = reactive({})
 export const fieldTrends = reactive({})
+// Trend-chart cache for the currently open chart, keyed by
+// subject ('field:<id>' or 'point:<lat>,<lng>') + index + date-range. Extends
+// the same skip-on-hit pattern fetchHealthZone()/fetchObservations() already
+// use: switching NDVI -> NDWI -> NDVI reuses the first result instead of
+// re-running the ~14-image reduceRegion batch every toggle. Deliberately NOT
+// fieldTrends (that one is NDVI+fields-only for dashboard sparklines).
+const chartCache = new Map()
+const CHART_CACHE_TTL_MS = 15 * 60 * 1000
+
+// A field edit reshapes its geometry, so every cached series for that field
+// (all indices, all ranges) describes the old boundary. Planting-date edits do
+// NOT go through here — they only reinterpret values, they don't change them.
+function invalidateChartCacheForField(fieldId) {
+  if (!fieldId) return
+  const prefix = 'field:' + fieldId + '|'
+  for (const k of Array.from(chartCache.keys())) {
+    if (k.startsWith(prefix)) chartCache.delete(k)
+  }
+}
 export const datePicker = reactive({ visible: false, currentDate: null })
 let infoChart = null
 let loadingCount = 0
@@ -1082,8 +1101,26 @@ export function fetchHealthZone(force) {
 // ---------------------------------------------------------------------------
 // Trend chart data
 // ---------------------------------------------------------------------------
+function chartCacheKey(subjectKey, index, rangeKey) {
+  return subjectKey + '|' + index + '|' + rangeKey
+}
+
+function activeRangeKey() {
+  return (state.rangeStart || '') + '|' + (state.rangeEnd || '')
+}
+
 export function loadChartForPoint(lat, lng, index, onEmpty) {
   const cfg = INDICES[index] || TRUE_COLOR
+  const key = chartCacheKey('point:' + lat.toFixed(4) + ',' + lng.toFixed(4), index, activeRangeKey())
+  const cached = chartCache.get(key)
+  if (cached && Date.now() - cached.fetchedAt < CHART_CACHE_TTL_MS) {
+    state.chartData = cached.data
+    state.chartIndex = index
+    state.chartSubtitle = cached.subtitle
+    checkStress(cached.data, lat, lng, index)
+    setStatus('ready', cfg.name + ' trend loaded \u2014 ' + cached.data.length + ' observations')
+    return
+  }
   setStatus('computing', 'Fetching ' + cfg.name + ' trend...')
   ee.getIndexTimeSeries(lat, lng, index, activeMonths(), (data) => {
     if (data.length === 0) {
@@ -1094,6 +1131,7 @@ export function loadChartForPoint(lat, lng, index, onEmpty) {
     state.chartData = data
     state.chartIndex = index
     state.chartSubtitle = lat.toFixed(4) + ', ' + lng.toFixed(4) + ' \u00b7 ' + observationCount(state.preferredLanguage, data.length)
+    chartCache.set(key, { data, subtitle: state.chartSubtitle, fetchedAt: Date.now() })
     checkStress(data, lat, lng, index)
     setStatus('ready', cfg.name + ' trend loaded \u2014 ' + data.length + ' observations')
   })
@@ -1101,6 +1139,20 @@ export function loadChartForPoint(lat, lng, index, onEmpty) {
 
 export function loadChartForGeometry(geometry, index, label) {
   const cfg = INDICES[index] || TRUE_COLOR
+  // Every caller of this function has a field loaded (setIndex /
+  // reloadChartForActiveRange / loadField all gate on currentFieldId), so the
+  // field id is the stable subject key; label alone could drift on rename.
+  const subjectKey = state.currentFieldId ? 'field:' + state.currentFieldId : 'geom:' + label
+  const key = chartCacheKey(subjectKey, index, activeRangeKey())
+  const cached = chartCache.get(key)
+  if (cached && Date.now() - cached.fetchedAt < CHART_CACHE_TTL_MS) {
+    state.chartData = cached.data
+    state.chartIndex = index
+    state.chartSubtitle = cached.subtitle
+    checkStress(cached.data, null, null, index)
+    setStatus('ready', cfg.name + ' trend loaded \u2014 ' + cached.data.length + ' observations')
+    return
+  }
   setStatus('computing', 'Fetching ' + cfg.name + ' trend...')
   ee.getIndexTimeSeriesForGeometry(geometry, index, activeMonths(), (data) => {
     if (!data || data.length === 0) {
@@ -1110,6 +1162,7 @@ export function loadChartForGeometry(geometry, index, label) {
     state.chartData = data
     state.chartIndex = index
     state.chartSubtitle = label + ' \u00b7 ' + observationCount(state.preferredLanguage, data.length)
+    chartCache.set(key, { data, subtitle: state.chartSubtitle, fetchedAt: Date.now() })
     checkStress(data, null, null, index)
     setStatus('ready', cfg.name + ' trend loaded \u2014 ' + data.length + ' observations')
   })
@@ -1916,6 +1969,7 @@ export function onFieldEdited() {
   if (layers.length > 0 && state.currentFieldId) {
     const field = state.fields.find((f) => f.id === state.currentFieldId)
     if (field) {
+      invalidateChartCacheForField(field.id)
       updateField(field.id, {
         geojson: layers[0],
         area_ha: getFieldAreaHectares(layers[0]),

@@ -60,38 +60,43 @@ function jsonResponse(body: unknown, status = 200): Response {
 }
 
 // ── Earth Engine init (cached per isolate, refreshed before token expiry) ──
-function eeInit(): Promise<void> {
-  return new Promise((resolve, reject) => {
+// Module-scope state: runs ONCE per warm function instance, not once per
+// request. Concurrency-safe — the check-and-set below is synchronous, so
+// requests arriving during startup all await the same in-flight init promise.
+async function initEE(): Promise<void> {
+  const t0 = performance.now();
+  await new Promise<void>((resolve, reject) => {
     ee.data.authenticateViaPrivateKey(
       EE_KEY,
       () =>
-        ee.initialize(
-          null,
-          null,
-          () => resolve(),
-          (e: string) => reject(new Error(e)),
-        ),
+        ee.initialize(null, null, () => resolve(), (e: string) =>
+          reject(new Error(e))),
       (e: string) => reject(new Error(e)),
     );
   });
+  console.log(
+    `[ee-data] EE session initialized in ${Math.round(performance.now() - t0)}ms`,
+  );
 }
 
-let eeInitPromise: Promise<void> | null = null;
-let eeInitAt = 0;
-// Service-account OAuth access tokens live ~1h; re-auth well before expiry so
-// warm isolates never serve requests with a stale token.
+let eeReady: Promise<void> | null = null;
+let eeReadyAt = 0;
+// Service-account JWT-bearer grants return ONLY an access token (expires_in
+// ~3600s, no refresh token), so a warm isolate's session silently dies after
+// an hour. Re-auth well before expiry instead of serving failures.
 const EE_INIT_TTL_MS = 45 * 60 * 1000;
 
 function ensureEE(): Promise<void> {
-  if (!eeInitPromise || Date.now() - eeInitAt > EE_INIT_TTL_MS) {
-    eeInitAt = Date.now();
-    eeInitPromise = eeInit().catch((e) => {
-      // Don't cache failures — the next request should retry auth.
-      eeInitPromise = null;
+  if (!eeReady || Date.now() - eeReadyAt > EE_INIT_TTL_MS) {
+    eeReadyAt = Date.now();
+    eeReady = initEE().catch((e) => {
+      // Don't cache failures — the next request retries authentication
+      // instead of permanently holding a rejected promise.
+      eeReady = null;
       throw e;
     });
   }
-  return eeInitPromise;
+  return eeReady;
 }
 
 // ── Promise helpers around the callback-style JS client ───────────────────
@@ -745,12 +750,24 @@ Deno.serve(async (req) => {
     return jsonResponse({ ok: false, error: "unknown_action" }, 400);
   }
 
+  // Timing instrumentation: `supabase functions logs ee-data` will show, per
+  // request, whether the EE session was freshly authenticated (cold isolate /
+  // TTL refresh) or reused, plus the total handler duration. A request that is
+  // slow WITHOUT a fresh "EE session initialized" line right before it is
+  // slow because of Earth Engine compute, not auth.
+  const started = performance.now();
   try {
     await ensureEE();
     const data = await handler(body);
+    console.log(
+      `[ee-data] ${body.action} ok in ${Math.round(performance.now() - started)}ms`,
+    );
     return jsonResponse({ ok: true, ...data });
   } catch (e: any) {
-    console.error(`ee-data ${body.action} failed:`, e);
+    console.error(
+      `[ee-data] ${body.action} failed after ${Math.round(performance.now() - started)}ms:`,
+      e,
+    );
     const status = typeof e?.code === "number" ? e.code : 500;
     const error = e?.message === "invalid_geometry" ? "invalid_geometry" : String(e?.message || e);
     return jsonResponse({ ok: false, error }, status);
