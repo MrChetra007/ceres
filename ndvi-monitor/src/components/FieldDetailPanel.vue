@@ -126,7 +126,7 @@ import { buildChartConfig } from '../services/chart'
 import { INDICES, MONTHS, CONSULT_AI_URL } from '../config'
 import { sb, requireSession } from '../services/supabase'
 import { loadFieldPhotos, createSignedPhotoUrl } from '../services/supabase'
-import { getRecentIndexValue, getRainfallMm } from '../services/earthEngine'
+import { getRecentIndexValue, getRainfallMm, polygonGeometry } from '../services/earthEngine'
 import { formatMonthYear, stageName as stageNameKm, daySinceLabel } from '../services/format'
 import { useI18n } from '../i18n'
 
@@ -483,7 +483,7 @@ async function consultAi() {
     store.showToast(t('toast.cant_explain'))
     return
   }
-  const geometry = window.ee.Geometry.Polygon(geom.coordinates)
+  const geometry = polygonGeometry(geom.coordinates)
 
   consultingAi.value = true
   aiExplanation.value = ''

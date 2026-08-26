@@ -71,7 +71,9 @@ watch(() => state.statusText, () => {
 })
 
 onMounted(() => {
-  store.restoreSavedSession()
+  // Session restore is handled by supabase-js: a persisted Supabase session
+  // fires INITIAL_SESSION -> store.beginSessionWork() (which now also unlocks
+  // satellite data — no separate Earth Engine login exists anymore).
   store.applyRangeFromUrl()
   window.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && state.isDrawing) store.cancelDraw()

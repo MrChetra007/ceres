@@ -2,12 +2,12 @@ import { reactive, shallowRef } from 'vue'
 import { area as turfArea } from '@turf/turf'
 import { jsPDF } from 'jspdf'
 import {
-  EE_PROJECT_ID, CLIENT_ID, MONTHS, DEFAULT_AOI, DEFAULT_PRESETS,
+  MONTHS, DEFAULT_AOI, DEFAULT_PRESETS,
   RICE_GROWTH_STAGES, EVENTS, EVENT_COLORS, INDICES, TRUE_COLOR, MAP_CENTER, MAP_ZOOM,
   TELEGRAM_BOT_USERNAME, TELEGRAM_LINK_TTL_MS, SEASON_PRESETS,
 } from './config'
 import * as ee from './services/earthEngine'
-import { loadTrueColor } from './services/earthEngine'
+import { loadTrueColor, rectGeometry, polygonGeometry, pointGeometry } from './services/earthEngine'
 import {
   toKhmerDigits, stageName, statusLabel, futurePlantingText, noReadingText,
   observationCount, confReason, daySinceLabel,
@@ -138,7 +138,7 @@ let cloudToastShown = false
 // Helpers
 // ---------------------------------------------------------------------------
 function getGeometry() {
-  return currentGeometry.value || window.ee.Geometry.Rectangle(state.aoiCoords)
+  return currentGeometry.value || rectGeometry(state.aoiCoords)
 }
 
 export function setStatus(s, text) {
@@ -612,12 +612,18 @@ export function loadIndexForMonth(idx, geometry, silent) {
   state.cloudBlock.main = null
   state.radarFallback.main = null
   beginLoading()
-  const geom = geometry || window.ee.Geometry.Rectangle(state.aoiCoords)
+  const geom = geometry || rectGeometry(state.aoiCoords)
   if (state.currentIndex === 'truecolor') {
     loadTrueColor(m, geom, state.trueColorDate, (res) => {
       endLoading()
       state.sceneCount.main = res.count
       state.trueColorScenes = res.scenes || []
+      if (res.mode === 'error') {
+        if (mapReg.ndviLayer) { mapReg.map.removeLayer(mapReg.ndviLayer); mapReg.ndviLayer = null }
+        showToast('Satellite request failed \u2014 ' + (res.err || 'please try again'))
+        setStatus('error', 'Satellite request failed for ' + m.label)
+        return
+      }
       if (res.mode === 'no_data' || !res.url) {
         if (mapReg.ndviLayer) { mapReg.map.removeLayer(mapReg.ndviLayer); mapReg.ndviLayer = null }
         setStatus('error', 'No Sentinel-2 scenes yet for ' + m.label + ' \u2014 check back later in the month')
@@ -640,6 +646,13 @@ export function loadIndexForMonth(idx, geometry, silent) {
   }
   ee.loadIndexTile(m, state.currentIndex, geom, (res) => {
     state.sceneCount.main = res.count
+    if (res.mode === 'error') {
+      endLoading()
+      if (mapReg.ndviLayer) { mapReg.map.removeLayer(mapReg.ndviLayer); mapReg.ndviLayer = null }
+      showToast('Satellite request failed \u2014 ' + (res.err || 'please try again'))
+      setStatus('error', 'Satellite request failed for ' + m.label)
+      return
+    }
     if (res.mode === 'radar_fallback') {
       endLoading()
       if (res.url) mapReg.ndviLayer = applyTileLayer(mapReg.map, mapReg.ndviLayer, res.url, 1)
@@ -694,6 +707,11 @@ export function loadIndexForMonthRight(idx, silent) {
       endLoading()
       state.sceneCount.right = res.count
       state.trueColorScenesRight = res.scenes || []
+      if (res.mode === 'error') {
+        if (mapReg.ndviLayerRight) { mapReg.mapRight.removeLayer(mapReg.ndviLayerRight); mapReg.ndviLayerRight = null }
+        showToast('Satellite request failed \u2014 ' + (res.err || 'please try again'))
+        return
+      }
       if (res.mode === 'no_data' || !res.url) {
         if (mapReg.ndviLayerRight) { mapReg.mapRight.removeLayer(mapReg.ndviLayerRight); mapReg.ndviLayerRight = null }
         return
@@ -709,6 +727,12 @@ export function loadIndexForMonthRight(idx, silent) {
   ee.loadIndexTile(m, state.currentIndex, geom, (res) => {
     if (!mapReg.mapRight) { endLoading(); return }
     state.sceneCount.right = res.count
+    if (res.mode === 'error') {
+      endLoading()
+      if (mapReg.ndviLayerRight) { mapReg.mapRight.removeLayer(mapReg.ndviLayerRight); mapReg.ndviLayerRight = null }
+      showToast('Satellite request failed \u2014 ' + (res.err || 'please try again'))
+      return
+    }
     if (res.mode === 'radar_fallback') {
       endLoading()
       if (res.url) mapReg.ndviLayerRight = applyTileLayer(mapReg.mapRight, mapReg.ndviLayerRight, res.url, 1)
@@ -956,7 +980,7 @@ export function fetchObservations() {
     return
   }
   state.observationsLoading = true
-  const geometry = window.ee.Geometry.Polygon(geom.coordinates)
+  const geometry = polygonGeometry(geom.coordinates)
   ee.getObservations(geometry, state.rangeStart, state.rangeEnd, (rows) => {
     state.observationsLoading = false
     state.observations = rows
@@ -1006,7 +1030,7 @@ export function jumpToObservationDate(dateStr) {
 // ---------------------------------------------------------------------------
 export function fetchDryMonths() {
   if (!state.eeReady) return
-  const geom = window.ee.Geometry.Rectangle(state.aoiCoords)
+  const geom = rectGeometry(state.aoiCoords)
   ee.getDryMonths(MONTHS, geom, (drySet) => {
     state.dryMonthSet = drySet
   })
@@ -1021,7 +1045,7 @@ export function fetchDryMonths() {
 // ---------------------------------------------------------------------------
 export function fetchHealthZone(force) {
   if (!state.eeReady) return
-  const geom = currentGeometry.value || window.ee.Geometry.Rectangle(state.aoiCoords)
+  const geom = currentGeometry.value || rectGeometry(state.aoiCoords)
   if (!geom) return
   const m = MONTHS[state.mainMonth]
   if (!m) return
@@ -1112,7 +1136,7 @@ export function setIndex(index) {
 // switched, plus the status label naming the actual scene date + cloud%.
 export function showLatestView() {
   if (!state.eeReady) {
-    setStatus('error', 'Sign in with Google to view the latest satellite pass')
+    setStatus('error', 'Sign in to view the latest satellite pass')
     return
   }
   if (!currentGeometry.value && !state.aoiCoords) {
@@ -1158,10 +1182,10 @@ export function onMapClick(lat, lng) {
   state.chartSubtitle = lat.toFixed(4) + ', ' + lng.toFixed(4)
   state.infoPanelVisible = true
   if (!state.eeReady) {
-    setStatus('error', 'Sign in with Google to load ' + INDICES[state.currentIndex].name + ' trends')
+    setStatus('error', 'Sign in to load ' + INDICES[state.currentIndex].name + ' trends')
     return
   }
-  loadRainfall(window.ee.Geometry.Point([lng, lat]))
+  loadRainfall(pointGeometry(lng, lat))
   loadBenchmark()
   loadChartForPoint(lat, lng, state.currentIndex)
 }
@@ -1193,7 +1217,7 @@ export function checkStress(data, lat, lng, index) {
     const baseMsg = '\u26a0 Possible stress detected \u2014 NDVI dropped ' + drop.toFixed(0) + '% (' + earlier.date + ' \u2192 ' + recent.date + ')'
     state.stressAlert = baseMsg
     if (lat != null && lng != null) {
-      const point = window.ee.Geometry.Point([lng, lat])
+      const point = pointGeometry(lng, lat)
       ee.getRainfallMm(point, 21, (mm) => {
         if (mm == null) return
         const rainNote = mm < 10
@@ -1218,28 +1242,16 @@ export function getStageAtDate(date) {
 }
 
 // ---------------------------------------------------------------------------
-// Auth (Earth Engine + Supabase)
+// Auth (Supabase Google OAuth only)
 // ---------------------------------------------------------------------------
-export function authenticate() {
-  setStatus('authenticating', 'Signing in...')
-  ee.authenticateViaOauth(CLIENT_ID, () => {
-    const token = ee.getAuthToken()
-    if (token) {
-      localStorage.setItem('ee_auth_creds', JSON.stringify({
-        access_token: token,
-        expires_in: 3600,
-        issued_at: Date.now(),
-      }))
-    }
-    initializeEE()
-  }, (err) => setStatus('error', 'Sign-in failed: ' + (err?.message || err)))
-}
-
-export function initializeEE() {
-  setStatus('initializing', 'Initializing Earth Engine...')
-  ee.initialize(EE_PROJECT_ID, () => {
-    state.eeReady = true
-    state.authOverlayVisible = false
+// Earth Engine no longer has its own login: all satellite computation runs
+// server-side in the `ee-data` Edge Function with a service account, so
+// `state.eeReady` now simply means "signed in to Supabase" — the single gate
+// that unlocks NDVI/map loads.
+export function beginSessionWork() {
+  state.eeReady = true
+  state.authOverlayVisible = false
+  if (mapReg.map) {
     mapReg.map.invalidateSize()
     mapReg.map.setView([(state.aoiCoords[1] + state.aoiCoords[3]) / 2, (state.aoiCoords[0] + state.aoiCoords[2]) / 2], MAP_ZOOM)
     updateDrawEditVisibility()
@@ -1247,37 +1259,18 @@ export function initializeEE() {
     setStatus('computing', 'Computing NDVI...')
     loadIndexForMonth(state.mainMonth, null)
     // Defer the secondary background work (dry-month markers, field statuses,
-    // field trends) so it doesn't compete for the throttled Earth Engine
-    // connection with the map load. Runs after the current work at idle time.
+    // field trends) so it doesn't compete with the map load. Runs after the
+    // current work at idle time.
     deferIdle(() => {
       fetchDryMonths()
       refreshAllFieldStatuses()
       refreshAllFieldTrends()
     })
-  }, (err) => {
-    localStorage.removeItem('ee_auth_creds')
-    state.authOverlayVisible = true
-    setStatus('error', 'Satellite sign-in expired \u2014 please sign in again: ' + (err?.message || err))
-  })
+  }
 }
 
-export function restoreSavedSession() {
-  const saved = localStorage.getItem('ee_auth_creds')
-  if (saved) {
-    try {
-      const creds = JSON.parse(saved)
-      const age = Date.now() - (creds.issued_at || 0)
-      const maxAge = ((creds.expires_in || 3600) - 120) * 1000
-      if (creds.issued_at && age > maxAge) {
-        localStorage.removeItem('ee_auth_creds')
-        return
-      }
-      ee.setAuthToken(CLIENT_ID, creds.access_token, creds.expires_in)
-      initializeEE()
-    } catch (e) {
-      localStorage.removeItem('ee_auth_creds')
-    }
-  }
+export function endSessionWork() {
+  state.eeReady = false
 }
 
 export function showAuthOverlay() {
@@ -1338,6 +1331,9 @@ sb.auth.onAuthStateChange((event, session) => {
   if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
     if (user && user.id !== lastLoadedUserId) {
       lastLoadedUserId = user.id
+      // eeReady now just means "signed in" — satellite data is served by the
+      // service-account-backed ee-data Edge Function, no EE login involved.
+      beginSessionWork()
       loadFieldsFromSupabase()
       loadAoisFromSupabase()
       loadTelegramChatId()
@@ -1347,6 +1343,7 @@ sb.auth.onAuthStateChange((event, session) => {
     }
   } else if (event === 'SIGNED_OUT') {
     lastLoadedUserId = null
+    endSessionWork()
     state.fields = []
     state.aois = []
     state.selectedAoiId = null
@@ -1419,7 +1416,7 @@ export async function saveField(name, geojson, plantingDate) {
   if (!planting_date && state.eeReady) {
     const geom = geojson && (geojson.geometry || geojson)
     if (geom && geom.coordinates) {
-      const geometry = window.ee.Geometry.Polygon(geom.coordinates)
+      const geometry = polygonGeometry(geom.coordinates)
       const detected = await new Promise((resolve) => ee.detectPlantingDate(geometry, resolve))
       if (detected && detected.estimatedDate) {
         planting_date = detected.estimatedDate
@@ -1497,7 +1494,7 @@ export function loadField(field) {
     setStatus('error', 'Field has invalid geometry')
     return
   }
-  currentGeometry.value = window.ee.Geometry.Polygon(geom.coordinates)
+  currentGeometry.value = polygonGeometry(geom.coordinates)
   hideAoiRectangle()
   state.infoPanelVisible = true
   state.chartSubtitle = field.name
@@ -1634,7 +1631,7 @@ export function loadFieldTrend(field) {
   if (fieldTrends[field.id]) return
   const geom = field.geojson && (field.geojson.geometry || field.geojson)
   if (!geom || !geom.coordinates) return
-  const geometry = window.ee.Geometry.Polygon(geom.coordinates)
+  const geometry = polygonGeometry(geom.coordinates)
   ee.getIndexTimeSeriesForGeometry(geometry, 'ndvi', MONTHS, (data) => {
     fieldTrends[field.id] = data
   })
@@ -1651,7 +1648,7 @@ export function loadRainfall(geometry) {
 
 export function loadBenchmark(geometry) {
   if (!state.eeReady) { state.benchmarkValue = null; return }
-  const geom = geometry || window.ee.Geometry.Rectangle(state.aoiCoords)
+  const geom = geometry || rectGeometry(state.aoiCoords)
   ee.getRecentIndexValue(geom, 'ndvi', ({ count, value }) => {
     state.benchmarkValue = value
   })
@@ -1871,7 +1868,7 @@ export function updateFieldStatus(field) {
   if (!state.eeReady) return
   const geom = field.geojson && (field.geojson.geometry || field.geojson)
   if (!geom || !geom.coordinates) return
-  const geometry = window.ee.Geometry.Polygon(geom.coordinates)
+  const geometry = polygonGeometry(geom.coordinates)
   ee.getRecentIndexValue(geometry, state.currentIndex, ({ count, value, date, cloudBlocked }) => {
     if (count === 0 || value == null) {
       fieldStatus[field.id] = {

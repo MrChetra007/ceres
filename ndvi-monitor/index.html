@@ -27,14 +27,14 @@
     <div id="app"></div>
     <!--
     These libs load via classic CDN <script> tags because their UMD/global
-    style breaks under Vite bundling (same reason Earth Engine stays on CDN):
+    style breaks under Vite bundling:
     - leaflet + leaflet-draw: UMD that must extend the global `L`
-    - Google Earth Engine: dynamic function-binding breaks under bundlers
+    Earth Engine is no longer loaded client-side — all EE calls go through
+    the `ee-data` Supabase Edge Function (service-account auth server-side).
     Everything else (Vue, Chart.js, turf, jsPDF, supabase-js) is bundled by Vite.
   -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
-    <script src="https://ajax.googleapis.com/ajax/libs/earthengine/1.7.36/earthengine-api.js"></script>
     <script type="module" src="/src/main.js"></script>
   </body>
 </html>

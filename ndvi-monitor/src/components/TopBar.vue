@@ -73,7 +73,7 @@
         </div>
 
         <div
-          v-if="state.supabaseUser || state.eeReady || !state.authOverlayVisible"
+          v-if="state.supabaseUser || !state.authOverlayVisible"
           ref="userWrap"
           class="topbar-user"
           :class="{ 'menu-open': userMenuOpen }"
@@ -128,7 +128,7 @@ const userLabel = computed(() =>
 function onUserClick(e) {
   if (e.target.classList.contains('sign-out-btn')) return
   settingsOpen.value = false
-  if (state.supabaseUser && state.eeReady) {
+  if (state.supabaseUser) {
     userMenuOpen.value = !userMenuOpen.value
     return
   }

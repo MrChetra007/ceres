@@ -1,6 +1,9 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import ee from "npm:@google/earthengine@0.1.395";
 import { generateExplanation, languageLine } from "../_shared/llm.ts";
+// Growth-stage thresholds live in _shared/growthStage.ts so this worker and
+// the ee-data function stay in sync automatically.
+import { statusFromNdvi } from "../_shared/growthStage.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
 const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
@@ -23,43 +26,6 @@ function eeInit(): Promise<void> {
       (e: string) => reject(new Error(e)),
     );
   });
-}
-
-// Port of your existing growth-stage thresholds from app.js — same 6 stages.
-const RICE_GROWTH_STAGES = [
-  { name: "Germination", maxDay: 10, min: 0.05, max: 0.15 },
-  { name: "Seedling", maxDay: 25, min: 0.15, max: 0.3 },
-  { name: "Vegetative", maxDay: 55, min: 0.3, max: 0.55 },
-  { name: "Reproductive", maxDay: 90, min: 0.55, max: 0.75 },
-  { name: "Maturation", maxDay: 110, min: 0.35, max: 0.55 },
-  { name: "Harvest", maxDay: Infinity, min: 0.1, max: 0.3 },
-];
-
-function stageForDay(day: number) {
-  return (
-    RICE_GROWTH_STAGES.find((s) => day <= s.maxDay) ||
-    RICE_GROWTH_STAGES[RICE_GROWTH_STAGES.length - 1]
-  );
-}
-
-function statusFromNdvi(
-  ndvi: number,
-  plantingDate: string | null,
-): { status: string; stage: string | null } {
-  if (!plantingDate) {
-    // flat fallback, same as app.js
-    if (ndvi >= 0.6) return { status: "healthy", stage: null };
-    if (ndvi >= 0.3) return { status: "below_expected", stage: null };
-    return { status: "stressed", stage: null };
-  }
-  const day = Math.floor(
-    (Date.now() - new Date(plantingDate).getTime()) / 86400000,
-  );
-  const stage = stageForDay(day);
-  const deficit = stage.min - ndvi;
-  if (deficit > 0.15) return { status: "stressed", stage: stage.name };
-  if (ndvi < stage.min) return { status: "below_expected", stage: stage.name };
-  return { status: "healthy", stage: stage.name };
 }
 
 function toEeGeometry(geojson: any) {

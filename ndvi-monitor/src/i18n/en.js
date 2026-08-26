@@ -259,7 +259,6 @@ export default {
   'auth.tagline': 'Sign in to sync your saved fields across devices and load live satellite imagery.',
   'auth.google': 'Sign in with Google',
   'auth.sync_hint': 'Sync your saved fields to this account',
-  'auth.or': 'or',
   'auth.or_email': 'or use email & password',
   'auth.tab_sign_in': 'Sign in',
   'auth.tab_create_account': 'Create account',
@@ -271,7 +270,6 @@ export default {
   'auth.err_email': 'Enter a valid email address.',
   'auth.err_password': 'Password must be at least 6 characters.',
   'auth.err_generic': 'Couldn\'t sign in — please try again.',
-  'auth.connect_ee': 'Connects the satellite NDVI imagery',
   'auth.explore': 'Explore the map first',
 
   // Confidence
@@ -304,7 +302,7 @@ export default {
   'help.red': 'Red',
   'help.bare_stressed': 'Bare soil, water, or stressed crops',
   'help.use_sign_in': 'Sign in',
-  'help.use_sign_in_txt': 'Click "Sign in with Google" to authenticate with Earth Engine.',
+  'help.use_sign_in_txt': 'Sign in once with Google or email — satellite imagery and your saved data unlock automatically.',
   'help.use_slider': 'Drag the slider',
   'help.use_slider_txt': 'Move the time slider at the bottom to see NDVI/NDWI/LSWI change month by month. A scene count next to the month label shows how many cloud-free Sentinel-2 images went into that month\'s composite (amber dot means 1-2 scenes — lower confidence). Click ↻ to jump to the most recent complete month.',
   'help.use_basemap': 'Toggle basemap',
@@ -380,7 +378,7 @@ export default {
   'landing.how_title': 'From sign-in to field report, in five steps.',
   'landing.how_desc': 'Each step mirrors what actually happens inside the app — nothing skipped, nothing simplified away.',
   'landing.how_1_title': 'Sign in with Google',
-  'landing.how_1_text': 'Google sign-in authenticates with Earth Engine to unlock live imagery, and syncs your saved fields through Supabase across devices.',
+  'landing.how_1_text': 'One sign-in unlocks everything: live satellite imagery is processed for you on secure servers, and your saved fields sync through Supabase across devices.',
   'landing.how_2_title': 'Draw or search an area',
   'landing.how_2_text': 'Search a place, drag a box on the map, or reuse a saved field boundary. Up to five areas per account, synced across devices.',
   'landing.how_3_title': 'Read NDVI, NDWI and LSWI',
