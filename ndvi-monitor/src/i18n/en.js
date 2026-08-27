@@ -423,4 +423,7 @@ export default {
   'landing.footer_how': 'How it works',
   'landing.footer_features': 'Features',
   'landing.footer_signin': 'Sign in',
+  'sheet.pull_up': 'Pull up',
+  'sheet.collapse': 'Collapse',
+  'sheet.expand': 'Expand',
 }

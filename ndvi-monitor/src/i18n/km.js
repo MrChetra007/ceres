@@ -423,5 +423,8 @@ export default {
   'landing.footer_credit': 'រូបភាព៖ រូបថតនាស្រែតាមរយៈអ្នកចូលរួម Wikimedia Commons · សមាសភាពផ្កាយរណបវាលទំនាបទន្លេមេគង្គទទួលបានការឧបត្ថម្ភពី NASA / Applied GeoSolutions។ ទិន្នន័យបន្លែ៖ Copernicus Sentinel-2 & Sentinel-1 ប្រសិទ្ធភាពតាម Google Earth Engine។ បរិមាណទឹកភ្លៀង៖ CHIRPS។',
   'landing.footer_how': 'របៀបប្រើប្រាស់',
   'landing.footer_features': 'លក្ខណៈពិសេស',
-  'landing.footer_signin': 'ចូលគណនី'
+  'landing.footer_signin': 'ចូលគណនី',
+  'sheet.pull_up': 'ទាញឡើង',
+  'sheet.collapse': 'បង្រួម',
+  'sheet.expand': 'ពង្រីក',
 };

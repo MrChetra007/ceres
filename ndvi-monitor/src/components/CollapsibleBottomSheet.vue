@@ -196,5 +196,16 @@ defineExpose({ open: isOpen, close, toggle })
   .sheet-tab {
     padding: 10px 16px 14px;
   }
+  .sheet-panel {
+    max-height: calc(100vh - 220px) !important;
+  }
+}
+@media (max-width: 480px) {
+  .collapsible-bottom-sheet {
+    bottom: 8px;
+  }
+  .sheet-panel {
+    max-height: calc(100vh - 260px) !important;
+  }
 }
 </style>

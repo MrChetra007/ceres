@@ -116,7 +116,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, nextTick } from 'vue'
 import Chart from 'chart.js/auto'
 import { state, fieldStatus, fieldTrends, setInfoChart, getStageAtDate, fieldConfidence } from '../store'
 import * as store from '../store'
@@ -396,12 +396,14 @@ const plantingText = computed(() => {
 const addedText = computed(() => (currentField.value && currentField.value.createdAt ? new Date(currentField.value.createdAt).toLocaleDateString() : '\u2014'))
 const areaHa = computed(() => (currentField.value ? getOrComputeArea(currentField.value) : 0))
 
-function render(data) {
+async function render(data) {
   const ctx = chartCanvas.value.getContext('2d')
   if (chart) chart.destroy()
   chart = new Chart(ctx, buildChartConfig(ctx, data, state.chartIndex, false, (date) => getStageAtDate(date), state.benchmarkValue))
   setInfoChart(chart)
   updateMarker()
+  await nextTick()
+  if (chart) chart.resize()
 }
 
 function updateMarker() {
@@ -577,7 +579,13 @@ watch(() => state.benchmarkValue, () => {
 })
 watch(() => state.mainMonth, () => updateMarker())
 watch(() => state.currentFieldId, () => { aiExplanation.value = ''; aiTruncated.value = false; photos.value = []; state.photosLightboxIndex = null; loadPhotos() })
-watch(() => state.infoPanelVisible, (open) => {
-  if (open && currentField.value) loadPhotos()
+watch(() => state.infoPanelVisible, async (open) => {
+  if (open && currentField.value) {
+    loadPhotos()
+    if (state.chartData) {
+      await nextTick()
+      render(state.chartData)
+    }
+  }
 })
 </script>
