@@ -116,7 +116,7 @@
 </template>
 
 <script setup>
-import { ref, computed, watch, nextTick } from 'vue'
+import { ref, computed, watch, nextTick, onBeforeUnmount } from 'vue'
 import Chart from 'chart.js/auto'
 import { state, fieldStatus, fieldTrends, setInfoChart, getStageAtDate, fieldConfidence } from '../store'
 import * as store from '../store'
@@ -136,6 +136,7 @@ const aiExplanation = ref('')
 const aiTruncated = ref(false)
 const photos = ref([])
 let chart = null
+let chartResizeObs = null
 
 const currentField = computed(() => state.fields.find((f) => f.id === state.currentFieldId) || null)
 const isField = computed(() => !!currentField.value)
@@ -399,11 +400,21 @@ const areaHa = computed(() => (currentField.value ? getOrComputeArea(currentFiel
 async function render(data) {
   const ctx = chartCanvas.value.getContext('2d')
   if (chart) chart.destroy()
+  if (chartResizeObs) { chartResizeObs.disconnect(); chartResizeObs = null }
   chart = new Chart(ctx, buildChartConfig(ctx, data, state.chartIndex, false, (date) => getStageAtDate(date), state.benchmarkValue))
   setInfoChart(chart)
   updateMarker()
-  await nextTick()
+  await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))
   if (chart) chart.resize()
+  const card = chartCanvas.value && chartCanvas.value.closest('.chart-card')
+  if (card) {
+    let resizeTimer = null
+    chartResizeObs = new ResizeObserver(() => {
+      clearTimeout(resizeTimer)
+      resizeTimer = setTimeout(() => { if (chart) chart.resize() }, 80)
+    })
+    chartResizeObs.observe(card)
+  }
 }
 
 function updateMarker() {
@@ -587,5 +598,10 @@ watch(() => state.infoPanelVisible, async (open) => {
       render(state.chartData)
     }
   }
+})
+
+onBeforeUnmount(() => {
+  if (chartResizeObs) { chartResizeObs.disconnect(); chartResizeObs = null }
+  if (chart) { chart.destroy(); chart = null }
 })
 </script>
