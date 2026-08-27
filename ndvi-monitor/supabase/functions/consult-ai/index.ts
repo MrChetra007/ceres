@@ -1,21 +1,14 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { generateExplanation, languageLine } from "../_shared/llm.ts";
+import { getCorsHeaders } from "../_shared/cors.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
 const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
-const APP_URL = Deno.env.get("APP_URL") || "*";
 const DAILY_CAP = 20;
 
 const supabase = createClient(SUPABASE_URL, SERVICE_ROLE);
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": APP_URL,
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-};
-
-function jsonResponse(body: unknown, status = 200): Response {
+function jsonResponse(body: unknown, status = 200, corsHeaders: Record<string, string>): Response {
   return new Response(JSON.stringify(body), {
     status,
     headers: { "Content-Type": "application/json", ...corsHeaders },
@@ -23,6 +16,7 @@ function jsonResponse(body: unknown, status = 200): Response {
 }
 
 Deno.serve(async (req) => {
+  const corsHeaders = getCorsHeaders(req);
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
@@ -32,7 +26,7 @@ Deno.serve(async (req) => {
     const {
       data: { user },
     } = await supabase.auth.getUser(authHeader.replace("Bearer ", ""));
-    if (!user) return jsonResponse({ ok: false, error: "Not signed in" }, 401);
+    if (!user) return jsonResponse({ ok: false, error: "Not signed in" }, 401, corsHeaders);
 
     const {
       fieldId,
@@ -58,7 +52,7 @@ Deno.serve(async (req) => {
 
     // There's nothing meaningful to explain without NDVI.
     if (ndviValue == null) {
-      return jsonResponse({ ok: false, error: "missing_data" }, 400);
+      return jsonResponse({ ok: false, error: "missing_data" }, 400, corsHeaders);
     }
 
     // 1. Check cache — only reuse if NDVI + status haven't moved
@@ -81,7 +75,7 @@ Deno.serve(async (req) => {
         // real boolean written at cache time.
         truncated: cached.truncated ?? false,
         cached: true,
-      });
+      }, 200, corsHeaders);
     }
 
     // 2. Check + increment daily usage
@@ -92,7 +86,7 @@ Deno.serve(async (req) => {
       .maybeSingle();
     const callsToday = usage?.calls_today ?? 0;
     if (callsToday >= DAILY_CAP) {
-      return jsonResponse({ ok: false, error: "daily_limit_reached" }, 429);
+      return jsonResponse({ ok: false, error: "daily_limit_reached" }, 429, corsHeaders);
     }
     await supabase
       .from("ai_usage")
@@ -149,9 +143,9 @@ Keep the whole reply under 45 words. Do not mention "NDVI", "LSWI" or any index 
       created_at: new Date().toISOString(),
     });
 
-    return jsonResponse({ ok: true, explanation, truncated, cached: false });
+    return jsonResponse({ ok: true, explanation, truncated, cached: false }, 200, corsHeaders);
   } catch (e) {
     console.error(e);
-    return jsonResponse({ ok: false, error: String(e) }, 500);
+    return jsonResponse({ ok: false, error: String(e) }, 500, corsHeaders);
   }
 });

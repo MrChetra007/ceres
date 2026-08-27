@@ -1,4 +1,5 @@
 import { createClient } from "npm:@supabase/supabase-js@2"
+import { getCorsHeaders } from "../_shared/cors.ts"
 
 // Edge Function: Telegram bot webhook.
 //  - Phase 8.3: /start <code> account linking.
@@ -274,10 +275,9 @@ async function handleCallbackQuery(update: any): Promise<Response> {
 }
 
 Deno.serve(async (req) => {
+  const corsHeaders = getCorsHeaders(req);
   if (req.method === "OPTIONS") {
-    return new Response("ok", {
-      headers: { "Access-Control-Allow-Origin": "*" },
-    })
+    return new Response("ok", { headers: corsHeaders })
   }
   if (req.method !== "POST") return new Response("ok")
 

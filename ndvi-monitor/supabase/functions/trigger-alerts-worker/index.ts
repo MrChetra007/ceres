@@ -10,26 +10,23 @@
 //          (JWT-required; the Supabase dashboard's "Invoke" button works as-is)
 // ============================================================================
 
+import { getCorsHeaders } from "../_shared/cors.ts";
+
 const WORKER_URL =
   Deno.env.get("EE_WORKER_URL") ||
   "https://wopwwtnvqyomiwbsxiks.functions.supabase.co/ee-alerts-worker";
 
 Deno.serve(async (req) => {
+  const corsHeaders = getCorsHeaders(req);
   if (req.method === "OPTIONS") {
-    return new Response("ok", {
-      headers: {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "POST, OPTIONS",
-        "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-      },
-    });
+    return new Response("ok", { headers: corsHeaders });
   }
 
   const serviceRole = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   if (!serviceRole) {
     return new Response(
       JSON.stringify({ ok: false, error: "SUPABASE_SERVICE_ROLE_KEY not set" }),
-      { status: 500, headers: { "Content-Type": "application/json" } },
+      { status: 500, headers: { "Content-Type": "application/json", ...corsHeaders } },
     );
   }
 
@@ -47,6 +44,6 @@ Deno.serve(async (req) => {
   const text = await resp.text();
   return new Response(text, {
     status: resp.status,
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...corsHeaders },
   });
 });

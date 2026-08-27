@@ -20,9 +20,9 @@
 
 import ee from "npm:@google/earthengine@0.1.395";
 import { statusFromNdvi } from "../_shared/growthStage.ts";
+import { getCorsHeaders } from "../_shared/cors.ts";
 
 const EE_KEY = JSON.parse(Deno.env.get("EE_SERVICE_ACCOUNT_KEY") || "{}");
-const APP_URL = Deno.env.get("APP_URL") || "*";
 
 // ── Index/visualization config (mirrors src/config.js INDICES) ────────────
 const BANDS: Record<string, string[]> = {
@@ -45,14 +45,7 @@ const TRUE_COLOR_BANDS = ["B4", "B3", "B2"];
 const TRUE_COLOR_VIS = { min: 0, max: 5000 };
 const DRY_MONTH_THRESHOLD = 50;
 
-const corsHeaders = {
-  "Access-Control-Allow-Origin": APP_URL,
-  "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
-  "Access-Control-Allow-Methods": "POST, OPTIONS",
-};
-
-function jsonResponse(body: unknown, status = 200): Response {
+function jsonResponse(body: unknown, status = 200, corsHeaders: Record<string, string>): Response {
   return new Response(JSON.stringify(body), {
     status,
     headers: { "Content-Type": "application/json", ...corsHeaders },
@@ -904,6 +897,7 @@ const HANDLERS: Record<string, Handler> = {
 };
 
 Deno.serve(async (req) => {
+  const corsHeaders = getCorsHeaders(req);
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
   }
@@ -912,12 +906,12 @@ Deno.serve(async (req) => {
   try {
     body = await req.json();
   } catch {
-    return jsonResponse({ ok: false, error: "invalid_json" }, 400);
+    return jsonResponse({ ok: false, error: "invalid_json" }, 400, corsHeaders);
   }
 
   const handler = body && HANDLERS[body.action];
   if (!handler) {
-    return jsonResponse({ ok: false, error: "unknown_action" }, 400);
+    return jsonResponse({ ok: false, error: "unknown_action" }, 400, corsHeaders);
   }
 
   // Timing instrumentation: `supabase functions logs ee-data` will show, per
@@ -932,7 +926,7 @@ Deno.serve(async (req) => {
     console.log(
       `[ee-data] ${body.action} ok in ${Math.round(performance.now() - started)}ms`,
     );
-    return jsonResponse({ ok: true, ...data });
+    return jsonResponse({ ok: true, ...data }, 200, corsHeaders);
   } catch (e: any) {
     console.error(
       `[ee-data] ${body.action} failed after ${Math.round(performance.now() - started)}ms:`,
@@ -940,6 +934,6 @@ Deno.serve(async (req) => {
     );
     const status = typeof e?.code === "number" ? e.code : 500;
     const error = e?.message === "invalid_geometry" ? "invalid_geometry" : String(e?.message || e);
-    return jsonResponse({ ok: false, error }, status);
+    return jsonResponse({ ok: false, error }, status, corsHeaders);
   }
 });
