@@ -158,6 +158,17 @@ function positionMenu() {
   menu.style.top = 'auto'
   menu.style.zIndex = '2000'
   menu.style.maxWidth = 'calc(100vw - 24px)'
+
+  // Clamp within viewport: if the menu extends past the left or right edge,
+  // re-anchor it so it stays fully visible.
+  const m = menu.getBoundingClientRect()
+  if (m.left < 12) {
+    menu.style.left = '12px'
+    menu.style.right = 'auto'
+  } else if (m.right > window.innerWidth - 12) {
+    menu.style.right = '12px'
+    menu.style.left = 'auto'
+  }
 }
 
 function remove(a) {
