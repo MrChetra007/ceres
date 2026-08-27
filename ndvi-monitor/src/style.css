@@ -2719,10 +2719,7 @@ body {
 }
 
 .areas-menu {
-  position: absolute;
-  bottom: calc(100% + 26px);
-  right: 0;
-  left: auto;
+  position: fixed;
   min-width: 220px;
   max-width: calc(100vw - 24px);
   background: var(--panel-2);
@@ -2730,7 +2727,7 @@ body {
   border-radius: var(--radius-md);
   box-shadow: var(--shadow);
   padding: 6px;
-  z-index: 40;
+  z-index: 2000;
 }
 
 .areas-menu-title {

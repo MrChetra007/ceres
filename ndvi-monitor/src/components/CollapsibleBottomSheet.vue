@@ -137,7 +137,7 @@ defineExpose({ open: isOpen, close, toggle })
   box-shadow: var(--shadow);
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .sheet-handle {
@@ -162,6 +162,7 @@ defineExpose({ open: isOpen, close, toggle })
   min-height: 0;
   display: flex;
   flex-direction: column;
+  position: relative;
 }
 
 /* Slide transition */

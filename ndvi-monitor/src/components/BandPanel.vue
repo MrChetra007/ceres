@@ -55,24 +55,26 @@
             <span class="band-btn-caption">{{ t('band.areas') }}</span>
             <span v-if="state.aois.length >= 5" class="areas-cap-dot" :title="t('band.areas_cap')"></span>
           </button>
-          <div class="areas-menu" v-show="areasOpen">
-            <div class="areas-menu-title">{{ t('band.my_areas') }}</div>
-            <button
-              v-for="a in state.aois"
-              :key="a.id"
-              class="areas-item"
-              :class="{ active: a.id === state.selectedAoiId }"
-              @click="pick(a)"
-            >
-              <span class="areas-item-name">{{ displayAoiName(a) }}</span>
-              <i class="ti ti-trash" :title="t('band.delete_area')" @click.stop="remove(a)"></i>
-            </button>
-            <div class="areas-empty" v-if="state.aois.length === 0">{{ t('band.no_areas') }}</div>
-            <button v-if="state.aois.length < 5" class="areas-new" @click="openNewArea">
-              <i class="ti ti-plus"></i> {{ t('band.new_area') }}
-            </button>
-            <div v-else class="areas-cap">{{ t('band.areas_cap') }}</div>
-          </div>
+          <Teleport to="body">
+            <div class="areas-menu" v-show="areasOpen" ref="areasMenuRef">
+              <div class="areas-menu-title">{{ t('band.my_areas') }}</div>
+              <button
+                v-for="a in state.aois"
+                :key="a.id"
+                class="areas-item"
+                :class="{ active: a.id === state.selectedAoiId }"
+                @click="pick(a)"
+              >
+                <span class="areas-item-name">{{ displayAoiName(a) }}</span>
+                <i class="ti ti-trash" :title="t('band.delete_area')" @click.stop="remove(a)"></i>
+              </button>
+              <div class="areas-empty" v-if="state.aois.length === 0">{{ t('band.no_areas') }}</div>
+              <button v-if="state.aois.length < 5" class="areas-new" @click="openNewArea">
+                <i class="ti ti-plus"></i> {{ t('band.new_area') }}
+              </button>
+              <div v-else class="areas-cap">{{ t('band.areas_cap') }}</div>
+            </div>
+          </Teleport>
         </div>
 
         <button class="aoi-btn" :class="{ active: state.aoiEditorVisible }" :title="t('band.edit_area_bounds')" @click="editArea">
@@ -86,7 +88,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import { state } from '../store'
 import * as store from '../store'
 import { INDICES, TRUE_COLOR } from '../config'
@@ -96,6 +98,7 @@ const { t } = useI18n()
 const areasOpen = ref(false)
 const areasWrap = ref(null)
 const areasGroupWrap = ref(null)
+const areasMenuRef = ref(null)
 
 const explainerText = computed(() => {
   const cfg = INDICES[state.currentIndex] || TRUE_COLOR
@@ -135,6 +138,28 @@ function pick(a) {
   store.selectAoi(a.id)
 }
 
+watch(areasOpen, async (open) => {
+  if (open) {
+    await nextTick()
+    positionMenu()
+  }
+})
+
+function positionMenu() {
+  if (!areasGroupWrap.value || !areasMenuRef.value) return
+  const btn = areasGroupWrap.value.querySelector('.areas-btn')
+  if (!btn) return
+  const rect = btn.getBoundingClientRect()
+  const menu = areasMenuRef.value
+  menu.style.position = 'fixed'
+  menu.style.right = (window.innerWidth - rect.right) + 'px'
+  menu.style.bottom = (window.innerHeight - rect.top + 6) + 'px'
+  menu.style.left = 'auto'
+  menu.style.top = 'auto'
+  menu.style.zIndex = '2000'
+  menu.style.maxWidth = 'calc(100vw - 24px)'
+}
+
 function remove(a) {
   if (!window.confirm(t('band.delete_confirm', { name: a.name }))) return
   store.deleteAoi(a.id)
@@ -157,7 +182,8 @@ function editArea() {
 }
 
 function onDocClick(e) {
-  if (areasGroupWrap.value && !areasGroupWrap.value.contains(e.target)) {
+  if (areasGroupWrap.value && !areasGroupWrap.value.contains(e.target) &&
+      !(areasMenuRef.value && areasMenuRef.value.contains(e.target))) {
     areasOpen.value = false
   }
 }
