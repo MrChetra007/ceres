@@ -1372,6 +1372,8 @@ export async function signUpWithEmail(email, password) {
 
 export async function signOut() {
   await supabase.signOut()
+  state.landingVisible = true
+  try { localStorage.removeItem('ndvi_landing_done') } catch {}
 }
 
 // Last user id whose fields/AOIs were loaded from Supabase. Guards against
@@ -1387,8 +1389,8 @@ sb.auth.onAuthStateChange((event, session) => {
   if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
     if (user && user.id !== lastLoadedUserId) {
       lastLoadedUserId = user.id
-      // eeReady now just means "signed in" — satellite data is served by the
-      // service-account-backed ee-data Edge Function, no EE login involved.
+      state.authOverlayVisible = false
+      state.landingVisible = false
       beginSessionWork()
       loadFieldsFromSupabase()
       loadAoisFromSupabase()
@@ -1396,6 +1398,10 @@ sb.auth.onAuthStateChange((event, session) => {
       if (localStorage.getItem('ndvi_fields') && !localStorage.getItem('ndvi_import_skipped')) {
         importLocalFieldsIfAny()
       }
+    } else if (!user) {
+      // INITIAL_SESSION with no persisted session → show landing, hide auth overlay
+      state.authOverlayVisible = false
+      state.landingVisible = true
     }
   } else if (event === 'SIGNED_OUT') {
     lastLoadedUserId = null
@@ -1411,7 +1417,8 @@ sb.auth.onAuthStateChange((event, session) => {
       if (mapReg.map) mapReg.map.removeLayer(mapReg.aoiRectangle)
       mapReg.aoiRectangle = null
     }
-    state.authOverlayVisible = true
+    state.authOverlayVisible = false
+    state.landingVisible = true
   }
 })
 
