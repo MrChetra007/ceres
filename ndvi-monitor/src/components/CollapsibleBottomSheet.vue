@@ -71,11 +71,11 @@ defineExpose({ open: isOpen, close, toggle })
 <style scoped>
 .collapsible-bottom-sheet {
   position: fixed;
-  bottom: 0;
+  bottom: 12px;
   left: 50%;
   transform: translateX(-50%);
-  width: min(100vw, 100%);
-  max-width: 100%;
+  width: auto;
+  max-width: calc(100vw - 24px);
   z-index: 1000;
   display: flex;
   flex-direction: column;
