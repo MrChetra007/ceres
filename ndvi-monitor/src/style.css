@@ -3582,6 +3582,20 @@ body {
   .band-panel .segmented-btn { padding: 5px 9px; }
   .latest-view-caption { display: none; }
   .latest-view-btn .latest-btn-label { font-size: 10px; }
+  /* Stack band-panel children vertically inside the bottom sheet on mobile */
+  .sheet-content .band-panel {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+  }
+  .sheet-content .band-divider {
+    width: 100%;
+    height: 0.5px;
+    align-self: stretch;
+  }
+  .sheet-content .band-panel .segmented {
+    flex-wrap: wrap;
+  }
   .areas-btn { padding: 4px 8px; max-width: none; flex-direction: column; gap: 2px; }
   .areas-btn-label { display: none; }
   .areas-btn .ti-chevron-down { display: none; }
