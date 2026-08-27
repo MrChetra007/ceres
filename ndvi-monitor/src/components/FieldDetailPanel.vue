@@ -1,5 +1,5 @@
 ﻿<template>
-  <div id="field-detail" class="panel detail-panel" v-show="state.infoPanelVisible">
+  <div id="field-detail" class="panel detail-panel">
     <div class="detail-header">
       <div class="detail-heading">
         <p class="detail-title">{{ title }}</p>

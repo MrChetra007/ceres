@@ -1,5 +1,5 @@
 <template>
-  <div class="obs-strip panel" v-show="state.observationsVisible">
+  <div class="obs-strip panel">
     <div class="obs-strip-head">
       <span class="obs-title">
         <i class="ti ti-satellite"></i>

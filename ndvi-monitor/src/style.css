@@ -2069,6 +2069,13 @@ body {
   gap: 2px;
 }
 
+.sidebar-settings-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
 .drawer-item {
   display: flex;
   align-items: center;

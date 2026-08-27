@@ -9,9 +9,18 @@
   <MapLegend />
   <HealthZonePanel />
 
-  <Sidebar ref="sidebarRef" />
-  <FieldDetailPanel />
-  <ObservationsPanel />
+  <CollapsibleDrawer v-model="leftDrawerOpen" position="left" :width="300">
+    <template #title><i class="ti ti-tools"></i> {{ t('topbar.settings') }}</template>
+    <Sidebar />
+  </CollapsibleDrawer>
+
+  <CollapsibleDrawer v-model="state.infoPanelVisible" position="right" :width="360" no-header>
+    <FieldDetailPanel />
+  </CollapsibleDrawer>
+
+  <CollapsibleBottomSheet v-model="state.observationsVisible">
+    <ObservationsPanel />
+  </CollapsibleBottomSheet>
 
   <div id="status-bar" class="status-toast" :class="{ hidden: !state.statusText }">{{ state.statusText }}</div>
 
@@ -26,16 +35,16 @@
   <div id="toast-stack" class="toast-stack">
     <transition-group name="toast">
       <div
-        v-for="t in state.toasts"
-        :key="t.id"
+        v-for="toast in state.toasts"
+        :key="toast.id"
         class="toast"
-      >{{ t.msg }}</div>
+      >{{ toast.msg }}</div>
     </transition-group>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, watch } from 'vue'
+import { ref, watch, onMounted } from 'vue'
 import { state } from './store'
 import * as store from './store'
 import LandingPage from './components/LandingPage.vue'
@@ -45,6 +54,8 @@ import TimeControl from './components/TimeControl.vue'
 import BandPanel from './components/BandPanel.vue'
 import MapLegend from './components/MapLegend.vue'
 import HealthZonePanel from './components/HealthZonePanel.vue'
+import CollapsibleDrawer from './components/CollapsibleDrawer.vue'
+import CollapsibleBottomSheet from './components/CollapsibleBottomSheet.vue'
 import Sidebar from './components/Sidebar.vue'
 import FieldDetailPanel from './components/FieldDetailPanel.vue'
 import ObservationsPanel from './components/ObservationsPanel.vue'
@@ -55,13 +66,19 @@ import ChartModal from './components/ChartModal.vue'
 import AuthOverlay from './components/AuthOverlay.vue'
 import DatePickerModal from './components/DatePickerModal.vue'
 import TelegramModal from './components/TelegramModal.vue'
+import { useI18n } from './i18n'
 
-const sidebarRef = ref(null)
+const { t } = useI18n()
+const leftDrawerOpen = ref(false)
 let statusTimer = null
 
 function openDashboard() {
-  if (sidebarRef.value) sidebarRef.value.open = true
+  leftDrawerOpen.value = true
 }
+
+watch(leftDrawerOpen, (v) => {
+  document.body.style.overflow = v ? 'hidden' : ''
+})
 
 watch(() => state.statusText, () => {
   clearTimeout(statusTimer)
@@ -71,9 +88,6 @@ watch(() => state.statusText, () => {
 })
 
 onMounted(() => {
-  // Session restore is handled by supabase-js: a persisted Supabase session
-  // fires INITIAL_SESSION -> store.beginSessionWork() (which now also unlocks
-  // satellite data — no separate Earth Engine login exists anymore).
   store.applyRangeFromUrl()
   window.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && state.isDrawing) store.cancelDraw()
@@ -81,8 +95,6 @@ onMounted(() => {
   })
 })
 
-// Load the per-pass observation list lazily: whenever the toggle opens the
-// panel or the selected field changes, (re-)pull observations for that field.
 watch(
   [() => state.observationsVisible, () => state.currentFieldId],
   ([visible, fieldId]) => {

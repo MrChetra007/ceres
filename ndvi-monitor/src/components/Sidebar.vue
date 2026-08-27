@@ -1,168 +1,151 @@
 <template>
-  <transition name="drawer-fade">
-    <div
-      v-if="open"
-      class="drawer-overlay sidebar-backdrop"
-      @click="open = false"
-    ></div>
-  </transition>
+  <div class="drawer-account">
+    <i class="ti ti-user"></i>
+    <span>{{ userLabel }}</span>
+  </div>
 
-  <transition name="sidebar-slide">
-    <aside id="sidebar" class="sidebar" v-if="open">
-      <div class="drawer-header">
-        <span class="drawer-title"><i class="ti ti-tools"></i>{{ t('topbar.settings') }}</span>
-        <button class="drawer-close" @click="open = false" :aria-label="t('common.close')">&times;</button>
+  <div class="sidebar-settings-list">
+    <button
+      class="drawer-item"
+      :class="{ on: state.compareMode }"
+      :title="t('topbar.compare_title')"
+      @click="toggleCompare"
+    >
+      <i class="ti ti-columns-3"></i><span>{{ t('topbar.compare') }}</span>
+      <i class="ti ti-check drawer-check" v-if="state.compareMode"></i>
+    </button>
+
+    <div class="drawer-item lang-toggle">
+      <i class="ti ti-map"></i>
+      <span>{{ t('band.base_layer') }}</span>
+      <div class="lang-seg">
+        <button :class="{ on: state.currentBase === 'street' }" @click="store.setBaseLayer('street')">{{ t('topbar.street') }}</button>
+        <button :class="{ on: state.currentBase === 'satellite' }" @click="store.setBaseLayer('satellite')">{{ t('topbar.satellite') }}</button>
       </div>
+    </div>
 
-      <div class="drawer-account">
-        <i class="ti ti-user"></i>
-        <span>{{ userLabel }}</span>
+    <button class="drawer-item" :title="t('topbar.export_png')" @click="doExport('png')">
+      <i class="ti ti-photo"></i><span>{{ t('topbar.export_png') }}</span>
+    </button>
+    <button class="drawer-item" :title="t('topbar.export_pdf')" @click="doExport('pdf')">
+      <i class="ti ti-file-text"></i><span>{{ t('topbar.export_pdf') }}</span>
+    </button>
+
+    <button
+      class="drawer-item"
+      :class="{ on: state.telegramChatId }"
+      :title="t('common.telegram_alerts')"
+      @click="openTelegram"
+    >
+      <i class="ti ti-brand-telegram"></i><span>{{ t('common.telegram_alerts') }}</span>
+      <span class="tg-status-dot" :class="{ on: state.telegramChatId }"></span>
+    </button>
+
+    <button class="drawer-item" :title="t('topbar.how_this_works')" @click="openHelp">
+      <i class="ti ti-help"></i><span>{{ t('topbar.help') }}</span>
+    </button>
+
+    <div class="drawer-item lang-toggle">
+      <i class="ti ti-language"></i>
+      <span>{{ t('common.language') }}</span>
+      <div class="lang-seg">
+        <button :class="{ on: state.preferredLanguage === 'en' }" @click="setLang('en')">EN</button>
+        <button :class="{ on: state.preferredLanguage === 'km' }" @click="setLang('km')">ខ្មែរ</button>
       </div>
+    </div>
 
-      <div class="drawer-body">
-        <button
-          class="drawer-item"
-          :class="{ on: state.compareMode }"
-          :title="t('topbar.compare_title')"
-          @click="toggleCompare"
-        >
-          <i class="ti ti-columns-3"></i><span>{{ t('topbar.compare') }}</span>
-          <i class="ti ti-check drawer-check" v-if="state.compareMode"></i>
-        </button>
+    <button v-if="state.supabaseUser" class="drawer-item sign-out" @click="store.signOut()">
+      <i class="ti ti-logout"></i><span>{{ t('common.sign_out') }}</span>
+    </button>
+    <button v-else class="drawer-item" @click="store.showAuthOverlay()">
+      <i class="ti ti-login"></i><span>{{ t('topbar.sign_in') }}</span>
+    </button>
+  </div>
 
-        <div class="drawer-item lang-toggle">
-          <i class="ti ti-map"></i>
-          <span>{{ t('band.base_layer') }}</span>
-          <div class="lang-seg">
-            <button :class="{ on: state.currentBase === 'street' }" @click="store.setBaseLayer('street')">{{ t('topbar.street') }}</button>
-            <button :class="{ on: state.currentBase === 'satellite' }" @click="store.setBaseLayer('satellite')">{{ t('topbar.satellite') }}</button>
-          </div>
-        </div>
-
-        <button class="drawer-item" :title="t('topbar.export_png')" @click="doExport('png')">
-          <i class="ti ti-photo"></i><span>{{ t('topbar.export_png') }}</span>
-        </button>
-        <button class="drawer-item" :title="t('topbar.export_pdf')" @click="doExport('pdf')">
-          <i class="ti ti-file-text"></i><span>{{ t('topbar.export_pdf') }}</span>
-        </button>
-
-        <button
-          class="drawer-item"
-          :class="{ on: state.telegramChatId }"
-          :title="t('common.telegram_alerts')"
-          @click="openTelegram"
-        >
-          <i class="ti ti-brand-telegram"></i><span>{{ t('common.telegram_alerts') }}</span>
-          <span class="tg-status-dot" :class="{ on: state.telegramChatId }"></span>
-        </button>
-
-        <button class="drawer-item" :title="t('topbar.how_this_works')" @click="openHelp">
-          <i class="ti ti-help"></i><span>{{ t('topbar.help') }}</span>
-        </button>
-
-        <div class="drawer-item lang-toggle">
-          <i class="ti ti-language"></i>
-          <span>{{ t('common.language') }}</span>
-          <div class="lang-seg">
-            <button :class="{ on: state.preferredLanguage === 'en' }" @click="setLang('en')">EN</button>
-            <button :class="{ on: state.preferredLanguage === 'km' }" @click="setLang('km')">ខ្មែរ</button>
-          </div>
-        </div>
-
-        <button v-if="state.supabaseUser" class="drawer-item sign-out" @click="store.signOut()">
-          <i class="ti ti-logout"></i><span>{{ t('common.sign_out') }}</span>
-        </button>
-        <button v-else class="drawer-item" @click="store.showAuthOverlay()">
-          <i class="ti ti-login"></i><span>{{ t('topbar.sign_in') }}</span>
-        </button>
+  <div class="sidebar-fields">
+    <div class="sidebar-header">
+      <div>
+        <h3>{{ t('sidebar.monitored_fields') }}</h3>
+        <span class="sidebar-count mono">{{ state.fields.length }} {{ t('sidebar.parcels') }} · {{ totalHaText }}</span>
       </div>
+    </div>
 
-      <div class="sidebar-fields">
-        <div class="sidebar-header">
+    <div class="sidebar-search">
+      <i class="ti ti-search"></i>
+      <input type="text" v-model="query" :placeholder="t('sidebar.search')" />
+    </div>
+
+    <div class="filter-tabs">
+      <button
+        v-for="t2 in tabsLabeled"
+        :key="t2.key"
+        class="filter-tab"
+        :class="{ active: filter === t2.key }"
+        @click="filter = t2.key"
+      >{{ t2.label }}</button>
+    </div>
+
+    <button
+      v-if="state.fields.length > 0 && !state.currentFieldId"
+      class="ai-hint"
+      :title="t('field.ai_agronomist')"
+      @click="openFirstField"
+    >
+      <i class="ti ti-sparkles"></i>
+      <span>{{ t('sidebar.ai_hint') }}</span>
+    </button>
+
+    <div id="field-list" class="sidebar-list">
+      <div
+        v-for="f in filtered"
+        :key="f.id"
+        class="field-card"
+        :class="{ active: f.id === state.currentFieldId }"
+        :data-id="f.id"
+        @click="onCardClick(f)"
+      >
+        <div class="field-card-header">
           <div>
-            <h3>{{ t('sidebar.monitored_fields') }}</h3>
-            <span class="sidebar-count mono">{{ state.fields.length }} {{ t('sidebar.parcels') }} · {{ totalHaText }}</span>
+            <p class="field-card-name">{{ f.name }}</p>
+            <p class="field-card-meta mono">{{ formatHectares(getOrComputeArea(f)).toUpperCase() }} · {{ stageLine(f) }}</p>
+          </div>
+          <div class="field-card-badges">
+            <span class="status-badge" :class="badgeClass(f)">{{ status(f) ? status(f).badgeText : '\u2014' }}</span>
+            <ConfidenceBadge v-if="conf(f)" :tier="conf(f).tier" :reason="conf(f).reason" class="card-conf" />
           </div>
         </div>
 
-        <div class="sidebar-search">
-          <i class="ti ti-search"></i>
-          <input type="text" v-model="query" :placeholder="t('sidebar.search')" />
-        </div>
-
-        <div class="filter-tabs">
-          <button
-            v-for="t2 in tabsLabeled"
-            :key="t2.key"
-            class="filter-tab"
-            :class="{ active: filter === t2.key }"
-            @click="filter = t2.key"
-          >{{ t2.label }}</button>
-        </div>
-
-        <button
-          v-if="state.fields.length > 0 && !state.currentFieldId"
-          class="ai-hint"
-          :title="t('field.ai_agronomist')"
-          @click="openFirstField"
-        >
-          <i class="ti ti-sparkles"></i>
-          <span>{{ t('sidebar.ai_hint') }}</span>
-        </button>
-
-        <div id="field-list" class="sidebar-list">
-          <div
-            v-for="f in filtered"
-            :key="f.id"
-            class="field-card"
-            :class="{ active: f.id === state.currentFieldId }"
-            :data-id="f.id"
-            @click="onCardClick(f)"
-          >
-            <div class="field-card-header">
-              <div>
-                <p class="field-card-name">{{ f.name }}</p>
-                <p class="field-card-meta mono">{{ formatHectares(getOrComputeArea(f)).toUpperCase() }} · {{ stageLine(f) }}</p>
-              </div>
-              <div class="field-card-badges">
-                <span class="status-badge" :class="badgeClass(f)">{{ status(f) ? status(f).badgeText : '\u2014' }}</span>
-                <ConfidenceBadge v-if="conf(f)" :tier="conf(f).tier" :reason="conf(f).reason" class="card-conf" />
-              </div>
-            </div>
-
-            <div class="field-card-row">
-              <svg class="field-sparkline" :class="sparkClass(f)" viewBox="0 0 100 28" preserveAspectRatio="none">
-                <polyline v-if="sparkPoints(f)" :points="sparkPoints(f)" fill="none" stroke-linejoin="round" stroke-linecap="round" />
-                <line v-else x1="0" y1="14" x2="100" y2="14" stroke-dasharray="3 3" />
-              </svg>
-              <div class="field-card-stats">
-                <button class="plant-date-btn" :title="t('sidebar.set_planting_date')" @click.stop="setPlantingDate(f)"><i class="ti ti-calendar-plus"></i></button>
-                <button class="plant-date-btn" :title="t('sidebar.edit_field')" @click.stop="store.startFieldEdit(f)"><i class="ti ti-pencil"></i></button>
-              </div>
-            </div>
-
-            <div v-if="areaWarning(f)" class="field-area-warning">{{ areaWarning(f) }}</div>
-            <button class="delete-btn" @click.stop="store.deleteField(f.id)" :title="t('sidebar.delete_field')">&#10005;</button>
+        <div class="field-card-row">
+          <svg class="field-sparkline" :class="sparkClass(f)" viewBox="0 0 100 28" preserveAspectRatio="none">
+            <polyline v-if="sparkPoints(f)" :points="sparkPoints(f)" fill="none" stroke-linejoin="round" stroke-linecap="round" />
+            <line v-else x1="0" y1="14" x2="100" y2="14" stroke-dasharray="3 3" />
+          </svg>
+          <div class="field-card-stats">
+            <button class="plant-date-btn" :title="t('sidebar.set_planting_date')" @click.stop="setPlantingDate(f)"><i class="ti ti-calendar-plus"></i></button>
+            <button class="plant-date-btn" :title="t('sidebar.edit_field')" @click.stop="store.startFieldEdit(f)"><i class="ti ti-pencil"></i></button>
           </div>
-
-          <p v-if="state.fields.length === 0" class="sidebar-hint">{{ t('sidebar.no_fields') }}</p>
-          <p v-else-if="filtered.length === 0" class="sidebar-hint">{{ t('sidebar.no_match') }}</p>
         </div>
 
-        <div class="sidebar-footer">
-          <button class="draw-btn" :class="{ drawing: state.isDrawing }" @click="store.startDraw()">
-            <i class="ti ti-plus"></i>
-            <template v-if="state.isDrawing">{{ t('sidebar.cancel_draw') }}</template>
-            <template v-else>{{ t('sidebar.add_field') }}</template>
-          </button>
-        </div>
+        <div v-if="areaWarning(f)" class="field-area-warning">{{ areaWarning(f) }}</div>
+        <button class="delete-btn" @click.stop="store.deleteField(f.id)" :title="t('sidebar.delete_field')">&#10005;</button>
       </div>
-    </aside>
-  </transition>
+
+      <p v-if="state.fields.length === 0" class="sidebar-hint">{{ t('sidebar.no_fields') }}</p>
+      <p v-else-if="filtered.length === 0" class="sidebar-hint">{{ t('sidebar.no_match') }}</p>
+    </div>
+
+    <div class="sidebar-footer">
+      <button class="draw-btn" :class="{ drawing: state.isDrawing }" @click="store.startDraw()">
+        <i class="ti ti-plus"></i>
+        <template v-if="state.isDrawing">{{ t('sidebar.cancel_draw') }}</template>
+        <template v-else>{{ t('sidebar.add_field') }}</template>
+      </button>
+    </div>
+  </div>
 </template>
 
 <script setup>
-import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed } from 'vue'
 import { state, fieldStatus, fieldTrends } from '../store'
 import * as store from '../store'
 import { getOrComputeArea, formatHectares, getAreaWarning, fieldConfidence } from '../store'
@@ -171,7 +154,6 @@ import { useI18n } from '../i18n'
 import { toKhmerDigits } from '../services/format'
 
 const { t } = useI18n()
-const open = ref(false)
 const query = ref('')
 const filter = ref('all')
 
@@ -307,22 +289,4 @@ function openHelp() {
 function setLang(lang) {
   store.setLanguage(lang)
 }
-
-function onKeydown(e) {
-  if (e.key === 'Escape') open.value = false
-}
-
-// While the drawer is open, lock page scroll so the map/panels behind are
-// neither scrollable nor clickable (the backdrop already intercepts taps).
-watch(open, (v) => {
-  document.body.style.overflow = v ? 'hidden' : ''
-})
-
-onMounted(() => window.addEventListener('keydown', onKeydown))
-onBeforeUnmount(() => {
-  window.removeEventListener('keydown', onKeydown)
-  document.body.style.overflow = ''
-})
-
-defineExpose({ open })
 </script>
