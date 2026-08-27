@@ -3511,6 +3511,36 @@ body {
 
 .band-wrap { display: contents; }
 
+/* When BandPanel is inside the bottom sheet, override its fixed positioning */
+.sheet-content .band-panel {
+  position: static;
+  transform: none;
+  width: 100%;
+  z-index: auto;
+}
+
+.sheet-content .band-explainer {
+  position: static;
+  transform: none;
+}
+
+.sheet-content .obs-strip {
+  position: static;
+  transform: none;
+  width: 100%;
+  z-index: auto;
+  bottom: auto;
+  left: auto;
+}
+
+.sheet-divider {
+  width: 100%;
+  height: 1px;
+  background: var(--panel-border);
+  margin: 8px 0;
+  flex-shrink: 0;
+}
+
 /* ---- Responsive (spec section 5) ---- */
 /* Step 3: on desktop the time-slider panel is always expanded (collapse is a
    mobile-only behavior). The `collapsed` ref may still be true from a prior

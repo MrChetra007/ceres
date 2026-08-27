@@ -160,6 +160,8 @@ defineExpose({ open: isOpen, close, toggle })
   overflow-y: auto;
   padding: 0 16px 16px;
   min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 /* Slide transition */

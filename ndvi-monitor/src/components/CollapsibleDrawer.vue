@@ -1,5 +1,5 @@
 <template>
-  <div class="collapsible-drawer" :class="[position, { open: isOpen }]">
+  <div class="collapsible-drawer" :class="[position, { open: isOpen }]" ref="drawerEl">
     <!-- Collapsed tab (edge trigger) -->
     <button
       class="drawer-tab"
@@ -10,15 +10,6 @@
     >
       <i class="ti" :class="tabIcon"></i>
     </button>
-
-    <!-- Backdrop (only on mobile/tablet, or when open) -->
-    <transition name="drawer-fade">
-      <div
-        v-if="isOpen"
-        class="drawer-backdrop"
-        @click="close"
-      ></div>
-    </transition>
 
     <!-- Drawer panel -->
     <transition :name="`drawer-slide-${position}`">
@@ -61,6 +52,7 @@ const props = defineProps({
 const emit = defineEmits(['update:modelValue'])
 
 const isOpen = ref(props.modelValue)
+const drawerEl = ref(null)
 
 const tabIcon = computed(() => {
   if (props.position === 'left') return isOpen.value ? 'ti-chevron-left' : 'ti-chevron-right'
@@ -83,10 +75,21 @@ function onKeydown(e) {
   if (e.key === 'Escape') close()
 }
 
+function onClickOutside(e) {
+  if (!isOpen.value || !drawerEl.value) return
+  if (!drawerEl.value.contains(e.target)) close()
+}
+
 watch(() => props.modelValue, (v) => { isOpen.value = v })
 
-onMounted(() => window.addEventListener('keydown', onKeydown))
-onBeforeUnmount(() => window.removeEventListener('keydown', onKeydown))
+onMounted(() => {
+  window.addEventListener('keydown', onKeydown)
+  document.addEventListener('click', onClickOutside, true)
+})
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', onKeydown)
+  document.removeEventListener('click', onClickOutside, true)
+})
 
 defineExpose({ open: isOpen, close, toggle })
 </script>
@@ -146,15 +149,6 @@ defineExpose({ open: isOpen, close, toggle })
 .drawer-tab:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
-}
-
-/* Backdrop */
-.drawer-backdrop {
-  position: fixed;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.3);
-  backdrop-filter: blur(2px);
-  z-index: 999;
 }
 
 /* Drawer panel */
@@ -250,16 +244,6 @@ defineExpose({ open: isOpen, close, toggle })
 .drawer-slide-right-enter-from,
 .drawer-slide-right-leave-to {
   transform: translateX(100%);
-}
-
-.drawer-fade-enter-active,
-.drawer-fade-leave-active {
-  transition: opacity 0.2s ease;
-}
-
-.drawer-fade-enter-from,
-.drawer-fade-leave-to {
-  opacity: 0;
 }
 
 /* Mobile adjustments */

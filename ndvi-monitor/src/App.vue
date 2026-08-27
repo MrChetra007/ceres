@@ -5,7 +5,6 @@
   <div v-if="state.loading" class="map-loading"></div>
 
   <TimeControl />
-  <BandPanel />
   <MapLegend />
   <HealthZonePanel />
 
@@ -20,6 +19,8 @@
 
   <CollapsibleBottomSheet v-model="state.observationsVisible">
     <ObservationsPanel />
+    <div class="sheet-divider"></div>
+    <BandPanel />
   </CollapsibleBottomSheet>
 
   <div id="status-bar" class="status-toast" :class="{ hidden: !state.statusText }">{{ state.statusText }}</div>
