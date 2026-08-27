@@ -476,8 +476,10 @@
 
 <script setup>
 import { ref, onMounted, onBeforeUnmount, nextTick } from "vue";
+import { useRouter } from "vue-router";
 import { state } from "../store";
 import * as store from "../store";
+import { sb } from "../services/supabase";
 
 const leaving = ref(false);
 
@@ -505,10 +507,22 @@ function enter() {
   leaving.value = true;
   setTimeout(() => {
     store.dismissLanding();
+    import('../router/index.js').then((m) => {
+      const router = m.default
+      if (router.currentRoute.value.path !== '/map') router.push('/map')
+    })
   }, 400);
 }
 
 onMounted(async () => {
+  // If user is already logged in (persisted Supabase session), skip landing
+  const router = useRouter();
+  const { data } = await sb.auth.getSession();
+  if (data.session && data.session.user) {
+    router.replace('/map');
+    return;
+  }
+
   await nextTick();
 
   // ---- hero NDVI scan wipe (auto sweep) ----

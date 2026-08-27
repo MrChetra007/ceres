@@ -15,6 +15,16 @@ import {
 import { sb } from './services/supabase'
 import * as supabase from './services/supabase'
 
+let _router = null
+let _routerReady = null
+function getRouter() {
+  if (_router) return Promise.resolve(_router)
+  if (!_routerReady) {
+    _routerReady = import('./router/index.js').then((m) => { _router = m.default; return _router })
+  }
+  return _routerReady
+}
+
 // ---------------------------------------------------------------------------
 // Idle-time deferral — pushes non-critical background work after the map load
 // the user is actually waiting on (Earth Engine's JS client throttles calls).
@@ -1322,6 +1332,18 @@ export function beginSessionWork() {
       refreshAllFieldStatuses()
       refreshAllFieldTrends()
     })
+  } else if (state.eeReady) {
+    // Map not mounted yet (e.g. user signed in from landing page before
+    // router navigated to /map). Retry once the map component creates it.
+    let tries = 0
+    const wait = () => {
+      if (mapReg.map || ++tries > 50) {
+        if (mapReg.map) beginSessionWork()
+        return
+      }
+      setTimeout(wait, 200)
+    }
+    wait()
   }
 }
 
@@ -1374,6 +1396,9 @@ export async function signOut() {
   await supabase.signOut()
   state.landingVisible = true
   try { localStorage.removeItem('ndvi_landing_done') } catch {}
+  getRouter().then((r) => {
+    if (r.currentRoute.value.path !== '/') r.push('/')
+  })
 }
 
 // Last user id whose fields/AOIs were loaded from Supabase. Guards against
@@ -1391,6 +1416,9 @@ sb.auth.onAuthStateChange((event, session) => {
       lastLoadedUserId = user.id
       state.authOverlayVisible = false
       state.landingVisible = false
+      getRouter().then((r) => {
+        if (r.currentRoute.value.path !== '/map') r.push('/map')
+      })
       beginSessionWork()
       loadFieldsFromSupabase()
       loadAoisFromSupabase()
@@ -1419,6 +1447,9 @@ sb.auth.onAuthStateChange((event, session) => {
     }
     state.authOverlayVisible = false
     state.landingVisible = true
+    getRouter().then((r) => {
+      if (r.currentRoute.value.path !== '/') r.push('/')
+    })
   }
 })
 
