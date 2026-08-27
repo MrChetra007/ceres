@@ -9,7 +9,7 @@
   <HealthZonePanel />
 
   <CollapsibleDrawer v-model="leftDrawerOpen" position="left" :width="300">
-    <template #title><i class="ti ti-tools"></i> {{ t('topbar.settings') }}</template>
+    <template #title><i class="ti ti-list-details"></i> {{ t('sidebar.monitored_fields') }}</template>
     <Sidebar />
   </CollapsibleDrawer>
 

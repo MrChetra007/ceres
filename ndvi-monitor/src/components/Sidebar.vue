@@ -1,67 +1,4 @@
 <template>
-  <div class="drawer-account">
-    <i class="ti ti-user"></i>
-    <span>{{ userLabel }}</span>
-  </div>
-
-  <div class="sidebar-settings-list">
-    <button
-      class="drawer-item"
-      :class="{ on: state.compareMode }"
-      :title="t('topbar.compare_title')"
-      @click="toggleCompare"
-    >
-      <i class="ti ti-columns-3"></i><span>{{ t('topbar.compare') }}</span>
-      <i class="ti ti-check drawer-check" v-if="state.compareMode"></i>
-    </button>
-
-    <div class="drawer-item lang-toggle">
-      <i class="ti ti-map"></i>
-      <span>{{ t('band.base_layer') }}</span>
-      <div class="lang-seg">
-        <button :class="{ on: state.currentBase === 'street' }" @click="store.setBaseLayer('street')">{{ t('topbar.street') }}</button>
-        <button :class="{ on: state.currentBase === 'satellite' }" @click="store.setBaseLayer('satellite')">{{ t('topbar.satellite') }}</button>
-      </div>
-    </div>
-
-    <button class="drawer-item" :title="t('topbar.export_png')" @click="doExport('png')">
-      <i class="ti ti-photo"></i><span>{{ t('topbar.export_png') }}</span>
-    </button>
-    <button class="drawer-item" :title="t('topbar.export_pdf')" @click="doExport('pdf')">
-      <i class="ti ti-file-text"></i><span>{{ t('topbar.export_pdf') }}</span>
-    </button>
-
-    <button
-      class="drawer-item"
-      :class="{ on: state.telegramChatId }"
-      :title="t('common.telegram_alerts')"
-      @click="openTelegram"
-    >
-      <i class="ti ti-brand-telegram"></i><span>{{ t('common.telegram_alerts') }}</span>
-      <span class="tg-status-dot" :class="{ on: state.telegramChatId }"></span>
-    </button>
-
-    <button class="drawer-item" :title="t('topbar.how_this_works')" @click="openHelp">
-      <i class="ti ti-help"></i><span>{{ t('topbar.help') }}</span>
-    </button>
-
-    <div class="drawer-item lang-toggle">
-      <i class="ti ti-language"></i>
-      <span>{{ t('common.language') }}</span>
-      <div class="lang-seg">
-        <button :class="{ on: state.preferredLanguage === 'en' }" @click="setLang('en')">EN</button>
-        <button :class="{ on: state.preferredLanguage === 'km' }" @click="setLang('km')">ខ្មែរ</button>
-      </div>
-    </div>
-
-    <button v-if="state.supabaseUser" class="drawer-item sign-out" @click="store.signOut()">
-      <i class="ti ti-logout"></i><span>{{ t('common.sign_out') }}</span>
-    </button>
-    <button v-else class="drawer-item" @click="store.showAuthOverlay()">
-      <i class="ti ti-login"></i><span>{{ t('topbar.sign_in') }}</span>
-    </button>
-  </div>
-
   <div class="sidebar-fields">
     <div class="sidebar-header">
       <div>
@@ -168,10 +105,6 @@ const tabsLabeled = computed(() => tabs.map((x) => ({
   label: tAbs(x.label, { all: 'ទាំងអស់', healthy: 'ល្អ', alerts: 'ព្រមាន' }[x.key]),
 })))
 
-const userLabel = computed(() =>
-  state.supabaseUser ? (state.supabaseUser.email || t('topbar.signed_in')) : t('topbar.sign_in')
-)
-
 const totalHa = computed(() => {
   let ha = 0
   state.fields.forEach((f) => { ha += getOrComputeArea(f) })
@@ -262,31 +195,5 @@ function setPlantingDate(f) {
     // A manual overwrite supersedes any satellite-estimated date.
     store.updateField(f.id, { planting_date: newDate, planting_date_source: 'manual' })
   })
-}
-
-// --- Drawer actions (reused from the desktop header) ---
-function toggleCompare() {
-  state.compareMode = !state.compareMode
-}
-
-function doExport(fmt) {
-  if (fmt === 'png') store.exportChart()
-  else store.exportPdf()
-}
-
-function openTelegram() {
-  if (!state.supabaseUser) {
-    store.showAuthOverlay()
-    return
-  }
-  store.openTelegramModal()
-}
-
-function openHelp() {
-  state.helpVisible = true
-}
-
-function setLang(lang) {
-  store.setLanguage(lang)
 }
 </script>

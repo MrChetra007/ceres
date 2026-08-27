@@ -2157,6 +2157,44 @@ body {
 .settings-item.lang-toggle:hover { background: transparent; color: var(--text-dim); }
 .settings-item.lang-toggle .lang-seg { margin-left: auto; }
 
+/* ---- Hamburger dropdown (mobile settings menu) ---- */
+.hamburger-dropdown {
+  position: relative;
+}
+
+.hamburger-menu {
+  position: fixed;
+  top: 56px;
+  right: 8px;
+  left: auto;
+  max-height: calc(100vh - 72px);
+  overflow-y: auto;
+}
+
+.hamburger-divider {
+  height: 0.5px;
+  background: var(--panel-border);
+  margin: 4px 10px;
+}
+
+.hamburger-account {
+  cursor: default;
+  opacity: 0.8;
+}
+.hamburger-account:hover {
+  background: transparent;
+  color: var(--text-dim);
+}
+
+.hamburger-check {
+  margin-left: auto;
+  font-size: 16px;
+}
+
+.settings-item.sign-out { color: var(--red); }
+.settings-item.sign-out .ti { color: var(--red); }
+.settings-item.sign-out:hover { background: var(--red-dim); }
+
 /* ---- Time control (top-center) ---- */
 .time-panel {
   position: fixed;

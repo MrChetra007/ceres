@@ -86,9 +86,71 @@
         </div>
       </span>
 
-      <button class="glass-pill drawer-toggle" :title="t('topbar.settings')" @click="$emit('menu')" aria-label="Menu">
-        <i class="ti ti-menu-2"></i>
-      </button>
+      <div class="hamburger-dropdown" ref="hamburgerWrap">
+        <button class="glass-pill drawer-toggle" :title="t('topbar.settings')" @click="toggleHamburgerMenu" aria-label="Menu">
+          <i class="ti ti-menu-2"></i>
+        </button>
+        <div class="settings-menu hamburger-menu" v-show="hamburgerOpen" @click.stop>
+          <button class="settings-item" @click="openFields">
+            <i class="ti ti-list-details"></i>{{ t('sidebar.monitored_fields') }}
+          </button>
+          <div class="hamburger-divider"></div>
+          <div class="settings-item hamburger-account">
+            <i class="ti ti-user"></i>
+            <span>{{ userLabel }}</span>
+          </div>
+          <button
+            class="settings-item"
+            :class="{ on: state.compareMode }"
+            :title="t('topbar.compare_title')"
+            @click="toggleCompare"
+          >
+            <i class="ti ti-columns-3"></i>{{ t('topbar.compare') }}
+            <i class="ti ti-check hamburger-check" v-if="state.compareMode"></i>
+          </button>
+          <div class="settings-item lang-toggle">
+            <i class="ti ti-map"></i>
+            <span>{{ t('band.base_layer') }}</span>
+            <div class="lang-seg">
+              <button :class="{ on: state.currentBase === 'street' }" @click="store.setBaseLayer('street')">{{ t('topbar.street') }}</button>
+              <button :class="{ on: state.currentBase === 'satellite' }" @click="store.setBaseLayer('satellite')">{{ t('topbar.satellite') }}</button>
+            </div>
+          </div>
+          <button class="settings-item" :title="t('topbar.export_png')" @click="chooseExport('png')">
+            <i class="ti ti-photo"></i>{{ t('topbar.export_png') }}
+          </button>
+          <button class="settings-item" :title="t('topbar.export_pdf')" @click="chooseExport('pdf')">
+            <i class="ti ti-file-text"></i>{{ t('topbar.export_pdf') }}
+          </button>
+          <button
+            class="settings-item"
+            :class="{ on: state.telegramChatId }"
+            :title="t('common.telegram_alerts')"
+            @click="openTelegram"
+          >
+            <i class="ti ti-brand-telegram"></i>{{ t('common.telegram_alerts') }}
+            <span class="tg-status-dot" :class="{ on: state.telegramChatId }"></span>
+          </button>
+          <button class="settings-item" :title="t('topbar.how_this_works')" @click="state.helpVisible = true">
+            <i class="ti ti-help"></i>{{ t('topbar.help') }}
+          </button>
+          <div class="settings-item lang-toggle">
+            <i class="ti ti-language"></i>
+            <span>{{ t('common.language') }}</span>
+            <div class="lang-seg">
+              <button :class="{ on: state.preferredLanguage === 'en' }" @click="setLang('en')">EN</button>
+              <button :class="{ on: state.preferredLanguage === 'km' }" @click="setLang('km')">ខ្មែរ</button>
+            </div>
+          </div>
+          <div class="hamburger-divider"></div>
+          <button v-if="state.supabaseUser" class="settings-item sign-out" @click="doSignOut">
+            <i class="ti ti-logout"></i>{{ t('common.sign_out') }}
+          </button>
+          <button v-else class="settings-item" @click="store.showAuthOverlay()">
+            <i class="ti ti-login"></i>{{ t('topbar.sign_in') }}
+          </button>
+        </div>
+      </div>
     </div>
   </div>
 </template>
@@ -114,6 +176,8 @@ const settingsWrap = ref(null)
 const userWrap = ref(null)
 const userMenuOpen = ref(false)
 const searchQuery = ref('')
+const hamburgerOpen = ref(false)
+const hamburgerWrap = ref(null)
 
 const userLabel = computed(() =>
   state.supabaseUser ? (state.supabaseUser.email || t('topbar.signed_in')) : t('topbar.sign_in')
@@ -131,12 +195,14 @@ function onUserClick(e) {
 
 function doSignOut() {
   userMenuOpen.value = false
+  hamburgerOpen.value = false
   store.signOut()
 }
 
 function openTelegram() {
   userMenuOpen.value = false
   settingsOpen.value = false
+  hamburgerOpen.value = false
   if (!state.supabaseUser) {
     store.showAuthOverlay()
     return
@@ -147,6 +213,7 @@ function openTelegram() {
 function setLang(lang) {
   userMenuOpen.value = false
   settingsOpen.value = false
+  hamburgerOpen.value = false
   store.setLanguage(lang)
 }
 
@@ -155,8 +222,24 @@ function toggleSettingsMenu() {
   userMenuOpen.value = false
 }
 
+function toggleHamburgerMenu() {
+  hamburgerOpen.value = !hamburgerOpen.value
+  settingsOpen.value = false
+  userMenuOpen.value = false
+}
+
+function openFields() {
+  hamburgerOpen.value = false
+  $emit('menu')
+}
+
+function toggleCompare() {
+  state.compareMode = !state.compareMode
+}
+
 function chooseExport(fmt) {
   settingsOpen.value = false
+  hamburgerOpen.value = false
   if (fmt === 'png') store.exportChart()
   else store.exportPdf()
 }
@@ -171,6 +254,9 @@ function onDocClick(e) {
   }
   if (userWrap.value && !userWrap.value.contains(e.target)) {
     userMenuOpen.value = false
+  }
+  if (hamburgerWrap.value && !hamburgerWrap.value.contains(e.target)) {
+    hamburgerOpen.value = false
   }
 }
 
