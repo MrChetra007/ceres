@@ -530,6 +530,7 @@ onMounted(async () => {
     let wipe = 38;
     let dir = 1;
     const autoSweep = () => {
+      if (!heroBg.value) return;
       wipe += dir * 0.18;
       if (wipe > 78) dir = -1;
       if (wipe < 22) dir = 1;
@@ -572,6 +573,7 @@ onMounted(async () => {
     tiltCleanups.push(() => trailPool.forEach((d) => d.remove()));
 
     const orbitTick = (now) => {
+      if (!satOrbiter.value) return;
       const angle = ((now % ORBIT_PERIOD) / ORBIT_PERIOD) * Math.PI * 2;
       const dx = Math.cos(angle) * ORBIT_RX;
       const dy = Math.sin(angle) * ORBIT_RY;

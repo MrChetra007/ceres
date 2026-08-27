@@ -1426,10 +1426,6 @@ sb.auth.onAuthStateChange((event, session) => {
       if (localStorage.getItem('ndvi_fields') && !localStorage.getItem('ndvi_import_skipped')) {
         importLocalFieldsIfAny()
       }
-    } else if (!user) {
-      // INITIAL_SESSION with no persisted session → show landing, hide auth overlay
-      state.authOverlayVisible = false
-      state.landingVisible = true
     }
   } else if (event === 'SIGNED_OUT') {
     lastLoadedUserId = null
