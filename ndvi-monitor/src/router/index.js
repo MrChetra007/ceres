@@ -23,6 +23,10 @@ router.beforeEach((to) => {
   if (to.name === 'landing' && !state.supabaseUser) {
     state.landingVisible = true
   }
+  // unauthenticated visitor landing on the map must get the sign-in popup
+  if (to.name === 'map' && !state.supabaseUser) {
+    state.authOverlayVisible = true
+  }
 })
 
 export default router
