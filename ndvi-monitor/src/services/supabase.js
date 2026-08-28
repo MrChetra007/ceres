@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
+import { centroid as turfCentroid } from '@turf/turf'
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from '../config'
 
 export const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
@@ -13,6 +14,8 @@ export function mapRowToField(row) {
     areaHectares: row.area_ha,
     plantingDate: row.planting_date,
     plantingDateSource: row.planting_date_source || 'manual',
+    centroidLat: row.centroid_lat ?? null,
+    centroidLng: row.centroid_lng ?? null,
     notes: row.notes,
     createdAt: row.created_at,
   }
@@ -49,14 +52,33 @@ export async function loadFields() {
   return (data || []).map(mapRowToField)
 }
 
+// Compute a single lat/lng point for a field's stored GeoJSON (Feature or bare
+// geometry), used for weather lookups. Returns { centroid_lat, centroid_lng }
+// or {} if the geometry can't be reduced to a centroid. Coordinate order is
+// GeoJSON [longitude, latitude] — Turf handles that for us.
+export function fieldCentroid(geojson) {
+  try {
+    const geom = geojson && (geojson.geometry || geojson)
+    if (!geom || !geom.coordinates) return {}
+    const c = turfCentroid(geom)
+    const coord = c && c.geometry && c.geometry.coordinates
+    if (!coord || !isFinite(coord[0]) || !isFinite(coord[1])) return {}
+    return { centroid_lng: coord[0], centroid_lat: coord[1] }
+  } catch {
+    return {}
+  }
+}
+
 export async function insertField({ name, geojson, area_ha, planting_date, planting_date_source }) {
   const session = await requireSession()
+  const centroid = fieldCentroid(geojson)
   const { data, error } = await sb
     .from('fields')
     .insert({
       name, geojson, area_ha, planting_date,
       planting_date_source: planting_date_source || 'manual',
       owner_id: session.user.id,
+      ...centroid,
     })
     .select()
     .single()

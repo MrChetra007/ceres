@@ -2057,6 +2057,7 @@ export function onFieldEdited() {
       updateField(field.id, {
         geojson: layers[0],
         area_ha: getFieldAreaHectares(layers[0]),
+        ...supabase.fieldCentroid(layers[0]),
       })
     }
   }

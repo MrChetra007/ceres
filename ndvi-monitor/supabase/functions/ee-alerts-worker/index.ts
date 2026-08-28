@@ -4,6 +4,8 @@ import { generateExplanation, languageLine } from "../_shared/llm.ts";
 // Growth-stage thresholds live in _shared/growthStage.ts so this worker and
 // the ee-data function stay in sync automatically.
 import { statusFromNdvi } from "../_shared/growthStage.ts";
+import { getWeatherContext } from "../_shared/weather.ts";
+import type { WeatherContext } from "../_shared/weather.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
 const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
@@ -212,6 +214,7 @@ function buildAlertMessage(
   stage: string | null,
   ndvi: number,
   rainfall: number | null,
+  weather: WeatherContext | null,
   lang: string,
 ): string {
   const stageText = stage ? ` (${stage})` : "";
@@ -226,10 +229,16 @@ function buildAlertMessage(
             ? "ល្អ"
             : status.replace("_", " ")
       : status.replace("_", " ");
+  const wxText =
+    weather?.precipitation_probability == null
+      ? ""
+      : lang === "km"
+        ? ` — ឱកាសភ្លៀងបន្ទាប់ 5 ថ្ងៃ ~${Math.round(weather.precipitation_probability)}%`
+        : ` — next-5-day rain ~${Math.round(weather.precipitation_probability)}%`;
   if (lang === "km") {
-    return `វាល ${fieldName}: ${statusLabel}${stageText} — NDVI ${ndvi.toFixed(2)}, ទឹកភ្លៀង ${rainText} (21 ថ្ងៃ)`;
+    return `វាល ${fieldName}: ${statusLabel}${stageText} — NDVI ${ndvi.toFixed(2)}, ទឹកភ្លៀង ${rainText} (21 ថ្ងៃ)${wxText}`;
   }
-  return `${fieldName}: ${statusLabel}${stageText} — NDVI ${ndvi.toFixed(2)}, ${rainText} rain (21d)`;
+  return `${fieldName}: ${statusLabel}${stageText} — NDVI ${ndvi.toFixed(2)}, ${rainText} rain (21d)${wxText}`;
 }
 
 async function sendTelegram(chatId: string, text: string): Promise<boolean> {
@@ -263,12 +272,24 @@ function safeText(text: string | null, fallback: string): string {
 
 // Builds the prompt for the advisory LLM (Phase 13 Feature 1). Kept as its own
 // function so the "reasoning task" is explicit and easy to tune/adjust.
+function forecastContextLine(weather: WeatherContext | null): string {
+  if (!weather || !weather.forecast_days?.length) return "weather forecast: n/a";
+  const days = weather.forecast_days
+    .map(
+      (d) =>
+        `${d.date.split("T")[0]}: rain ${d.rainPct == null ? "n/a" : `${d.rainPct}%`}, max ${d.tMax == null ? "n/a" : `${Math.round(d.tMax)}°C`}, min ${d.tMin == null ? "n/a" : `${Math.round(d.tMin)}°C`}`,
+    )
+    .join("; ");
+  return `weather forecast (next ~5 days): ${days}`;
+}
+
 async function buildAdvisoryPrompt(
   field: any,
   ndvi: number,
   status: string,
   stage: string | null,
   rainfall: number | null,
+  weather: WeatherContext | null,
   lang: string,
 ): Promise<string> {
   const lswi = await getLswiForGeometry(field.geojson).catch(() => null);
@@ -286,9 +307,10 @@ async function buildAdvisoryPrompt(
 
   return `You are writing a short Telegram alert for a rice farmer in Battambang, Cambodia, about their field named "${field.name}".
 Satellite data: NDVI ${ndvi.toFixed(2)} (${pctLine}), LSWI (moisture) ${lswi == null ? "n/a" : lswi.toFixed(2)}, rainfall (21 days) ${rainText}, growth stage: ${stageText}, current status: ${statusLabel}.
+${forecastContextLine(weather)}
 
 ${langLine}
-Write 2-3 short sentences. Describe what the numbers suggest about the likely cause of a stress signal (drought vs. flood vs. normal for this growth stage) and give ONE practical, cautious next step. IMPORTANT: this is guidance to inform the farmer, NOT a diagnosis — never state a cause with certainty. Always hedge with words like "likely" / "could be". Do not repeat the technical index names (NDVI, LSWI) in the reply itself.`;
+Write 2-3 short sentences. Describe what the numbers suggest about the likely cause of a stress signal (drought vs. flood vs. normal for this growth stage) and give ONE practical, cautious next step. Use the weather forecast to inform this: mention upcoming rain (or its absence) when it is relevant to the field's situation — e.g. warn that rain is expected soon if the field is dry, or note a dry spell ahead if the forecast shows little rain. IMPORTANT: this is guidance to inform the farmer, NOT a diagnosis — never state a cause with certainty. Always hedge with words like "likely" / "could be". Do not repeat the technical index names (NDVI, LSWI) in the reply itself.`;
 }
 
 Deno.serve(async (_req) => {
@@ -298,7 +320,7 @@ Deno.serve(async (_req) => {
     const { data: fields, error } = await supabase
       .from("fields")
       .select(
-        "id, name, geojson, planting_date, owner_id, profiles!inner(telegram_chat_id, preferred_language)",
+        "id, name, geojson, planting_date, centroid_lat, centroid_lng, owner_id, profiles!inner(telegram_chat_id, preferred_language)",
       )
       .not("profiles.telegram_chat_id", "is", null);
 
@@ -366,12 +388,33 @@ Deno.serve(async (_req) => {
         // worsening" guard — every field with a linked chat gets a message
         // on every worker run.)
         const rainfall = await getRainfallMm(field.geojson);
+        // Weather forecast for the field centroid (never blocks the alert — null
+        // on failure means the advisory simply runs without a forecast line).
+        let weather: WeatherContext | null = null;
+        try {
+          const lat = (field as any).centroid_lat;
+          const lng = (field as any).centroid_lng;
+          if (lat != null && lng != null) {
+            weather = await getWeatherContext(lat, lng);
+          } else {
+            console.warn(
+              `No centroid for field ${field.name} (${field.id}) — skipping weather forecast`,
+            );
+          }
+        } catch (e) {
+          console.warn(
+            `Weather fetch failed for field ${field.name}: ${
+              e instanceof Error ? e.message : String(e)
+            } — continuing with stress data only`,
+          );
+        }
         const prompt = await buildAdvisoryPrompt(
           field,
           ndvi,
           status,
           stage,
           rainfall,
+          weather,
           lang,
         );
         const result = await generateExplanation(prompt);
@@ -382,7 +425,7 @@ Deno.serve(async (_req) => {
           modelUsed = result.model;
           message = safeText(
             result.text,
-            buildAlertMessage(field.name, status, stage, ndvi, rainfall, lang),
+            buildAlertMessage(field.name, status, stage, ndvi, rainfall, weather, lang),
           );
         } else {
           if (result?.truncated) {
@@ -401,6 +444,7 @@ Deno.serve(async (_req) => {
             stage,
             ndvi,
             rainfall,
+            weather,
             lang,
           );
         }
