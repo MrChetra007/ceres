@@ -337,6 +337,21 @@
       </div>
     </section>
 
+    <section id="landing-indices" class="landing-section reveal">
+      <div class="landing-eyebrow mono center">Read them yourself</div>
+      <h2 class="landing-h2">Six ways to read a rice field.</h2>
+      <p class="landing-lead">
+        Every pair below is the same Sentinel-2 scene — the raw field photo on
+        the left, the index that interprets it on the right. Drag the handle to
+        compare.
+      </p>
+      <IndexSection
+        v-for="item in landingIndices"
+        :key="item.key"
+        :index="item"
+      />
+    </section>
+
     <section id="landing-lang" class="landing-section reveal">
       <div class="mock-wrap">
         <div class="lang-copy">
@@ -480,6 +495,8 @@ import { useRouter } from "vue-router";
 import { state } from "../store";
 import * as store from "../store";
 import { sb } from "../services/supabase";
+import { landingIndices } from "../data/landing-indices";
+import IndexSection from "../components/landing-page/IndexSection.vue";
 
 const leaving = ref(false);
 
@@ -1290,6 +1307,12 @@ onBeforeUnmount(() => {
   max-width: 1080px;
   margin: 0 auto;
   padding: 90px 28px;
+}
+
+/* New indices block: intro sits tight against the first comparison below it,
+   so the six IndexSection rows create the visual rhythm, not the header. */
+#landing-indices {
+  padding-bottom: 40px;
 }
 .landing-eyebrow {
   margin-bottom: 14px;

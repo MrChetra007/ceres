@@ -1,6 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { state } from '../store'
-import LandingPage from '../components/LandingPage.vue'
+import LandingPage from '../views/LandingPage.vue'
 import MapView from '../views/MapView.vue'
 
 const routes = [
