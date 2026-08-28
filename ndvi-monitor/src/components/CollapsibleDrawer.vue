@@ -224,7 +224,7 @@ defineExpose({ open: isOpen, close, toggle })
   flex-direction: column;
 }
 
-.drawer-panel ::v-deep .drawer-body > *:last-child {
+.drawer-panel :deep(.drawer-body > *:last-child) {
   margin-bottom: 0;
 }
 

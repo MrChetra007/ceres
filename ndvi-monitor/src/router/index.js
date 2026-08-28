@@ -17,6 +17,12 @@ router.beforeEach((to) => {
   if (to.name === 'landing' && state.supabaseUser) {
     return { name: 'map' }
   }
+  // unauthenticated visitor on the public landing must always see the
+  // landing page, even if a past onboarding run persisted `ndvi_landing_done`
+  // (which would otherwise leave `landingVisible === false` -> blank page)
+  if (to.name === 'landing' && !state.supabaseUser) {
+    state.landingVisible = true
+  }
 })
 
 export default router
