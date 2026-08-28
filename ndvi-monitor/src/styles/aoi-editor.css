@@ -1,0 +1,157 @@
+.aoi-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f1efe8;
+  border: none;
+  border-radius: 6px;
+  padding: 6px 8px;
+  font-size: 15px;
+  color: #5a5952;
+  cursor: pointer;
+  transition: background 0.15s;
+  line-height: 1;
+}
+.aoi-btn:hover { background: #e5e3da; color: #1a56db; }
+
+.aoi-editor-overlay {
+  position: fixed; inset: 0; z-index: 2000;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(0,0,0,0.4);
+}
+.aoi-editor-modal {
+  background: #fff; border-radius: 12px; padding: 1.5rem;
+  width: 90%; max-width: 420px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.25);
+}
+.aoi-editor-modal h3 { margin-bottom: 0.25rem; font-size: 1.1rem; }
+.aoi-editor-desc { font-size: 0.8rem; color: #666; margin-bottom: 1rem; }
+.aoi-editor-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;
+}
+.aoi-editor-grid label {
+  display: flex; flex-direction: column; gap: 3px;
+  font-size: 0.75rem; font-weight: 600; color: #555;
+}
+.aoi-editor-grid input {
+  padding: 6px 8px; border: 1px solid #ccc; border-radius: 6px;
+  font-size: 0.85rem; width: 100%;
+}
+.aoi-editor-field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-bottom: 0.75rem;
+}
+.aoi-editor-field input {
+  padding: 6px 8px; border: 1px solid #ccc; border-radius: 6px;
+  font-size: 0.85rem; width: 100%;
+}
+.aoi-editor-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #555;
+}
+.aoi-search-row {
+  display: flex;
+  gap: 6px;
+}
+.aoi-search-row input {
+  flex: 1;
+  min-width: 0;
+}
+.aoi-search-btn {
+  background: #1a56db;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 6px 14px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.aoi-search-btn:hover { background: #1648c0; }
+.aoi-editor-hint {
+  font-size: 0.72rem; color: #999; margin: 0.75rem 0;
+}
+.aoi-editor-actions { margin: 0.5rem 0; }
+.aoi-editor-actions button {
+  padding: 6px 12px; border: 1px solid #ccc; border-radius: 6px;
+  background: #f9f9f9; cursor: pointer; font-size: 0.8rem;
+}
+.aoi-editor-actions button:hover { background: #eee; }
+.aoi-editor-footer {
+  display: flex; justify-content: flex-end; gap: 8px; margin-top: 0.75rem;
+}
+.aoi-editor-footer button {
+  padding: 7px 18px; border-radius: 8px; border: none; cursor: pointer; font-size: 0.85rem;
+}
+#ae-cancel { background: #f3f3f3; color: #333; }
+.ae-apply-btn { background: #1a56db; color: #fff; }
+.ae-apply-btn:hover { background: #1648c0; }
+
+.aoi-editor-tabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 0.75rem;
+  flex-wrap: wrap;
+}
+.aoi-editor-tab {
+  flex: 1;
+  min-width: 0;
+  padding: 6px 8px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  background: #f4f6f8;
+  color: #555;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.aoi-editor-tab:hover { background: #e9edf1; }
+.aoi-editor-tab.active {
+  background: #1a56db;
+  border-color: #1a56db;
+  color: #fff;
+}
+.aoi-field-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 180px;
+  overflow-y: auto;
+}
+.aoi-field-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid #e2e6ea;
+  border-radius: 8px;
+  background: #f9fafb;
+  cursor: pointer;
+  font-size: 0.8rem;
+  transition: background 0.15s, border-color 0.15s;
+}
+.aoi-field-item:hover { background: #eef2f6; }
+.aoi-field-item.active {
+  border-color: #1a56db;
+  background: rgba(26, 86, 219, 0.08);
+}
+.aoi-field-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #333;
+  font-weight: 600;
+}
+.aoi-field-area {
+  flex-shrink: 0;
+  color: #888;
+  font-size: 0.72rem;
+}

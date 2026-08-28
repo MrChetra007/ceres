@@ -1,0 +1,45 @@
+/* ---- Leaflet controls re-themed ---- */
+.leaflet-bar {
+  border: 0.5px solid var(--panel-border-strong) !important;
+  box-shadow: var(--shadow) !important;
+}
+
+.leaflet-control-zoom a {
+  background-color: var(--panel-2) !important;
+  color: var(--text) !important;
+  border-bottom: 0.5px solid var(--panel-border) !important;
+}
+
+.leaflet-control-zoom a:hover { background-color: var(--panel-3) !important; color: var(--accent) !important; }
+
+.leaflet-control-attribution {
+  background: rgba(18, 22, 29, 0.75) !important;
+  color: var(--text-faint) !important;
+  font-size: 10px !important;
+  border-radius: 6px 0 0 0 !important;
+}
+
+.leaflet-control-attribution a { color: var(--text-dim) !important; }
+
+.leaflet-draw-toolbar a {
+  background-color: var(--panel-2) !important;
+  border-bottom: 0.5px solid var(--panel-border) !important;
+}
+
+.leaflet-draw-toolbar a:hover { background-color: var(--panel-3) !important; }
+
+/* leaflet-draw sprite is dark; flip it for the dark theme */
+.leaflet-draw-toolbar .leaflet-draw-draw-polygon,
+.leaflet-draw-toolbar .leaflet-draw-draw-rectangle,
+.leaflet-draw-toolbar .leaflet-draw-edit-edit,
+.leaflet-draw-toolbar .leaflet-draw-edit-remove {
+  filter: invert(0.92) hue-rotate(180deg);
+}
+
+.map-right { border-left: none; }
+
+/* Keep Leaflet top controls (zoom + draw) below the fixed header */
+#map .leaflet-top,
+#map-right .leaflet-top {
+  top: 64px;
+}

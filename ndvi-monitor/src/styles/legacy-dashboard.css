@@ -1,0 +1,171 @@
+.dashboard-toggle {
+  position: fixed;
+  top: 112px;
+  left: 12px;
+  z-index: 1001;
+  background: #fff;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  padding: 6px 10px;
+  font-size: 1.1rem;
+  cursor: pointer;
+  box-shadow: 0 1px 5px rgba(0,0,0,0.2);
+  line-height: 1;
+}
+
+.dashboard-toggle:hover {
+  background: #f4f4f4;
+}
+
+.dashboard {
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 280px;
+  z-index: 1002;
+  background: #fff;
+  box-shadow: 2px 0 12px rgba(0, 0, 0, 0.2);
+  display: flex;
+  flex-direction: column;
+  padding: 0.75rem 0.75rem 1rem;
+  overflow-y: auto;
+}
+
+.dashboard-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+
+.dashboard-header h3 {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #1a1a2e;
+}
+
+.dashboard-hint {
+  font-size: 0.8rem;
+  color: #999;
+  margin-top: 0.75rem;
+  text-align: center;
+}
+
+/* Field cards */
+.field-card {
+  background: #f9f9f9;
+  border: 1px solid #e5e5e5;
+  border-radius: 8px;
+  padding: 0.6rem 0.75rem;
+  margin-bottom: 0.5rem;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  position: relative;
+}
+
+.field-card:hover {
+  background: #f4f3ef;
+  border-color: #d4d2c8;
+}
+.field-card.active {
+  border-color: #1a56db;
+  background: #eef2ff;
+  box-shadow: 0 0 0 1px #1a56db;
+}
+
+.field-card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 8px;
+}
+
+.field-card-header .panel-title {
+  font-size: 13px;
+  font-weight: 600;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding-right: 6px;
+}
+
+.field-card-header .panel-subtitle {
+  font-size: 11px;
+}
+
+.status-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 9px;
+  border-radius: 999px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.status-healthy { background: #eaf3de; color: #27500a; }
+.status-moderate { background: #faeeda; color: #633806; }
+.status-stressed { background: #fcebeb; color: #791f1f; }
+.status-water { background: #dbeafe; color: #1e40af; }
+.status-moist { background: #ffedd5; color: #9a3412; }
+.status-dry { background: #fef9c3; color: #854d0e; }
+.status-lswi { background: #e0f2fe; color: #075985; }
+
+.status-badge.tone-blue { background: rgba(79, 168, 255, 0.16); color: var(--blue); }
+
+.field-card-stats {
+  display: flex;
+  gap: 12px;
+  padding-top: 8px;
+  border-top: 0.5px solid #e5e3da;
+  font-size: 12px;
+  color: #7a7972;
+}
+
+.field-card-stats span {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.field-card-stats .ti {
+  font-size: 14px;
+}
+
+.field-area-warning {
+  font-size: 10px;
+  color: #b45309;
+  margin-top: 6px;
+  padding: 3px 8px;
+  background: #fef9c3;
+  border-radius: 4px;
+}
+
+.plant-date-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 11px;
+  padding: 0;
+  color: #999;
+  transition: color 0.15s;
+  vertical-align: middle;
+}
+
+.plant-date-btn:hover { color: #1a56db; }
+
+.delete-btn {
+  background: none;
+  border: none;
+  color: #ccc;
+  font-size: 0.9rem;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+  position: absolute;
+  top: 6px;
+  right: 8px;
+}
+
+.delete-btn:hover { color: #dc2626; }

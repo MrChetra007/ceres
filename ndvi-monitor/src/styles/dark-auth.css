@@ -1,0 +1,37 @@
+.auth-tab {
+  background: rgba(255, 255, 255, 0.05);
+  border: 0.5px solid var(--panel-border);
+  color: var(--text-dim);
+}
+.auth-tab:hover { background: rgba(255, 255, 255, 0.1); color: var(--text); }
+.auth-tab.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #0b0f14;
+}
+.auth-field .auth-label { color: var(--text-dim); }
+.auth-input {
+  background: rgba(255, 255, 255, 0.05);
+  border: 0.5px solid var(--panel-border);
+  color: var(--text);
+}
+.auth-input::placeholder { color: var(--text-faint); }
+.auth-input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(34, 201, 142, 0.15);
+}
+.auth-email-btn {
+  background: var(--accent);
+  color: #0b0f14;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+.auth-email-btn:hover { background: #1bb37d; color: #0b0f14; }
+.auth-spinner {
+  border-color: rgba(11, 15, 20, 0.25);
+  border-top-color: #0b0f14;
+}
+.auth-error {
+  color: #ff8a8a;
+  background: var(--red-dim);
+  border-color: rgba(239, 91, 91, 0.35);
+}

@@ -1,0 +1,18 @@
+@media (max-width: 640px) {
+  .dashboard {
+    width: 100%;
+  }
+
+  .info-panel {
+    width: 100%;
+    height: 50%;
+    top: auto;
+    bottom: 0;
+    box-shadow: 0 -2px 12px rgba(0, 0, 0, 0.2);
+  }
+}
+
+/* =============================================================
+   DESIGN SYSTEM — Stage 1 (see design.md)
+   Dark slate + glass panels. Overrides legacy light surfaces.
+   ============================================================= */

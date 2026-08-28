@@ -1,0 +1,19 @@
+/* ---- Preset panel (dark glass) ---- */
+.preset-panel {
+  background: rgba(18, 22, 29, 0.82);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 0.5px solid var(--panel-border);
+  border-radius: 10px;
+  box-shadow: var(--shadow);
+}
+
+.preset-label { color: var(--text-faint); }
+.preset-btn {
+  background: rgba(255, 255, 255, 0.06);
+  border: 0.5px solid var(--panel-border);
+  color: var(--text-dim);
+}
+.preset-btn:hover { background: var(--accent-dim); color: var(--accent); }
+.preset-manage-btn { color: var(--text-faint); }
+.preset-manage-btn:hover { color: var(--accent); }

@@ -1,0 +1,47 @@
+body {
+  background: #0b0f14;
+  color: var(--text);
+  font-family: var(--font-ui);
+}
+
+.mono {
+  font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+#map,
+#map-right,
+.leaflet-container {
+  background: var(--bg-map) !important;
+}
+
+/* ---- Glass panel base (overrides legacy .panel) ---- */
+.panel {
+  background: rgba(18, 22, 29, 0.82);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 0.5px solid var(--panel-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
+  color: var(--text);
+}
+
+.panel-title { color: var(--text); }
+.panel-subtitle { color: var(--text-dim); }
+.icon-btn { color: var(--text-faint); }
+.icon-btn:hover { color: var(--text); }
+.close-btn { color: var(--text-faint); }
+.close-btn:hover { color: var(--text); }
+
+/* ---- Segmented controls ---- */
+.segmented {
+  background: rgba(255, 255, 255, 0.06);
+}
+.segmented-btn {
+  color: var(--text-dim);
+}
+.segmented-btn.active {
+  background: var(--panel-2);
+  color: var(--text);
+  box-shadow: 0 0 0 0.5px var(--panel-border-strong);
+}
+.segmented-btn:hover:not(.active) { color: var(--text); }

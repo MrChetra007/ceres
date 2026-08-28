@@ -1,0 +1,25 @@
+:root {
+  --bg-map: #1c2b1a;
+  --panel: #12161d;
+  --panel-2: #171c24;
+  --panel-3: #1e2732;
+  --panel-border: rgba(255, 255, 255, 0.08);
+  --panel-border-strong: rgba(255, 255, 255, 0.14);
+  --text: #eef1f4;
+  --text-dim: #9aa4b1;
+  --text-faint: #626c79;
+  --accent: #22c98e;
+  --accent-dim: rgba(34, 201, 142, 0.16);
+  --amber: #f5a623;
+  --amber-dim: rgba(245, 166, 35, 0.16);
+  --red: #ef5b5b;
+  --red-dim: rgba(239, 91, 91, 0.16);
+  --blue: #4fa8ff;
+  --radius-lg: 16px;
+  --radius-md: 12px;
+  --radius-sm: 8px;
+  --shadow: 0 8px 32px rgba(0, 0, 0, 0.45), 0 1px 0 rgba(255, 255, 255, 0.04) inset;
+  --ease: cubic-bezier(.4, 0, .2, 1);
+  --font-ui: 'Inter', 'Kantumruy Pro', 'Noto Sans Khmer', 'Hanuman',
+             -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}

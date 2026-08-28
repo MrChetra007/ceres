@@ -1,0 +1,8 @@
+/* ---- User menu moved into top bar ---- */
+.user-menu {
+  position: static;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  padding: 0;
+}

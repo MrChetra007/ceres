@@ -1,0 +1,29 @@
+/* ---- Info panel (dark) ---- */
+.info-panel {
+  z-index: 1000;
+  background: rgba(14, 18, 24, 0.92);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-left: 0.5px solid var(--panel-border);
+  box-shadow: -4px 0 24px rgba(0, 0, 0, 0.4);
+}
+
+.chart-explanation {
+  background: rgba(255, 255, 255, 0.04);
+  border: 0.5px solid var(--panel-border);
+  color: var(--text-dim);
+}
+
+.stress-alert {
+  background: var(--amber-dim);
+  border: 0.5px solid rgba(245, 166, 35, 0.35);
+  color: var(--amber);
+}
+
+.chart-card {
+  background: rgba(255, 255, 255, 0.05);
+  border: 0.5px solid var(--panel-border);
+  box-shadow: none;
+}
+
+.chart-card-title { color: var(--text); }

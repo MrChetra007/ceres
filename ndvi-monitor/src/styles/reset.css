@@ -1,0 +1,66 @@
+*, *::before, *::after {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+html, body {
+  height: 100%;
+  font-family: var(--font-ui);
+}
+
+button{
+  font-family: var(--font-ui);
+}
+
+h1{
+  font-family: var(--font-ui);
+}
+
+h2{
+  font-family: var(--font-ui);
+}
+
+h3{
+  font-family: var(--font-ui);
+}
+
+p{
+  font-family: var(--font-ui);
+}
+
+h4,h5,h6{
+  font-family: var(--font-ui);
+}
+
+input::placeholder{
+  font-family: var(--font-ui);
+}
+
+h4{
+  font-family: var(--font-ui);
+}
+
+h5{
+  font-family: var(--font-ui);
+}
+
+h6{
+  font-family: var(--font-ui);
+}
+
+p{
+  font-family: var(--font-ui);
+}
+
+span{
+  font-family: var(--font-ui);
+}
+
+div{
+  font-family: var(--font-ui);
+}
+
+#app {
+  height: 100%;
+  width: 100%;
+}

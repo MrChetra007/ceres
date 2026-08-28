@@ -1,0 +1,64 @@
+/* ---- Sidebar / dashboard (dark) ---- */
+.dashboard {
+  z-index: 40;
+  background: rgba(14, 18, 24, 0.92);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  box-shadow: 4px 0 24px rgba(0, 0, 0, 0.4);
+}
+
+.dashboard-header h3 { color: var(--text); }
+.dashboard-hint { color: var(--text-faint); }
+
+.field-card {
+  background: rgba(255, 255, 255, 0.04);
+  border: 0.5px solid var(--panel-border);
+  border-radius: var(--radius-md);
+}
+
+.field-card:hover { background: rgba(255, 255, 255, 0.07); border-color: var(--panel-border-strong); }
+
+.field-card.active {
+  border-color: var(--accent);
+  background: var(--accent-dim);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+.field-card-stats {
+  border-top: 0.5px solid var(--panel-border);
+  color: var(--text-dim);
+}
+
+.field-card-stats .ti { color: var(--text-faint); }
+
+.field-card-badges {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+  flex: 0 0 auto;
+  max-width: 100%;
+}
+
+.card-conf {
+  font-size: 8.5px;
+  padding: 2px 6px;
+}
+
+.field-area-warning {
+  background: var(--amber-dim);
+  color: var(--amber);
+}
+
+.status-healthy { background: var(--accent-dim); color: var(--accent); }
+.status-moderate { background: var(--amber-dim); color: var(--amber); }
+.status-stressed { background: var(--red-dim); color: var(--red); }
+.status-water { background: rgba(79, 168, 255, 0.16); color: var(--blue); }
+.status-moist { background: var(--amber-dim); color: var(--amber); }
+.status-dry { background: rgba(255, 255, 255, 0.1); color: var(--text-dim); }
+.status-lswi { background: rgba(79, 168, 255, 0.16); color: var(--blue); }
+
+.plant-date-btn { color: var(--text-faint); }
+.plant-date-btn:hover { color: var(--accent); }
+.delete-btn { color: var(--text-faint); }
+.delete-btn:hover { color: var(--red); }

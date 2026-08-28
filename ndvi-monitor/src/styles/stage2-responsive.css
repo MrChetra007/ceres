@@ -1,0 +1,31 @@
+/* ---- Stage 2 responsive (spec section 5) ---- */
+@media (max-width: 1024px) {
+  #sidebar { width: 280px; }
+  #field-detail { width: 320px; }
+}
+
+@media (max-width: 780px) {
+  #sidebar {
+    width: 100%;
+    top: 0;
+    bottom: 0;
+    height: 100dvh;
+    height: 100vh;
+    border-right: none;
+    border-radius: 0;
+  }
+  #field-detail {
+    width: 100%;
+    height: calc(100vh - var(--topbar-height, 56px));
+    top: var(--topbar-height, 56px);
+    bottom: auto;
+    left: 0;
+    border-left: none;
+    border-top: none;
+    border-radius: 0;
+    overflow-y: auto;
+  }
+  .chart-card {
+    min-width: 0;
+  }
+}

@@ -1,0 +1,80 @@
+/* ---- Settings (kebab) dropdown (Step 5) ---- */
+.settings-dropdown {
+  position: relative;
+}
+
+.settings-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 220px;
+  background: var(--panel-2);
+  border: 0.5px solid var(--panel-border-strong);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow);
+  padding: 6px;
+  text-align: left;
+  z-index: 6;
+}
+
+.settings-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  border: none;
+  background: transparent;
+  color: var(--text-dim);
+  font-size: 12.5px;
+  font-weight: 500;
+  padding: 9px 10px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  text-align: left;
+  transition: background 0.15s, color 0.15s;
+}
+.settings-item .ti { font-size: 16px; }
+.settings-item:hover { background: rgba(255, 255, 255, 0.08); color: var(--text); }
+.settings-item.on { color: var(--accent); }
+.settings-item.on .tg-status-dot { background: var(--accent); }
+.settings-item.lang-toggle { cursor: default; }
+.settings-item.lang-toggle:hover { background: transparent; color: var(--text-dim); }
+.settings-item.lang-toggle .lang-seg { margin-left: auto; }
+
+/* ---- Hamburger dropdown (mobile settings menu) ---- */
+.hamburger-dropdown {
+  position: relative;
+}
+
+.hamburger-menu {
+  position: fixed;
+  top: 56px;
+  right: 8px;
+  left: auto;
+  max-height: calc(100vh - 72px);
+  overflow-y: auto;
+}
+
+.hamburger-divider {
+  height: 0.5px;
+  background: var(--panel-border);
+  margin: 4px 10px;
+}
+
+.hamburger-account {
+  cursor: default;
+  opacity: 0.8;
+}
+.hamburger-account:hover {
+  background: transparent;
+  color: var(--text-dim);
+}
+
+.hamburger-check {
+  margin-left: auto;
+  font-size: 16px;
+}
+
+.settings-item.sign-out { color: var(--red); }
+.settings-item.sign-out .ti { color: var(--red); }
+.settings-item.sign-out:hover { background: var(--red-dim); }

@@ -1,0 +1,52 @@
+.auth-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  margin-top: 1.5rem;
+}
+
+.auth-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.auth-hint {
+  font-size: 0.72rem;
+  color: var(--text-faint);
+  margin: 0;
+}
+
+.auth-divider {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  color: var(--text-faint);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.auth-divider::before,
+.auth-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--panel-border);
+}
+
+.auth-skip {
+  margin-top: 1.5rem;
+}
+
+.auth-skip-btn {
+  background: none;
+  border: none;
+  color: var(--text-faint);
+  font-size: 0.85rem;
+  cursor: pointer;
+  text-decoration: underline;
+  padding: 0;
+}
+
+.auth-skip-btn:hover { color: var(--text); }

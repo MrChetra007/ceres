@@ -1,0 +1,123 @@
+/* ---- Responsive (spec section 5) ---- */
+/* Step 3: on desktop the time-slider panel is always expanded (collapse is a
+   mobile-only behavior). The `collapsed` ref may still be true from a prior
+   mobile session — force the scrubber open here so the slider is never lost. */
+@media (min-width: 781px) {
+  .time-panel.collapsed .scrubber-wrap { grid-template-rows: 1fr; }
+}
+
+@media (max-width: 1024px) {
+  .map-legend { display: none; }
+  .brand-loc { display: none; }
+  .dashboard,
+  .info-panel { width: 280px; }
+}
+
+@media (max-width: 780px) {
+  /* BUG A: keep the app title + "BATTAMBANG · N fields" subtitle visible on
+     mobile instead of collapsing the header to a bare leaf icon. */
+  .brand-text { display: flex; }
+  .brand-loc { display: block; }
+  .place-search { width: 120px; }
+  .glass-pill span.pill-text { display: none; }
+  /* NOTE: only the user chip collapses here (icon + dropdown). The desktop
+     controls (My Fields, Export, Telegram, Help, Language) and Compare stay
+     visible so the header isn't gutted on zoomed/narrow desktop windows. */
+  .time-panel { width: calc(100vw - 24px); }
+  /* Step 8 BUG B: stack the time-panel header on mobile so the month label,
+     cloud-blocked pill, and "Last reading" jump badge never overlap. */
+  .time-head { flex-wrap: wrap; row-gap: 4px; }
+  .time-title { flex: 1 1 auto; min-width: 0; }
+  .time-pills { flex-basis: 100%; width: 100%; margin-left: 0; justify-content: flex-end; flex-wrap: wrap; row-gap: 4px; }
+  .month-label { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+  .collapse-btn { display: flex; }
+  .time-title { cursor: pointer; }
+  .topbar-right .glass-pill { padding: 6px 9px; }
+  .topbar-user { padding: 6px 9px; border-radius: var(--radius-sm); }
+  .topbar-user .ti-user { display: flex; }
+  .topbar-user .user-email,
+  .topbar-user .sign-out-btn { display: none; }
+  .topbar-user-menu { display: block; }
+  .band-panel { gap: 8px; padding: 6px 8px; }
+  .band-panel .segmented-btn { padding: 5px 9px; }
+  .latest-view-caption { display: none; }
+  .latest-view-btn .latest-btn-label { font-size: 10px; }
+  /* Stack band-panel children vertically inside the bottom sheet on mobile */
+  .sheet-content .band-panel {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+  }
+  .sheet-content .band-divider {
+    width: 100%;
+    height: 0.5px;
+    align-self: stretch;
+  }
+  .sheet-content .band-panel .segmented {
+    flex-wrap: wrap;
+  }
+  .areas-btn { padding: 4px 8px; max-width: none; flex-direction: column; gap: 2px; }
+  .areas-btn-label { display: none; }
+  .areas-btn .ti-chevron-down { display: none; }
+  .band-btn-caption { display: block; }
+  .band-panel .aoi-btn { flex-direction: column; gap: 2px; padding: 5px 8px; }
+  .band-panel .aoi-btn .band-btn-caption { display: block; }
+  .areas-group-label { display: none; }
+  .areas-group { padding: 3px; }
+  .info-panel {
+    width: 100%;
+    height: 55%;
+    top: auto;
+    bottom: 0;
+    border-left: none;
+    border-top: 0.5px solid var(--panel-border-strong);
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  }
+  .dashboard { width: 100%; }
+}
+
+/* BUG B: keep the mobile map zoom controls clear of the time-slider panel
+   (which sits across the top of the viewport). Base is top:64px (line 2887);
+   push it below the panel's bottom edge on phones/tablets only. */
+@media (max-width: 767px) {
+  #map .leaflet-top,
+  #map-right .leaflet-top { top: 172px; }
+}
+
+@media (max-width: 480px) {
+  /* BUG A: two-row header — row 1 logo + title/subtitle + hamburger, row 2
+     full-width search input. Header grows taller, so the panels below shift. */
+  .topbar {
+    flex-wrap: wrap;
+    height: auto;
+    align-content: flex-start;
+    row-gap: 6px;
+    padding-top: 6px;
+    padding-bottom: 6px;
+  }
+  .topbar-left { flex-wrap: wrap; row-gap: 6px; }
+  .brand-text { display: flex; }
+  .brand-loc { display: block; }
+  .place-search {
+    display: flex;
+    flex: 1 1 100%;
+    order: 5;
+    width: 100%;
+    box-sizing: border-box;
+  }
+  .topbar-desktop-controls { display: none; }
+  .topbar-center { display: none; }
+  .drawer-toggle { display: flex; }
+  .time-panel { top: 104px; }
+  #map .leaflet-top,
+  #map-right .leaflet-top { top: 206px; }
+  .band-panel { bottom: 10px; }
+  .band-base { display: none; }
+  .band-explainer { bottom: 66px; }
+  .toast-stack { right: 10px; left: 10px; }
+  .toast { max-width: none; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
+}

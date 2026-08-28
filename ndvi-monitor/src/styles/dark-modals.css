@@ -1,0 +1,25 @@
+/* ---- Modals & overlays (dark) ---- */
+.chart-modal,
+.help-modal,
+.preset-editor-modal,
+.aoi-editor-modal,
+.date-picker-modal,
+.tg-modal {
+  background: #161b23;
+  border: 0.5px solid var(--panel-border-strong);
+  color: var(--text);
+}
+
+.chart-modal-title,
+.help-header h3,
+.help-body h4,
+.preset-editor-modal h3,
+.aoi-editor-modal h3,
+.date-picker-modal label,
+.tg-modal h3 {
+  color: var(--text);
+}
+
+.help-header { border-bottom: 0.5px solid var(--panel-border); }
+.help-body { color: var(--text-dim); }
+.help-body strong { color: var(--text); }

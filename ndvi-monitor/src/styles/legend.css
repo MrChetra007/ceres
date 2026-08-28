@@ -1,0 +1,38 @@
+/* ---- Legend (bottom-right) ---- */
+.map-legend {
+  position: fixed;
+  right: 14px;
+  bottom: 18px;
+  z-index: 25;
+  background: rgba(18, 22, 29, 0.82);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 0.5px solid var(--panel-border);
+  border-radius: 10px;
+  padding: 8px 10px;
+  box-shadow: var(--shadow);
+}
+
+.legend-bar {
+  width: 180px;
+  height: 8px;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--red) 0%, var(--amber) 40%, #f9d976 62%, var(--accent) 100%);
+}
+
+.legend-labels {
+  display: flex;
+  justify-content: space-between;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 8.5px;
+  color: var(--text-faint);
+  margin-top: 4px;
+  white-space: nowrap;
+}
+
+.legend-photo-note {
+  font-size: 10px;
+  color: var(--text-dim);
+  line-height: 1.4;
+  max-width: 200px;
+}

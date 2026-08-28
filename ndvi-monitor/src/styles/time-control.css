@@ -1,0 +1,374 @@
+/* ---- Time control (top-center) ---- */
+.time-panel {
+  position: fixed;
+  top: 68px;
+  left: 50%;
+  transform: translateX(-50%);
+  /* Below .topbar (z 30) so the topbar's Export dropdown can paint above it. */
+  z-index: 25;
+  width: min(560px, 90vw);
+  padding: 12px 16px 10px;
+}
+
+.time-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+
+.play-btn {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: none;
+  background: var(--accent-dim);
+  color: var(--accent);
+  font-size: 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, transform 0.15s;
+  flex-shrink: 0;
+}
+
+.play-btn:hover { background: var(--accent); color: #0b0f14; transform: scale(1.05); }
+
+.time-title {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.month-label {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
+  white-space: nowrap;
+}
+
+.season-tag {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  color: var(--accent);
+  white-space: nowrap;
+}
+
+.time-pills {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+  align-items: center;
+}
+
+.pill {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10.5px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--text-dim);
+  white-space: nowrap;
+}
+
+.pill.low { background: var(--amber-dim); color: var(--amber); }
+.pill.error { background: var(--red-dim); color: var(--red); }
+.pill.cloud-blocked { background: rgba(125, 180, 255, 0.14); color: #8ab6ff; }
+.pill.radar-fallback { background: rgba(165, 100, 255, 0.16); color: #c39aff; }
+
+.jump-btn {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10.5px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 0.5px solid rgba(138, 182, 255, 0.4);
+  background: rgba(125, 180, 255, 0.08);
+  color: #8ab6ff;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.jump-btn:hover { background: rgba(125, 180, 255, 0.18); border-color: rgba(138, 182, 255, 0.65); color: #bcd6ff; }
+.jump-btn .ti { font-size: 12px; }
+
+/* ---- Observations day-strip (docked above the mode selector) ---- */
+.obs-strip {
+  position: fixed;
+  bottom: 78px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(860px, calc(100vw - 24px));
+  z-index: 31;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.obs-strip-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.obs-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.obs-title .ti { color: var(--accent); font-size: 15px; }
+
+.obs-strip-count {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-faint);
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 999px;
+  padding: 1px 7px;
+}
+
+.obs-loading {
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+.obs-strip-controls {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.obs-days-wrap { min-width: 0; }
+
+/* Horizontally scrollable row of day-columns (native scroll, like the app's
+   other overflow surfaces). */
+.obs-days {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  scrollbar-width: thin;
+}
+
+.obs-day {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  min-width: 78px;
+  padding: 6px 9px;
+  border-radius: var(--radius-sm);
+  border: 0.5px solid var(--panel-border);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+  font: inherit;
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s;
+}
+
+.obs-day:hover {
+  background: rgba(255, 255, 255, 0.09);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.obs-day.active {
+  background: var(--accent-dim);
+  border-color: rgba(34, 201, 142, 0.5);
+}
+
+.obs-day-date { font-size: 11px; white-space: nowrap; }
+
+/* Cloud icon carries the status tint; opacity ramps with cloud cover
+   (set inline) so heavy overcast reads heavier than a clear pass. */
+.obs-day-icon { font-size: 16px; line-height: 1.2; }
+.obs-day.clear .obs-day-icon { color: var(--accent); }
+.obs-day.low .obs-day-icon { color: var(--amber); }
+.obs-day.blocked .obs-day-icon { color: var(--red); }
+
+.obs-day-sub { font-size: 9.5px; color: var(--text-faint); }
+
+.obs-day-ndvi { font-size: 10.5px; }
+
+.obs-empty {
+  margin: 6px 4px 2px;
+  font-size: 12px;
+  color: var(--text-faint);
+  line-height: 1.5;
+}
+
+@media (max-width: 640px) {
+  .obs-strip {
+    width: calc(100vw - 24px);
+    left: 12px;
+    transform: none;
+    bottom: 84px;
+  }
+}
+
+.scrubber-conf {
+  font-size: 9px;
+  padding: 2px 7px;
+}
+
+.scrubber { position: relative; padding-top: 4px; }
+.scrubber.compare { margin-top: 8px; border-top: 0.5px solid var(--panel-border); padding-top: 8px; }
+
+/* Collapsible time panel (Step 3): wrapper for smooth height transition */
+.range-selector {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 0;
+  margin-bottom: 4px;
+}
+
+.range-selector.active { padding-bottom: 8px; }
+
+.range-select {
+  background: rgba(255, 255, 255, 0.06);
+  border: 0.5px solid rgba(255, 255, 255, 0.16);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 6px;
+  cursor: pointer;
+  max-width: 180px;
+}
+
+.range-select option { background: #141b22; color: var(--text); }
+
+.range-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--accent-dim);
+  color: var(--accent);
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  white-space: nowrap;
+}
+
+.range-clear {
+  background: none;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+  padding: 0;
+}
+
+.range-custom {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.range-input {
+  background: rgba(255, 255, 255, 0.06);
+  border: 0.5px solid rgba(255, 255, 255, 0.16);
+  border-radius: 6px;
+  color: var(--text);
+  font-size: 11px;
+  padding: 3px 5px;
+}
+
+.range-input::-webkit-calendar-picker-indicator { filter: invert(0.8); }
+
+.range-arrow { color: var(--text-dim); font-size: 11px; }
+
+@media (max-width: 560px) {
+  .range-selector { gap: 4px; }
+  .range-input { max-width: 110px; }
+}
+
+.scrubber-wrap { overflow: hidden; display: grid; grid-template-rows: 1fr; transition: grid-template-rows 0.3s ease; }
+.time-panel.collapsed .scrubber-wrap { grid-template-rows: 0fr; }
+.scrubber-wrap > * { min-height: 0; }
+
+.collapse-btn {
+  display: none;
+  border: none;
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--text-dim);
+  width: 28px;
+  height: 28px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  transition: background 0.15s, color 0.15s;
+}
+.collapse-btn:hover { background: rgba(255, 255, 255, 0.11); color: var(--text); }
+.time-title { cursor: default; }
+
+#month-slider,
+#month-slider-right {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 6px;
+  border-radius: 999px;
+  background: linear-gradient(to right, var(--accent) 0%, var(--accent) 0%, rgba(255, 255, 255, 0.14) 0%);
+  outline: none;
+  cursor: pointer;
+}
+
+#month-slider::-webkit-slider-thumb,
+#month-slider-right::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid #0c1016;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+  cursor: grab;
+}
+
+#month-slider::-moz-range-thumb,
+#month-slider-right::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid #0c1016;
+  cursor: grab;
+}
+
+.scrubber-ticks {
+  display: flex;
+  justify-content: space-between;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9px;
+  color: var(--text-faint);
+  margin-top: 2px;
+}
+
+.event-markers { margin-top: 3px; }
+
+.latest-btn { color: var(--text-faint); }
+.latest-btn:hover { color: var(--accent); }
+
+.scene-count { color: var(--text-faint); }
+.scene-count.scene-count-low { color: var(--amber); }
+
+.event-badge.flood { background: rgba(79, 168, 255, 0.18); color: var(--blue); }
+.event-badge.drought { background: var(--amber-dim); color: var(--amber); }
