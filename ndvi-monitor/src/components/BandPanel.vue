@@ -13,7 +13,7 @@
       </div>
       <div class="segmented" role="group" aria-label="Index">
         <button
-          v-for="idx in ['ndvi', 'ndwi', 'lswi', 'truecolor']"
+          v-for="idx in ['ndvi', 'ndwi', 'lswi', 'savi', 'evi', 'gndvi', 'truecolor']"
           :key="idx"
           class="segmented-btn"
           :class="{ active: state.currentIndex === idx }"
@@ -119,6 +119,9 @@ function indexTitle(idx) {
     ndvi: t('index.ndvi_title'),
     ndwi: t('index.ndwi_title'),
     lswi: t('index.lswi_title'),
+    savi: t('index.savi_title'),
+    evi: t('index.evi_title'),
+    gndvi: t('index.gndvi_title'),
     truecolor: t('index.truecolor_title'),
   }
   return map[idx]

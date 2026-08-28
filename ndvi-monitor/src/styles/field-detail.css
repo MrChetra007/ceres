@@ -201,6 +201,57 @@
   color: var(--text-dim);
 }
 
+/* Weather forecast (display-only, Open-Meteo) */
+.forecast-note {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-dim);
+}
+.forecast-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 6px;
+}
+.forecast-day {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 4px;
+  border: 0.5px solid var(--panel-border);
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.03);
+  text-align: center;
+}
+.forecast-day-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-faint);
+}
+.forecast-temp {
+  font-size: 16px;
+  font-weight: 700;
+  color: var(--amber);
+}
+.forecast-rain {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--blue);
+}
+.forecast-rain.risk {
+  color: var(--accent);
+}
+.forecast-hint {
+  margin: 8px 0 0;
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
 /* Metadata */
 .meta-row {
   display: flex;

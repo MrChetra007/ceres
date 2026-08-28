@@ -29,6 +29,9 @@ const BANDS: Record<string, string[]> = {
   ndvi: ["B8", "B4"],
   ndwi: ["B3", "B8"],
   lswi: ["B8", "B11"],
+  savi: ["B8", "B4"],
+  evi: ["B8", "B4", "B2"],
+  gndvi: ["B8", "B3"],
 };
 const VIS: Record<string, Record<string, unknown>> = {
   ndvi: { min: -0.2, max: 0.8, palette: ["red", "yellow", "green"] },
@@ -38,12 +41,52 @@ const VIS: Record<string, Record<string, unknown>> = {
     palette: ["brown", "tan", "#e0f0ff", "#4a90d9", "#003366"],
   },
   lswi: { min: -0.3, max: 0.6, palette: ["tan", "lightblue", "darkblue"] },
+  // SAVI/EVI/GNDVI are visual/exploratory tabs only (they do NOT feed the
+  // growth-stage stress-alert scoring). Palettes below are starter breakpoints
+  // for the user to tune.
+  savi: { min: 0, max: 1, palette: ["brown", "yellow", "green"] },
+  evi: { min: 0, max: 1, palette: ["red", "orange", "green"] },
+  gndvi: { min: -0.2, max: 0.8, palette: ["red", "purple", "green"] },
 };
 const TRUE_COLOR_BANDS = ["B4", "B3", "B2"];
 // Wide stretch so bright cloud-free areas of a rice scene don't clamp to a
 // single saturated green block (same reasoning as the frontend TRUE_COLOR_VIS).
 const TRUE_COLOR_VIS = { min: 0, max: 5000 };
 const DRY_MONTH_THRESHOLD = 50;
+
+// Apply the band math for a given index to a (single) image and rename the
+// result band to `name`. NDVI/NDWI/LSWI/GNDVI are 2-band ratios that map cleanly
+// onto ee.Image.normalizedDifference(); SAVI and EVI need a custom expression
+// (same style as the RVI fallback above). This is the single place index math
+// lives — every action that computes an index goes through here so a new index
+// stays consistent across the map, trend chart, field statuses and bulk trends.
+function applyIndex(img: any, index: string, name: string) {
+  if (index === "savi") {
+    const L = 0.5;
+    return img
+      .expression(
+        "((NIR - RED) / (NIR + RED + L)) * (1 + L)",
+        { NIR: img.select("B8"), RED: img.select("B4"), L: L },
+      )
+      .rename(name);
+  }
+  if (index === "evi") {
+    const G = 2.5, C1 = 6, C2 = 7.5, L = 1;
+    return img
+      .expression(
+        "G * ((NIR - RED) / (NIR + C1 * RED - C2 * BLUE + L))",
+        {
+          NIR: img.select("B8"),
+          RED: img.select("B4"),
+          BLUE: img.select("B2"),
+          G, C1, C2, L,
+        },
+      )
+      .rename(name);
+  }
+  return img.normalizedDifference(BANDS[index]).rename(name);
+}
+
 
 function jsonResponse(body: unknown, status = 200, corsHeaders: Record<string, string>): Response {
   return new Response(JSON.stringify(body), {
@@ -181,7 +224,6 @@ async function getRadarVegetationIndex(geom: any, startDate: any, endDate: any) 
 
 async function actionGetIndexTile(payload: any) {
   const index = payload.index && BANDS[payload.index] ? payload.index : "ndvi";
-  const bands = BANDS[index];
   const vis = VIS[index];
   const geom = toEeGeometry(payload.geometry);
   const start = ee.Date.fromYMD(payload.year, payload.month, 1);
@@ -197,11 +239,11 @@ async function actionGetIndexTile(payload: any) {
   const count = await evaluate(cleanCollection.size());
 
   if (count > 0) {
-    const composite = cleanCollection
-      .median()
-      .clip(geom)
-      .normalizedDifference(bands)
-      .rename(index.toUpperCase());
+    const composite = applyIndex(
+      cleanCollection.median().clip(geom),
+      index,
+      index.toUpperCase(),
+    );
     const url = await getMapUrl(composite, vis);
     return { mode: "index", count, url };
   }
@@ -410,7 +452,6 @@ async function actionGetZoneBreakdown(payload: any) {
 // Accepts either `lat`+`lng` or a GeoJSON `geometry`.
 async function actionGetIndexTimeSeries(payload: any) {
   const index = payload.index && BANDS[payload.index] ? payload.index : "ndvi";
-  const bands = BANDS[index];
   const months = payload.months || [];
   if (!months.length) return { points: [] };
   const geom =
@@ -423,7 +464,7 @@ async function actionGetIndexTimeSeries(payload: any) {
 
   const all = s2Collection(geom, startDate, endDate);
   const series = all.map((img: any) => {
-    const idxImg = img.normalizedDifference(bands).rename(index.toUpperCase());
+    const idxImg = applyIndex(img, index, index.toUpperCase());
     const value = idxImg.reduceRegion({
       reducer: ee.Reducer.mean(),
       geometry: geom,
@@ -579,7 +620,6 @@ async function actionGetFieldStatus(payload: any) {
 // freshest day (least-cloudy twin orbit wins).
 async function actionGetRecentIndexValue(payload: any) {
   const index = payload.index && BANDS[payload.index] ? payload.index : "ndvi";
-  const bands = BANDS[index];
   const name = index.toUpperCase();
   const geom = toEeGeometry(payload.geometry);
   const start = ee.Date(Date.now()).advance(-90, "day");
@@ -616,7 +656,7 @@ async function actionGetRecentIndexValue(payload: any) {
 
   const recent = clean.first();
   const date = tsToISO(await evaluate(recent.get("system:time_start")));
-  const idxImg = recent.normalizedDifference(bands).rename(name);
+  const idxImg = applyIndex(recent, index, name);
   const result = await evaluate(
     idxImg.reduceRegion({
       reducer: ee.Reducer.mean(),
@@ -782,9 +822,7 @@ async function actionGetAllFieldStatuses(payload: any) {
     const dateStr = ee.Date(
       ee.Number(recent.get("system:time_start")),
     ).format("YYYY-MM-dd");
-    const value = recent
-      .normalizedDifference(bands)
-      .rename(name)
+    const value = applyIndex(recent, index, name)
       .reduceRegion({
         reducer: ee.Reducer.mean(),
         geometry: geom,
@@ -823,7 +861,6 @@ async function actionGetAllFieldStatuses(payload: any) {
 // reduceRegions in a single graph.
 async function actionGetAllFieldTrends(payload: any) {
   const index = payload.index && BANDS[payload.index] ? payload.index : "ndvi";
-  const bands = BANDS[index];
   const name = index.toUpperCase();
   const months = payload.months || [];
   const incoming = Array.isArray(payload.fields) ? payload.fields : [];
@@ -849,7 +886,7 @@ async function actionGetAllFieldTrends(payload: any) {
       .filter(ee.Filter.lt("CLOUDY_PIXEL_PERCENTAGE", 40));
     const series = all
       .map((img: any) => {
-        const idxImg = img.normalizedDifference(bands).rename(name);
+        const idxImg = applyIndex(img, index, name);
         const value = idxImg.reduceRegion({
           reducer: ee.Reducer.mean(),
           geometry: geom,

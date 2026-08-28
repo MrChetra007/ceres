@@ -21,6 +21,12 @@ export const MAP_ZOOM = 14
 export const NDVI_VIS = { min: -0.2, max: 0.8, palette: ['red', 'yellow', 'green'] }
 export const NDWI_VIS = { min: -1, max: 1, palette: ['brown', 'tan', '#e0f0ff', '#4a90d9', '#003366'] }
 export const LSWI_VIS = { min: -0.3, max: 0.6, palette: ['tan', 'lightblue', 'darkblue'] }
+// SAVI/EVI/GNDVI are visual/exploratory tabs only (they do NOT feed the
+// growth-stage stress-alert scoring). Palettes below are starter breakpoints
+// for the user to tune. Keep in sync with ee-data's VIS.
+export const SAVI_VIS = { min: 0, max: 1, palette: ['brown', 'yellow', 'green'] }
+export const EVI_VIS = { min: 0, max: 1, palette: ['red', 'orange', 'green'] }
+export const GNDVI_VIS = { min: -0.2, max: 0.8, palette: ['red', 'purple', 'green'] }
 
 // True Color photo mode — real Sentinel-2 RGB (B4·B3·B2), not an index.
 // Deliberately NOT in INDICES: the trend functions normalizeDifference() over
@@ -63,6 +69,30 @@ export const INDICES = {
     fullKhm: 'សន្ទស្សន៍ទឹកលើផ្ទៃដី',
     explain: 'High values (dark blue) mean moist soil and water-saturated plant canopies. Low values (tan) mean dry soil and dry vegetation.',
     explainKhm: 'តម្លៃខ្ពស់ (ខៀវចាស់) ជាដីមានសំណើម និងរុក្កជាតិដែលឆ្អែតដោយទឹក។ តម្លៃទាប (ត្នោតស្រាល) ជាដីនិងរុក្កជាតិស្ងួត។',
+  },
+  savi: {
+    name: 'SAVI', bands: ['B8', 'B4'], vis: SAVI_VIS, label: 'Soil-Adjusted',
+    color: '#84cc16',
+    full: 'Soil-Adjusted Vegetation Index (L=0.5)',
+    fullKhm: 'សន្ទស្សន៍រុក្ខជាតិកែតម្រូវដី (L=0.5)',
+    explain: 'Accounts for bare-soil background brightness (L=0.5), so low-cover or early-season fields read more accurately than raw NDVI. Placeholder scale — tune the breakpoints.',
+    explainKhm: 'គិតគូរពីពន្លឺដីទទេ (L=0.5) ដើម្បីឱ្យវាលដែលមានគម្របតិច ឬដំណាក់កាលដើមអានបានត្រឹមត្រូវជាង NDVI។ មាត្រដ្ឋានបណ្ដោះអាសន្ន — អាចកែតម្រូវបាន។',
+  },
+  evi: {
+    name: 'EVI', bands: ['B8', 'B4', 'B2'], vis: EVI_VIS, label: 'Enhanced',
+    color: '#f97316',
+    full: 'Enhanced Vegetation Index (G=2.5, C1=6, C2=7.5, L=1)',
+    fullKhm: 'សន្ទស្សន៍រុក្ខជាតិពង្រឹង (G=2.5, C1=6, C2=7.5, L=1)',
+    explain: 'Less prone to saturation than NDVI, so it keeps discriminating between fields even at high biomass. The blue band corrects atmospheric and soil noise. Placeholder scale — tune the breakpoints.',
+    explainKhm: 'ឆ្អែតយឺតជាង NDVI ដូច្នេះបន្តបែងចែកវាលបានសូម្បីតែពេលជីវម៉ាសខ្ពស់។ បទខៀវកែសំឡេងរំខានបរិយាកាស និងដី។ មាត្រដ្ឋានបណ្ដោះអាសន្ន — អាចកែតម្រូវបាន។',
+  },
+  gndvi: {
+    name: 'GNDVI', bands: ['B8', 'B3'], vis: GNDVI_VIS, label: 'Green',
+    color: '#22d3ee',
+    full: 'Green Normalized Difference Vegetation Index',
+    fullKhm: 'សន្ទស្សន៍ NDVI បៃតង',
+    explain: 'Mirror of NDVI but using the green band (B3), which responds more to chlorophyll and canopy water content. Placeholder scale — tune the breakpoints.',
+    explainKhm: 'ដូច NDVI ប៉ុន្តែប្រើបទបៃតង (B3) ដែលឆ្លើយតបខ្លាំងជាងនឹងក្លរ៉ូហ្វីល និងសំណើមក្នុងសំបកដំណាំ។ មាត្រដ្ឋានបណ្ដោះអាសន្ន — អាចកែតម្រូវបាន។',
   },
 }
 

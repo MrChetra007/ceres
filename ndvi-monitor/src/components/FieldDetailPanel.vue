@@ -83,6 +83,25 @@
       <p class="rain-value mono" :class="{ 'rain-unavailable': state.rainfallMm == null }">{{ rainText }}</p>
     </div>
 
+    <div class="detail-section forecast-card">
+      <p class="detail-card-label">{{ t('field.forecast') }} <span class="mono">({{ t('field.forecast_days') }})</span></p>
+      <div v-if="wxLoading" class="forecast-note">{{ t('field.loading') }}</div>
+      <div v-else-if="wxError" class="forecast-note">{{ t('field.forecast_unavailable') }}</div>
+      <template v-else-if="wxDays.length">
+        <div class="forecast-grid">
+          <div v-for="d in wxDays" :key="d.date" class="forecast-day">
+            <span class="forecast-day-label">{{ dayLabel(d.date) }}</span>
+            <span class="forecast-temp mono" :title="t('field.forecast_temp_tip')">{{ d.tMax != null ? Math.round(d.tMax) + '°' : '—' }}</span>
+            <span class="forecast-rain" :class="{ risk: d.rainPct != null && d.rainPct >= 50 }" :title="t('field.forecast_rain_tip')">
+              <i class="ti ti-umbrella"></i>{{ d.rainPct != null ? d.rainPct + '%' : '—' }}
+            </span>
+          </div>
+        </div>
+        <p class="forecast-hint">{{ t('field.forecast_hint') }}</p>
+      </template>
+      <div v-else class="forecast-note">{{ t('field.data_unavailable') }}</div>
+    </div>
+
     <template v-if="isField">
       <div class="detail-section meta-card">
         <p class="detail-card-label">{{ t('field.metadata') }}</p>
@@ -127,6 +146,8 @@ import { INDICES, MONTHS, CONSULT_AI_URL } from '../config'
 import { sb, requireSession } from '../services/supabase'
 import { loadFieldPhotos, createSignedPhotoUrl } from '../services/supabase'
 import { getRecentIndexValue, getRainfallMm, polygonGeometry } from '../services/earthEngine'
+import { getWeatherContext } from '../services/weatherService'
+import { centroid as turfCentroid } from '@turf/turf'
 import { formatMonthYear, stageName as stageNameKm, daySinceLabel } from '../services/format'
 import { useI18n } from '../i18n'
 
@@ -137,6 +158,12 @@ const aiTruncated = ref(false)
 const photos = ref([])
 let chart = null
 let chartResizeObs = null
+
+// Weather forecast (display-only, see services/weatherService.js)
+const wxDays = ref([])
+const wxLoading = ref(false)
+const wxError = ref(false)
+let wxReq = 0
 
 const currentField = computed(() => state.fields.find((f) => f.id === state.currentFieldId) || null)
 const isField = computed(() => !!currentField.value)
@@ -388,6 +415,43 @@ const rainText = computed(() => {
   return t('field.data_unavailable')
 })
 
+// Weather forecast (display-only, see services/weatherService.js). Resolve the
+// field's centroid, then fetch a short Open-Meteo forecast via the isolated
+// service (cached per location) so reopening a field is cheap.
+const fieldCentroid = computed(() => {
+  const f = currentField.value
+  if (!f) return null
+  const geom = (f.geojson && (f.geojson.geometry || f.geojson)) || null
+  if (!geom || !geom.coordinates) return null
+  if (geom.type === 'Point') return { lng: geom.coordinates[0], lat: geom.coordinates[1] }
+  const c = turfCentroid({ type: 'Polygon', coordinates: geom.coordinates })
+  return { lng: c.geometry.coordinates[0], lat: c.geometry.coordinates[1] }
+})
+
+function dayLabel(date) {
+  if (!date) return ''
+  const d = new Date(date + 'T00:00:00')
+  return d.toLocaleDateString(state.preferredLanguage === 'km' ? 'km-KH' : 'en', { weekday: 'short', day: 'numeric' })
+}
+
+async function loadWeather() {
+  const c = fieldCentroid.value
+  if (!c) { wxDays.value = []; wxLoading.value = false; wxError.value = false; return }
+  const req = ++wxReq
+  wxLoading.value = true
+  wxError.value = false
+  try {
+    const ctx = await getWeatherContext(c.lat, c.lng)
+    if (req !== wxReq) return
+    wxDays.value = ctx.days
+    wxLoading.value = false
+  } catch (e) {
+    if (req !== wxReq) return
+    wxError.value = true
+    wxLoading.value = false
+  }
+}
+
 const plantingText = computed(() => {
   const f = currentField.value
   if (!f || !f.plantingDate) return '\u2014'
@@ -590,6 +654,7 @@ watch(() => state.benchmarkValue, () => {
 })
 watch(() => state.mainMonth, () => updateMarker())
 watch(() => state.currentFieldId, () => { aiExplanation.value = ''; aiTruncated.value = false; photos.value = []; state.photosLightboxIndex = null; loadPhotos() })
+watch(() => currentField.value && currentField.value.id, () => { loadWeather() })
 watch(() => state.infoPanelVisible, async (open) => {
   if (open && currentField.value) {
     loadPhotos()
