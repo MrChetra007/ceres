@@ -22,4 +22,25 @@
   --ease: cubic-bezier(.4, 0, .2, 1);
   --font-ui: 'Inter', 'Kantumruy Pro', 'Noto Sans Khmer', 'Hanuman',
              -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+
+  /* AIM — light "readable outdoors" palette (Feature 0). Self-contained light
+     surfaces only (composite score card, index legends); the app chrome stays
+     dark. Rice-field semantics: paddy=good/healthy, harvest=caution, clay=
+     poor/dead, paddyWater=water/moisture indices. AA-compliant pairs used in
+     aim.css. */
+  --aim-paddy-50: #f2f8ed;
+  --aim-paddy-500: #5a8f3c;
+  --aim-paddy-700: #3f6629;
+  --aim-paddy-900: #2a4519;
+  --aim-harvest-50: #fdf6e8;
+  --aim-harvest-500: #d9a441;
+  --aim-harvest-700: #a97a24;
+  --aim-water-50: #eef6fb;
+  --aim-water-500: #3f7ea6;
+  --aim-water-700: #2c5c7d;
+  --aim-clay-50: #faf4ee;
+  --aim-clay-500: #a8724f;
+  --aim-clay-700: #7a4f34;
+  --aim-ink: #2b2620;
+  --aim-paper: #fbf9f5;
 }

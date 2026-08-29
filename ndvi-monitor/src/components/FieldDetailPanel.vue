@@ -9,6 +9,42 @@
     </div>
 
     <template v-if="isField">
+      <!-- AIM — composite health score card (light "readable outdoors" surface
+           on the dark panel, per the chosen hybrid design). Score + one plain
+           verdict first; component chips and any index disagreement below. -->
+      <div v-if="aimLoading || (aim && !aim.noData)" class="detail-section aim-card">
+        <div class="aim-card-head">
+          <span class="aim-card-title">{{ t('aim.heading') }}</span>
+          <span v-if="aimLoading" class="aim-loading">{{ t('aim.loading') }}</span>
+        </div>
+        <div v-if="aim && !aimLoading" class="aim-card-body">
+          <div class="aim-topline">
+            <div class="aim-score" :class="'aim-' + aim.label">{{ aim.score }}<span class="aim-score-of">/100</span></div>
+            <p class="aim-phrase" :class="'aim-' + aim.label">{{ aimPhrase }}</p>
+          </div>
+          <p v-if="aim.primaryIndex !== 'ndvi'" class="aim-reason">
+            <i class="ti ti-info-circle"></i>{{ aimReasonText }}
+          </p>
+          <div v-if="aim.discrepancy" class="aim-disc" role="alert">
+            <i class="ti ti-alert-triangle"></i><span>{{ aimDiscText }}</span>
+          </div>
+          <div class="aim-components">
+            <span class="aim-components-label">{{ t('aim.components') }}</span>
+            <span
+              v-for="chip in aimChips"
+              :key="chip.name"
+              class="aim-chip"
+              :title="chip.raw != null ? INDICES[chip.name].name + ' · raw ' + chip.raw.toFixed(2) : INDICES[chip.name].name"
+            >
+              {{ INDICES[chip.name].name }} {{ Math.round(chip.norm * 100) }}%
+            </span>
+          </div>
+        </div>
+      </div>
+      <div v-else-if="aim && aim.noData" class="detail-section aim-card aim-card--nodata">
+        <p class="aim-nodata">{{ t('aim.no_data') }}</p>
+      </div>
+
       <div class="detail-section hero-card">
         <div class="hero-main">
           <div class="hero-value mono" :class="statusTone">{{ heroValue }}</div>
@@ -155,7 +191,7 @@ import { buildChartConfig } from '../services/chart'
 import { INDICES, MONTHS, CONSULT_AI_URL } from '../config'
 import { sb, requireSession } from '../services/supabase'
 import { loadFieldPhotos, createSignedPhotoUrl } from '../services/supabase'
-import { getRecentIndexValue, getRainfallMm, polygonGeometry } from '../services/earthEngine'
+import { getRecentIndexValue, getRainfallMm, getFieldHealthScore, polygonGeometry } from '../services/earthEngine'
 import { getWeatherContext } from '../services/weatherService'
 import { centroid as turfCentroid } from '@turf/turf'
 import { formatMonthYear, stageName as stageNameKm, daySinceLabel } from '../services/format'
@@ -182,6 +218,50 @@ let wxReq = 0
 const currentField = computed(() => state.fields.find((f) => f.id === state.currentFieldId) || null)
 const isField = computed(() => !!currentField.value)
 const { km, t } = useI18n()
+
+// ── AIM composite health score card ─────────────────────────────────────────
+// One 0-100 score + a plain-language verdict from ee-data getFieldHealthScore.
+// The card hides entirely while loading-failed (aim stays null) and collapses
+// to an empty-state when the score outright can't be computed (noData).
+const aim = ref(null)
+const aimLoading = ref(false)
+let aimReq = 0
+
+const aimPhrase = computed(() => {
+  if (!aim.value || !aim.value.phraseKey) return (aim.value && aim.value.phrase) || ''
+  return t(aim.value.phraseKey) || aim.value.phrase
+})
+const aimReasonText = computed(() => (aim.value && aim.value.primaryReasonKey ? t(aim.value.primaryReasonKey) : ''))
+const aimDiscText = computed(() => {
+  const d = aim.value && aim.value.discrepancy
+  if (!d) return ''
+  return t(d.messageKey) || d.message
+})
+// Component chips — ordered by the server's weights (which are stage-aware).
+const aimChips = computed(() => {
+  const a = aim.value
+  if (!a) return []
+  return Object.keys(a.weights).map((name) => ({
+    name,
+    norm: a.components && a.components[name] != null ? a.components[name] : 0,
+    raw: a.rawValues && a.rawValues[name] != null ? a.rawValues[name] : null,
+  }))
+})
+
+async function loadAim() {
+  const field = currentField.value
+  if (!field || !state.eeReady) return
+  const geom = field.geojson && (field.geojson.geometry || field.geojson)
+  if (!geom || !geom.coordinates) return
+  const geometry = polygonGeometry(geom.coordinates)
+  const req = ++aimReq
+  aimLoading.value = true
+  getFieldHealthScore(geometry, field.plantingDate || null, (snap) => {
+    if (req !== aimReq) return
+    aim.value = snap
+    aimLoading.value = false
+  })
+}
 const status = computed(() => fieldStatus[state.currentFieldId] || null)
 const trend = computed(() => fieldTrends[state.currentFieldId] || null)
 const conf = computed(() => {
@@ -667,17 +747,21 @@ watch(() => state.benchmarkValue, () => {
   if (state.chartData && state.infoPanelVisible) render(state.chartData)
 })
 watch(() => state.mainMonth, () => updateMarker())
-watch(() => state.currentFieldId, () => { aiExplanation.value = ''; aiTruncated.value = false; photos.value = []; state.photosLightboxIndex = null; loadPhotos() })
-watch(() => currentField.value && currentField.value.id, () => { loadWeather() })
+watch(() => state.currentFieldId, () => { aiExplanation.value = ''; aiTruncated.value = false; photos.value = []; state.photosLightboxIndex = null; loadPhotos(); aim.value = null; loadAim() })
+watch(() => currentField.value && currentField.value.id, () => { loadWeather(); loadAim() })
 watch(() => state.infoPanelVisible, async (open) => {
   if (open && currentField.value) {
     loadPhotos()
+    loadAim()
     if (state.chartData) {
       await nextTick()
       render(state.chartData)
     }
   }
 })
+// The card is skipped while EE isn't ready; load it the moment it becomes
+// available (e.g. field opened during slow login auth/init).
+watch(() => state.eeReady, (ready) => { if (ready) loadAim() })
 
 onBeforeUnmount(() => {
   if (chartResizeObs) { chartResizeObs.disconnect(); chartResizeObs = null }

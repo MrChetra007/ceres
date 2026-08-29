@@ -22,7 +22,7 @@ Satellite-based rice crop health monitor ("Ceres") for Battambang, Cambodia. Sho
 - **Cloud-blocked fallback:** months ≥40% cloudy render the least-cloudy true-color scene instead of a misleading index composite, with a ☁️ pill (hover tooltip), a "jump to last valid reading" action (90-day lookback), and silent autoplay toasts (shown once per session).
 - **Sentinel-1 RVI radar fallback:** when optical is fully blocked, live radar tiles (RVI = 4·VH/(VV+VH), ±15-day window) render in `radar_fallback` mode, with explicit in-UI notes that radar is a different measurement and not comparable to the hero NDVI.
 - **Unified 🟢🟡🔴 confidence badge** (`getConfidenceTier`, 21-day staleness) shown in the map legend, field cards, field detail hero and compare scrubber — always consistent; auto-estimated planting dates downgrade confidence to Medium.
-- **Fields & areas:** draw/save polygons or rectangles with live hectare tooltip and implausible-size warning; per-user AOIs (5-area cap) with four creation paths — Search place (Nominatim), Draw on map, Manual coordinates, **Use existing field**; a selected field always clips analysis to its real polygon rather than the AOI rectangle.
+- **Fields & areas:** draw/save polygons or rectangles with live hectare tooltip and implausible-size warning; per-user AOIs with a **plan-aware cap** (Free=1, Individual=5, Co-op=20+) — DB trigger `enforce_aoi_limit` reads `profiles.max_aois`; four creation paths — Search place (Nominatim), Draw on map, Manual coordinates, **Use existing field**; a selected field always clips analysis to its real polygon rather than the AOI rectangle.
 - **Growth-stage-aware health assessment** against the 6-stage rice phenology range by days-since-planting (flat-threshold fallback when no planting date), with planting date optionally **auto-detected from an LSWI spike** (`planting_date_source = 'estimated'`, tap to adjust).
 - **Health badge dashboard** with per-field sparklines, trend charts with dashed AOI benchmark line and click-to-enlarge, CHIRPS 21-day rainfall watcher, dry-month and flood/dry-spell markers on the slider.
 - **Health Zone panel:** buckets the viewed month's index (or RVI fallback) into 10 value ranges — area in Ha + % per bucket, scale bar with Good/Medium/Bad markers that match growth-stage-aware thresholds.
@@ -32,11 +32,18 @@ Satellite-based rice crop health monitor ("Ceres") for Battambang, Cambodia. Sho
 - **Telegram:** bot account-linking, daily scheduled stress worker that sends **weather-aware, LLM-generated advisories** (with flat-template + Khmer fallback if the LLM fails), **farmer photo uploads** (send a photo to the bot → auto-linked to the right field → private storage → in-app thumbnail strip + lightbox), and best-effort field disambiguation when a photo is ambiguous.
 - **Export** of PNG charts and full PDF reports; **bilingual EN/Khmer UI** (per-user `preferred_language` synced to `profiles`); onboarding "How this works" tour; marketing landing page with six index before/after comparison sliders.
 - Collapsible left (fields/settings) + right (field stats) drawers and a floating, centered bottom sheet; fully responsive down to small mobile widths; dark "satellite dashboard" design system.
+- **Subscriptions & billing UI:** three tiers (Free / Individual $5-mo / Co-op from $39-mo) built on the `subscription_*` profile columns + `billing_events` audit table from `add_subscription_tiers.sql`. Public pricing cards on the landing page **and** a dedicated `/pricing` route (signed-in users can reach it from paywalls); tier display + usage (AOI count, total field hectares) in a Plan & billing modal and a topbar tier badge; friendly upgrade **paywalls** for AOI cap, hectare cap (UI-only, backend enforcement pending) and locked Consult AI; payment history (humanized `billing_events` rows); cancel flow that keeps tier access until `subscription_renews_at`, then free. Checkout is a **placeholder** (`upgrade_my_subscription` RPC grants the tier with no charge, clearly marked temporary) — the real ABA PayWay Purchase API swaps in at one isolated `initiatePayment()` spot (`migration12_subscription_rpc.sql` provides the grant/cancel RPCs).
 
 ## Explicitly out of scope (for now)
 No TTS, no harvest-window prediction, no pest/disease risk scoring, no yield estimation, no offline mode.
 
 ## Remaining polish (small)
-- Khmer tooltip copy for the 7 band/index tabs (`band.tip_*` in `km.js` currently empty strings)
+- Khmer tooltip copy for the 7 band/index tabs (`band.tip_*` in `km.js` currently empty strings — same for the new `subs.*` / `pricing.*` keys)
 - Worker RVI stress threshold (`RVI_STRESS_THRESHOLD = 0.4`) is an uncalibrated placeholder
 - Sentinel-1 (RVI) pass columns in the Observations day-strip are stubbed for a future pass
+
+## Flagged follow-ups (not built, deliberate)
+- **Real ABA PayWay integration:** sandbox currently blocked; today `upgrade_my_subscription()` grants tiers for free (temporary — remove the moment ABA ships) and the checkout UI swaps at `initiatePayment()`
+- **Hectare-cap enforcement:** `max_hectares` is stored and the UI blocks on it, but there's no server-side enforcement yet (`TODO(backend)` noted in `store.js saveField`)
+- **Auto-downgrade-on-cancel:** cancel sets `status='canceled'` and keeps the tier until renewal, but no scheduled job drops expired canceled users to Free yet — needs a small pg_cron job like the alerts worker
+- **Co-op multi-member/staff roles:** `organizations` table exists as a bare forward-compat hook; member invites/roles designed later as an additive migration

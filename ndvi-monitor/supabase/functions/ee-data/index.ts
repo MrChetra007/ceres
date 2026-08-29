@@ -21,6 +21,14 @@
 import ee from "npm:@google/earthengine@0.1.395";
 import { statusFromNdvi } from "../_shared/growthStage.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
+import { translateIndexValue } from "../_shared/indexTranslations.ts";
+import {
+  healthScoreWeights,
+  primaryIndexForStage,
+  primaryIndexReasonKey,
+  stageNameForDayCount,
+} from "../_shared/primaryIndex.ts";
+import { detectDiscrepancy } from "../_shared/discrepancy.ts";
 
 const EE_KEY = JSON.parse(Deno.env.get("EE_SERVICE_ACCOUNT_KEY") || "{}");
 
@@ -638,6 +646,48 @@ async function computeNdviOverWindow(
   return result?.nd ?? 0;
 }
 
+// Generic per-index window compute (AIM · composite health score). Same 14- or
+// 90-day median-over-clean-scenes approach as computeNdviOverWindow, but for
+// ANY index (deliberately routed through applyIndex — the single place index
+// math lives). Returns null when the window has no clean scenes at all.
+async function computeIndexOverWindow(
+  geom: any,
+  index: string,
+  days: number,
+): Promise<number | null> {
+  const end = ee.Date(Date.now());
+  const start = end.advance(-days, "day");
+  const collection = s2Collection(geom, start, end);
+  const count = await evaluate(collection.size());
+  if (!count) return null;
+  const name = index.toUpperCase();
+  const img = applyIndex(collection.median(), index, name);
+  const result = await evaluate(
+    img.reduceRegion({
+      reducer: ee.Reducer.mean(),
+      geometry: geom,
+      scale: 10,
+      maxPixels: 1e9,
+    }),
+  );
+  const value = result && result[name] != null ? result[name] : null;
+  return value;
+}
+
+// Normalize an index's raw value onto 0..1 using its OWN VIS min/max. Two
+// indices with different natural ranges (ndwi -1..1 vs savi 0..1) can't be
+// averaged raw, so every component is scaled before the weighted blend.
+function normalizeToUnitRange(
+  index: string,
+  value: number | null,
+): number | null {
+  if (value == null) return null;
+  const v = VIS[index] as { min?: number; max?: number } | undefined;
+  if (!v || v.min == null || v.max == null) return null;
+  const span = v.max - v.min || 1;
+  return Math.max(0, Math.min(1, (value - v.min) / span));
+}
+
 async function actionGetFieldStatus(payload: any) {
   const geom = toEeGeometry(payload.geometry);
   let ndvi = await computeNdviOverWindow(geom, 14);
@@ -656,12 +706,92 @@ async function actionGetFieldStatus(payload: any) {
     };
   }
   const { status, stage } = statusFromNdvi(ndvi, payload.plantingDate ?? null);
+  // Plain-language band (AIM F1) + the growth-stage-aware headline index (AIM
+  // F2, informational — the NDVI value here still drives the stage comparison
+  // thresholds, the actual INDEX switch happens in getFieldHealthScore).
+  const band = translateIndexValue("ndvi", ndvi);
+  const primaryIndex = primaryIndexForStage(stage);
   return {
     ndviValue: ndvi,
     status,
     stage,
     confidence,
     windowDays: confidence === "low" ? 90 : 14,
+    primaryIndex,
+    ...band,
+  };
+}
+
+// ── getFieldHealthScore ────────────────────────────────────────────────────
+// AIM · Feature 2 + 3 + 4. One 0-100 composite on a 4-band plain-language
+// verdict, blending the GROWTH-STAGE-APPROPRIATE indices:
+//   early stages (Germination/Seedling) → savi + lswi
+//   later stages / unknown              → ndvi + lswi + evi
+// Each index is normalized to 0..1 against its OWN VIS range before the
+// weighted average, so indices with different natural ranges can be combined.
+// Returns the raw per-index values too so the discrepancy rules (F4) operate
+// on un-normalized numbers.
+async function actionGetFieldHealthScore(payload: any) {
+  const geom = toEeGeometry(payload.geometry);
+  const plantingDate = payload.plantingDate || null;
+
+  let dayCount: number | null = null;
+  if (plantingDate) {
+    const days = Math.floor(
+      (Date.now() - new Date(plantingDate).getTime()) / 86400000,
+    );
+    if (days >= 0) dayCount = days;
+  }
+  const stage = stageNameForDayCount(dayCount);
+  const primaryIndex = primaryIndexForStage(stage);
+  const weights = healthScoreWeights(stage);
+
+  const raw: Record<string, number> = {};
+  const normalized: Record<string, number> = {};
+  let confidence: "high" | "low" = "high";
+  for (const index of Object.keys(weights)) {
+    let value = await computeIndexOverWindow(geom, index, 14);
+    if (value === null) {
+      value = await computeIndexOverWindow(geom, index, 90);
+      confidence = "low";
+    }
+    if (value === null) {
+      // A required index has no clean reading for scoring — return an honest
+      // no-data state instead of a fabricated verdict.
+      return {
+        score: null,
+        noData: true,
+        stage,
+        dayCount,
+        primaryIndex,
+        confidence,
+      };
+    }
+    raw[index] = value;
+    normalized[index] = normalizeToUnitRange(index, value);
+  }
+
+  const score = Math.round(
+    Object.entries(weights).reduce(
+      (sum, [i, w]) => sum + (normalized[i] ?? 0) * w,
+      0,
+    ) * 100,
+  );
+  const band = translateIndexValue("composite", score);
+  const discrepancy = detectDiscrepancy(raw);
+  return {
+    score,
+    noData: false,
+    stage,
+    dayCount,
+    primaryIndex,
+    primaryReasonKey: primaryIndexReasonKey(stage),
+    confidence,
+    weights,
+    components: normalized,
+    rawValues: raw,
+    ...band,
+    discrepancy,
   };
 }
 
@@ -721,7 +851,10 @@ async function actionGetRecentIndexValue(payload: any) {
     }),
   );
   const value = result && result[name] != null ? result[name] : null;
-  return { count, value, date, cloudBlocked };
+  // Plain-language band (AIM F1) alongside the raw value — power users and the
+  // trend chart still want the number; the phrase is for the field-view card.
+  const band = value == null ? {} : translateIndexValue(index, value);
+  return { count, value, date, cloudBlocked, ...band };
 }
 
 // ── getRainfall ────────────────────────────────────────────────────────────
@@ -903,13 +1036,19 @@ async function actionGetAllFieldStatuses(payload: any) {
   });
 
   const result = await evaluate(statuses);
-  const rows = ((result && result.features) || []).map((f: any) => ({
-    id: f.properties.fid,
-    count: f.properties.count,
-    value: f.properties.value,
-    date: f.properties.date,
-    cloudBlocked: !!f.properties.cloudBlocked,
-  }));
+  const rows = ((result && result.features) || []).map((f: any) => {
+    const value = f.properties.value;
+    const band =
+      value == null ? {} : translateIndexValue(index, value);
+    return {
+      id: f.properties.fid,
+      count: f.properties.count,
+      value,
+      date: f.properties.date,
+      cloudBlocked: !!f.properties.cloudBlocked,
+      ...band,
+    };
+  });
   return { statuses: rows };
 }
 
@@ -986,6 +1125,7 @@ const HANDLERS: Record<string, Handler> = {
   detectPlantingDate: actionDetectPlantingDate,
   getDryMonths: actionGetDryMonths,
   getFieldStatus: actionGetFieldStatus,
+  getFieldHealthScore: actionGetFieldHealthScore,
   getRecentIndexValue: actionGetRecentIndexValue,
   getAllFieldStatuses: actionGetAllFieldStatuses,
   getAllFieldTrends: actionGetAllFieldTrends,

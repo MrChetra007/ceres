@@ -1,0 +1,146 @@
+/* AIM — Field Index Understanding (Feature 0, hybrid: light surfaces inside
+   the dark dashboard). Legibility-first for reading outdoors on a phone:
+   minimum 16px text, tabular numbers, color never the ONLY signal (every
+   color-coded element carries a text label and AA contrast on the light
+   `paper` surface). */
+
+.aim-card {
+  background: var(--aim-paper);
+  color: var(--aim-ink);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
+  padding: 14px 16px;
+  margin-bottom: 12px;
+}
+
+.aim-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.aim-card-title {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.65;
+}
+
+.aim-loading {
+  font-size: 13px;
+  opacity: 0.55;
+}
+
+.aim-topline {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.aim-score {
+  font-size: 48px;
+  font-weight: 800;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  font-family: var(--font-ui);
+  min-width: 104px;
+  text-align: left;
+}
+
+.aim-score-of {
+  font-size: 16px;
+  font-weight: 600;
+  opacity: 0.5;
+  margin-left: 2px;
+}
+
+.aim-phrase {
+  font-size: 17px;
+  font-weight: 700;
+  line-height: 1.35;
+  margin: 0;
+  max-width: 26em;
+}
+
+/* Band color coding (text + the labeled phrase carry the meaning too, so
+   color is never the only signal). */
+.aim-healthy { color: var(--aim-paddy-700); }
+.aim-moderate { color: var(--aim-harvest-700); }
+.aim-unhealthy { color: var(--aim-clay-500); }
+.aim-dead { color: var(--aim-clay-700); }
+
+.aim-reason {
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+  margin: 10px 0 0;
+  font-size: 14px;
+  line-height: 1.4;
+  opacity: 0.85;
+}
+.aim-reason .ti { margin-top: 2px; }
+
+/* Discrepancy banner — deliberately NOT the health band colors (green/amber/
+   brown read as "the field's condition"); this is a separate warning surface. */
+.aim-disc {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  background: var(--aim-harvest-50);
+  color: var(--aim-clay-700);
+  border: 1px solid #ecd9a9;
+  border-radius: var(--radius-md);
+  padding: 9px 11px;
+  margin-top: 12px;
+  font-size: 14px;
+  line-height: 1.45;
+}
+.aim-disc .ti { margin-top: 2px; }
+
+.aim-components {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 12px;
+}
+
+.aim-components-label {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  opacity: 0.55;
+  margin-right: 2px;
+}
+
+.aim-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: #f1ecdf;
+  color: var(--aim-ink);
+  border: 1px solid #e2d9c4;
+  border-radius: 999px;
+  padding: 3px 10px;
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.5;
+}
+
+.aim-card--nodata {
+  background: var(--aim-paper);
+  color: var(--aim-ink);
+}
+
+.aim-nodata {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.45;
+  opacity: 0.8;
+}

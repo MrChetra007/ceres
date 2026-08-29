@@ -194,10 +194,41 @@ export function getRecentIndexValue(geometry, index, cb) {
       value: body.value == null ? null : body.value,
       date: body.date || null,
       cloudBlocked: !!body.cloudBlocked,
+      label: body.label || null,
+      phraseKey: body.phraseKey || null,
+      phrase: body.phrase || null,
     }))
     .catch((err) => {
       fail(err)
       cb({ count: 0, value: null, date: null, cloudBlocked: false })
+    })
+}
+
+// AIM composite health score — one 0-100 reading blending the growth-stage-
+// appropriate indices into a plain-language verdict (see ee-data
+// actionGetFieldHealthScore). cb(snapshot|null): the resolved payload, or null
+// on any error (server unreachable / EE failure).
+export function getFieldHealthScore(geometry, plantingDate, cb) {
+  callEE('getFieldHealthScore', { geometry, plantingDate: plantingDate || null })
+    .then((body) => cb({
+      score: body.score == null ? null : body.score,
+      noData: !!body.noData,
+      stage: body.stage || null,
+      dayCount: body.dayCount == null ? null : body.dayCount,
+      primaryIndex: body.primaryIndex || 'ndvi',
+      primaryReasonKey: body.primaryReasonKey || null,
+      confidence: body.confidence || 'high',
+      weights: body.weights || {},
+      components: body.components || {},
+      rawValues: body.rawValues || {},
+      label: body.label || null,
+      phraseKey: body.phraseKey || null,
+      phrase: body.phrase || null,
+      discrepancy: body.discrepancy || null,
+    }))
+    .catch((err) => {
+      fail(err)
+      cb(null)
     })
 }
 
