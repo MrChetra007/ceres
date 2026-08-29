@@ -82,7 +82,7 @@ language (Khmer or English).
 **Goal:** Let a farmer reply to a Telegram alert with a phone photo of their field; store it,
 link it to the field and the alert that prompted it, and surface it in the app.
 
-**Schema (`migration7.sql`):**
+**Schema (`migrations/007_field_photos.sql`):**
 
 ```sql
 create table field_photos (

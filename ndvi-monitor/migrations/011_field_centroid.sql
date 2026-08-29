@@ -1,4 +1,4 @@
--- migration11_add_field_centroid.sql
+-- migrations/011_field_centroid.sql
 --
 -- Adds centroid_lat / centroid_lng columns to the fields table, so a single
 -- lat/lng point exists per field for weather lookups (Open-Meteo) without

@@ -1,6 +1,6 @@
 -- ============================================================================
 -- Migration: Subscription self-service RPCs (UI layer for placeholder billing)
--- Depends on migration add_subscription_tiers.sql (set_subscription_tier(),
+-- Depends on migrations/012_subscription_tiers.sql (set_subscription_tier(),
 -- profiles.subscription_* columns, billing_events table).
 --
 -- Why these exist: regular users only have SELECT on billing_events (no

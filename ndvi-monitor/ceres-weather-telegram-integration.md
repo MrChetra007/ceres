@@ -17,7 +17,7 @@ There is currently **no stored lat/lng per field** — only the full polygon in 
 
 ## Step 1 — Run the centroid migration
 
-Use the provided `migration11_add_field_centroid.sql` (adjust the table name inside if it isn't `fields`). This:
+Use the provided `migrations/011_field_centroid.sql` (adjust the table name inside if it isn't `fields`). This:
 - Adds nullable `centroid_lat` / `centroid_lng` columns
 - Adds a `field_geojson_centroid()` helper function (simple average-of-ring-points — sufficient accuracy for field-sized polygons)
 - Backfills every existing field's centroid from its stored `geojson`

@@ -5,7 +5,7 @@ genuine status change for a test field — never zero, never five — across sev
 real runs.
 
 Reference: `NDVI_Master_Roadmap.md` §5.6–5.7, `PROCESS.md` Phase 8.5/8.6.
-Tooling: `validation-86.sql`, `scripts/trigger-alerts-worker.sh`.
+Tooling: `migrations/audits/validation-86_dedup_audit.sql`, `scripts/trigger-alerts-worker.sh`.
 
 ## The dedup contract being validated
 
@@ -20,7 +20,7 @@ From the roadmap §5.7 and `ee-alerts-worker/index.ts`:
 
 ## Setup
 
-1. Ensure the daily job is live — run `validation-86.sql` query #1; a row named
+1. Ensure the daily job is live — run `migrations/audits/validation-86_dedup_audit.sql` query #1; a row named
    `ndvi-alerts-daily` (schedule `0 23 * * *`) must exist.
 2. Create a **test field** in the app (draw a polygon over a real rice paddy).
 3. In the app, link Telegram for the signed-in account (bot deep link flow).
@@ -29,7 +29,7 @@ From the roadmap §5.7 and `ee-alerts-worker/index.ts`:
 ## Option A — real-time (wait for the daily run)
 
 Simply let `ndvi-alerts-daily` fire each day at 23:00 UTC (06:00 Cambodia) for
-5–7 days on the test field. After each run run `validation-86.sql` query #3 and
+5–7 days on the test field. After each run run `migrations/audits/validation-86_dedup_audit.sql` query #3 and
 check `msgs_sent == worsening_transitions` and `dup_msgs_on_flat == 0`.
 
 ## Option B — manual trigger (faster, recommended)
@@ -65,9 +65,9 @@ To make a *reproducible* change for testing:
 
 ## Pass criteria
 
-- `validation-86.sql` #1: cron job present.
-- `validation-86.sql` #3: per field, `msgs_sent == worsening_transitions`.
-- `validation-86.sql` #3: `dup_msgs_on_flat == 0`.
+- `migrations/audits/validation-86_dedup_audit.sql` #1: cron job present.
+- `migrations/audits/validation-86_dedup_audit.sql` #3: per field, `msgs_sent == worsening_transitions`.
+- `migrations/audits/validation-86_dedup_audit.sql` #3: `dup_msgs_on_flat == 0`.
 - Across 3+ manual runs with an unchanged status, `msgs_sent` stays flat
   (no growth).
 - The Telegram chat receives one message per genuine worsening, and NO message

@@ -49,7 +49,7 @@ import { useI18n } from '../i18n'
 const { t } = useI18n()
 
 // Marketing copy for the 3-tier comparison. Limits (AOI count, hectares, AI
-// access) mirror the tier defaults in add_subscription_tiers.sql — that SQL
+// access) mirror the tier defaults in migrations/012_subscription_tiers.sql — that SQL
 // block is the single source of truth; update both together.
 const cards = [
   {

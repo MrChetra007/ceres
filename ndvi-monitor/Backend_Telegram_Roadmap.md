@@ -6,7 +6,7 @@
 server-side stress checks that push Telegram alerts. The AI/LLM advisory layer is **explicitly not
 being built in this phase** — see "AI window" note at the end. Don't add it unless asked.
 
-Schema lives in the companion file `schema.sql` — run that in Supabase before starting Phase 8.2.
+Schema lives in the companion file `migrations/000_baseline_schema.sql` — run that in Supabase before starting Phase 8.2.
 
 ---
 
@@ -45,7 +45,7 @@ not a Deno one). Phases 8.4–8.5 are built and user-confirmed working.
 ## Phase 8.1 — Supabase schema & auth ✅
 - Supabase project `https://wopwwtnvqyomiwbsxiks.supabase.co` (anon key in `.env` / `app.js`)
 - Auth: **Google OAuth** (single provider — email magic-link/password forms removed; Earth Engine keeps its own separate Google OAuth popup)
-- `schema.sql` updated: `fields.owner_id` now defaults to `auth.uid()`, added `set_updated_at()` trigger
+- `migrations/000_baseline_schema.sql` updated: `fields.owner_id` now defaults to `auth.uid()`, added `set_updated_at()` trigger
 - App: supabase-js CDN added, auth overlay reworked into a dark-glass card with one "Sign in with Google" button for Supabase + one for Earth Engine, user menu with sign-in/sign-out, `onAuthStateChange` auto-loads fields and areas
 - **Checkpoint:** can sign in with Google and see an empty `fields` list from Supabase in the Supabase dashboard table view
 
@@ -66,11 +66,11 @@ not a Deno one). Phases 8.4–8.5 are built and user-confirmed working.
 - Bot webhook = **Supabase Edge Function** `supabase/functions/telegram-webhook/index.ts`
   (Deno, `verify_jwt = false`): receives `/start <code>`, matches it in `link_codes` (via
   `service_role`, which bypasses RLS — no public select-by-code policy exists), and redeems it
-  through the `redeem_link_code()` RPC (migration2.sql) which atomically sets the user's
+  through the `redeem_link_code()` RPC (migrations/002_telegram_linking.sql) which atomically sets the user's
   `telegram_chat_id` and marks the code used
-- `migration2.sql` also adds a guard trigger so a logged-in user can only ever *clear* their
+- `migrations/002_telegram_linking.sql` also adds a guard trigger so a logged-in user can only ever *clear* their
   `telegram_chat_id` (disconnect) — the actual chat id is set only by the bot
-- Deploy steps: run `migration2.sql` in the SQL editor → `supabase functions deploy
+- Deploy steps: run `migrations/002_telegram_linking.sql` in the SQL editor → `supabase functions deploy
   telegram-webhook` → `supabase secrets set TELEGRAM_BOT_TOKEN=...` → register the webhook
   `https://wopwwtnvqyomiwbsxiks.functions.supabase.co/telegram-webhook` via Telegram's
   `setWebhook` API
@@ -91,7 +91,7 @@ not a Deno one). Phases 8.4–8.5 are built and user-confirmed working.
 - **Checkpoint:** the worker authenticates and pulls a real NDVI value with no browser/OAuth popup involved ✅
 
 ## Phase 8.5 — Scheduled worker (Supabase pg_cron + Edge Function) ✅
-- **Scheduling:** `migration3.sql` uses a **Supabase pg_cron job** (Postgres scheduling, no separate
+- **Scheduling:** `migrations/003_cron_scheduled_worker.sql` uses a **Supabase pg_cron job** (Postgres scheduling, no separate
   Cloud Scheduler) — enables `pg_cron` + `pg_net`, stores the `service_role` key in **Supabase Vault**,
   and schedules `ndvi-alerts-daily` (once daily, 23:00 UTC = 06:00 Cambodia) to `net.http_post` the
   worker function with a Vault-signed `service_role` Bearer token. To disable later:
@@ -121,7 +121,7 @@ not a Deno one). Phases 8.4–8.5 are built and user-confirmed working.
   zero and not five — **user-confirmed complete**. The dedup contract holds: `no_data` logs without
   sending, `healthy→stressed` sends exactly one, repeated `stressed` runs send nothing. Two worker
   bugs surfaced and fixed during validation (GeoJSON Feature unwrap, 30→90-day window + `no_data`
-  severity). Test harness: `trigger-alerts-worker` Edge Function + `validation-86.sql`.
+  severity). Test harness: `trigger-alerts-worker` Edge Function + `migrations/audits/validation-86_dedup_audit.sql`.
 
 ---
 
@@ -148,9 +148,9 @@ season's alert log" during a pitch) while only pinging Telegram on genuine chang
 
 1. Supabase schema + auth — done ✅
 2. Migrate app CRUD off localStorage — done ✅
-3. Telegram bot + linking flow — done ✅ (deployed: `migration2.sql` applied, function deployed, token secret set, webhook registered)
+3. Telegram bot + linking flow — done ✅ (deployed: `migrations/002_telegram_linking.sql` applied, function deployed, token secret set, webhook registered)
 4. Earth Engine service account — done ✅ (secret `EE_SERVICE_ACCOUNT_KEY`, verified in Deno via `ee-spike`)
-5. Scheduled worker — done ✅ (`ee-alerts-worker` Edge Function + `migration3.sql` pg_cron/Vault daily job, user-confirmed working)
+5. Scheduled worker — done ✅ (`ee-alerts-worker` Edge Function + `migrations/003_cron_scheduled_worker.sql` pg_cron/Vault daily job, user-confirmed working)
 6. End-to-end test + dedup tuning — complete ✅ (dedup contract verified, worker bugs fixed)
 
 **Backend Phase 8 is complete.**

@@ -341,7 +341,7 @@ export default {
   'subs.coop_note': 'Co-op pricing is per-farmer above 20 — contact us for a quote.',
   'subs.ai_unlock_tip': 'Consult AI is locked on your current plan — upgrade to unlock',
   // Pricing-card feature bullets. Keep in sync with the tier defaults in
-  // add_subscription_tiers.sql (the single source of truth for limits).
+  // migrations/012_subscription_tiers.sql (the single source of truth for limits).
   'subs.feat_core': 'All core monitoring tools',
   'subs.feat_weather': '15-day weather & rainfall',
   'subs.feat_telegram': 'Telegram alerts',

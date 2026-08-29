@@ -534,7 +534,7 @@ export async function loadSubscription() {
 
 // Total area of all saved fields in hectares — displayed as usage against
 // max_hectares. UI-only for now: the backend does NOT enforce the hectare cap
-// (see add_subscription_tiers.sql "NOT covered"). TODO(backend): enforce
+// (see migrations/012_subscription_tiers.sql "NOT covered"). TODO(backend): enforce
 // hectares server-side, then keep this display but stop blocking on it alone.
 export function getTotalFieldHectares() {
   let total = 0
@@ -1637,7 +1637,7 @@ export async function saveField(name, geojson, plantingDate) {
   if (!state.supabaseUser) { showToast('Sign in to save fields'); return null }
   const area = getFieldAreaHectares(geojson)
   // UI-only hectare cap (TODO(backend): enforce server-side too — see
-  // add_subscription_tiers.sql "NOT covered"). Blocks right after the field is
+  // migrations/012_subscription_tiers.sql "NOT covered"). Blocks right after the field is
   // drawn, but is NOT a real server-side limit yet.
   if (getTotalFieldHectares() + area > state.subscription.maxHectares) {
     showPaywall('hectare')

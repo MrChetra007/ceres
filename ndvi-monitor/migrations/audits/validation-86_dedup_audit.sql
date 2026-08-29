@@ -7,7 +7,7 @@
 -- ---------------------------------------------------------------------------
 -- 1) Sanity: is the daily cron job actually registered?
 --    Expected: one row named 'ndvi-alerts-daily' with schedule '0 23 * * *'.
---    If empty, re-run migration3.sql and check cron.job / net._http_response.
+--    If empty, re-run migrations/003_cron_scheduled_worker.sql and check cron.job / net._http_response.
 -- ---------------------------------------------------------------------------
 select jobid, jobname, schedule, active
 from cron.job
