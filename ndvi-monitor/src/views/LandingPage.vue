@@ -455,6 +455,16 @@
       </div>
     </section>
 
+    <section id="landing-pricing" class="landing-section reveal">
+      <div class="landing-eyebrow mono center">Plans &amp; pricing</div>
+      <h2 class="landing-h2">Choose a plan that grows with your farm.</h2>
+      <p class="landing-lead">
+        Start free with one monitoring area. Upgrade for more areas, more
+        hectare capacity, and Consult AI.
+      </p>
+      <PricingCards />
+    </section>
+
     <section class="landing-cta-section">
       <h2 class="landing-cta-title">
         Your next rice cycle, watched from above.
@@ -497,6 +507,7 @@ import * as store from "../store";
 import { sb } from "../services/supabase";
 import { landingIndices } from "../data/landing-indices";
 import IndexSection from "../components/landing-page/IndexSection.vue";
+import PricingCards from "../components/PricingCards.vue";
 
 const leaving = ref(false);
 

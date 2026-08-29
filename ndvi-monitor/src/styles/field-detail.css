@@ -332,3 +332,32 @@
   color: var(--amber);
   font-weight: 600;
 }
+
+/* ---- Consult AI locked state (paid feature gating) ---- */
+.ai-consult-btn.locked {
+  color: var(--amber);
+  border-color: rgba(245, 166, 35, 0.4);
+  background: var(--amber-dim);
+}
+.ai-consult-btn.locked:hover:not(:disabled) {
+  background: var(--amber-dim);
+  color: var(--amber);
+}
+.ai-note.ai-locked-note {
+  color: var(--amber);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.ai-unlock-link {
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--accent);
+  font-size: 10.5px;
+  font-weight: 700;
+  cursor: pointer;
+  text-decoration: underline;
+}
+.ai-unlock-link:hover { color: var(--text); }

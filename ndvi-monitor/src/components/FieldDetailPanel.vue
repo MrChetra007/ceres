@@ -47,12 +47,22 @@
       </div>
 
       <div class="detail-section ai-card">
-        <button class="ai-consult-btn" :disabled="consultingAi || noSceneData" @click="consultAi">
+        <button
+          class="ai-consult-btn"
+          :class="{ locked: aiLocked }"
+          :title="aiLocked ? t('subs.ai_unlock_tip') : ''"
+          :disabled="consultingAi || noSceneData"
+          @click="aiLocked ? store.showPaywall('ai') : consultAi()"
+        >
           <span v-if="consultingAi" class="ai-spinner"></span>
-          <i v-else class="ti ti-sparkles"></i>
-          {{ consultingAi ? t('field.consulting_ai') : t('field.consult_ai') }}
+          <i v-else :class="aiLocked ? 'ti ti-lock' : 'ti ti-sparkles'"></i>
+          {{ aiLocked ? t('subs.limit_ai') : (consultingAi ? t('field.consulting_ai') : t('field.consult_ai')) }}
         </button>
-        <p v-if="noSceneData" class="ai-note no-scene-note">{{ t('field.no_scene_note') }}</p>
+        <p v-if="aiLocked" class="ai-note ai-locked-note">
+          {{ t('subs.ai_not_in_plan') }}
+          <button class="ai-unlock-link" @click="store.showPaywall('ai')">{{ t('subs.upgrade') }}</button>
+        </p>
+        <p v-else-if="noSceneData" class="ai-note no-scene-note">{{ t('field.no_scene_note') }}</p>
         <div v-if="aiExplanation" class="ai-answer">
           <p class="detail-card-label">{{ t('field.ai_agronomist') }}</p>
           <p class="ai-text">{{ aiExplanation }}</p>
@@ -158,6 +168,10 @@ const aiTruncated = ref(false)
 const photos = ref([])
 let chart = null
 let chartResizeObs = null
+
+// Consult AI is gated by plan (profiles.consult_ai_enabled). Show a locked
+// state rather than hiding the feature so locked users know it exists.
+const aiLocked = computed(() => !!state.supabaseUser && !state.subscription.consultAiEnabled)
 
 // Weather forecast (display-only, see services/weatherService.js)
 const wxDays = ref([])

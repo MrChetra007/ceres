@@ -116,6 +116,22 @@ export const state = reactive({
   telegramModalVisible: false,
   telegramLinking: false,
   preferredLanguage: 'km',
+  settingsVisible: false,
+  // Current user's subscription/limits, loaded from profiles. Defaults mirror
+  // the Free tier so limit checks work before the profile fetch resolves.
+  subscription: {
+    tier: 'free',
+    status: 'active',
+    source: 'none',
+    renewsAt: null,
+    maxAois: 1,
+    maxHectares: 10,
+    consultAiEnabled: false,
+  },
+  // Upgrade paywall modal. reason: 'aoi' | 'hectare' | 'ai'.
+  paywall: { visible: false, reason: 'aoi' },
+  // Placeholder checkout modal. null = closed, else 'individual' | 'coop'.
+  checkoutTier: null,
   photosLightboxIndex: null,
   // Health Zone Breakdown panel (default closed). `view` tracks which band
   // family the breakdown describes: 'ndvi' | 'rvi' | 'other' (ndwi/lswi/truecolor
@@ -337,7 +353,8 @@ export function openAoiEditorEdit(id) {
 
 export async function createAoi(name, bounds) {
   if (!state.supabaseUser) { showToast('Sign in to save areas'); return null }
-  if (state.aois.length >= 5) { showToast('Limit of 5 areas reached'); return null }
+  const maxAois = state.subscription.maxAois
+  if (state.aois.length >= maxAois) { showPaywall('aoi'); return null }
   try {
     const aoi = await supabase.insertAoi({ name, bounds })
     state.aois.push(aoi)
@@ -345,10 +362,13 @@ export async function createAoi(name, bounds) {
     return aoi
   } catch (err) {
     if (handleAuthError(err)) return null
-    const msg = /limit|exceeded|maximum|violates|cap/i.test(err.message || '')
-      ? 'Limit of 5 areas reached'
-      : err.message
-    showToast('Failed to save area: ' + msg)
+    // The enforce_aoi_limit DB trigger caught it server-side too — route that
+    // to the friendly upgrade prompt instead of the raw Postgres error text.
+    if (/AOI limit reached|limit|exceeded|maximum|violates|cap/i.test(err.message || '')) {
+      showPaywall('aoi')
+      return null
+    }
+    showToast('Failed to save area: ' + err.message)
     return null
   }
 }
@@ -477,6 +497,117 @@ export async function setLanguage(lang) {
     return false
   }
 }
+
+// ---------------------------------------------------------------------------
+// Subscription / billing UI
+// ---------------------------------------------------------------------------
+const FREE_DEFAULTS = {
+  tier: 'free',
+  status: 'active',
+  source: 'none',
+  renewsAt: null,
+  maxAois: 1,
+  maxHectares: 10,
+  consultAiEnabled: false,
+}
+
+export async function loadSubscription() {
+  if (!state.supabaseUser) {
+    Object.assign(state.subscription, FREE_DEFAULTS)
+    return
+  }
+  try {
+    const p = await supabase.getMyProfile()
+    Object.assign(state.subscription, {
+      tier: p.subscription_tier || 'free',
+      status: p.subscription_status || 'active',
+      source: p.subscription_source || 'none',
+      renewsAt: p.subscription_renews_at || null,
+      maxAois: p.max_aois != null ? p.max_aois : 1,
+      maxHectares: p.max_hectares != null ? p.max_hectares : 10,
+      consultAiEnabled: !!p.consult_ai_enabled,
+    })
+  } catch (err) {
+    // Non-fatal — limits fall back to Free-tier defaults.
+  }
+}
+
+// Total area of all saved fields in hectares — displayed as usage against
+// max_hectares. UI-only for now: the backend does NOT enforce the hectare cap
+// (see add_subscription_tiers.sql "NOT covered"). TODO(backend): enforce
+// hectares server-side, then keep this display but stop blocking on it alone.
+export function getTotalFieldHectares() {
+  let total = 0
+  for (const f of state.fields) total += getOrComputeArea(f)
+  return total
+}
+
+// Hexagonal-reference number formatting for renewal/history dates.
+export function formatDateLong(iso, lang) {
+  if (!iso) return null
+  const locale = (lang || state.preferredLanguage) === 'km' ? 'km-KH' : 'en-US'
+  try {
+    return new Intl.DateTimeFormat(locale, { month: 'long', day: 'numeric', year: 'numeric' }).format(new Date(iso))
+  } catch (e) {
+    return String(iso)
+  }
+}
+
+export function showPaywall(reason) {
+  state.paywall = { visible: true, reason: reason || 'aoi' }
+}
+
+export function hidePaywall() {
+  state.paywall.visible = false
+}
+
+export function openPlanBillingModal() {
+  if (!state.supabaseUser) { goToMap(); return }
+  state.settingsVisible = true
+  loadSubscription()
+}
+
+export function closePlanBillingModal() {
+  state.settingsVisible = false
+}
+
+export function openCheckout(tier) {
+  if (!state.supabaseUser) {
+    // AuthOverlay only mounts on /map — route there, the router guard shows it.
+    goToMap()
+    return
+  }
+  state.checkoutTier = tier
+}
+
+export function closeCheckout() {
+  state.checkoutTier = null
+}
+
+// PLACEHOLDER checkout: upgrade_my_subscription() grants the tier directly in
+// the DB with NO payment (ABA PayWay is blocked). This is the exact spot a
+// real ABA Purchase API call (or hosted-checkout redirect) replaces later —
+// nothing upstream changes. Also reloads the subscription + opens billing.
+export async function confirmCheckout(tier) {
+  await supabase.upgradeSubscription(tier)
+  await loadSubscription()
+  closeCheckout()
+}
+
+export async function cancelMySubscription() {
+  await supabase.cancelSubscription()
+  await loadSubscription()
+}
+
+function goToPricing() {
+  getRouter().then((r) => r.push('/pricing'))
+}
+
+function goToMap() {
+  getRouter().then((r) => r.push('/map'))
+}
+
+export { goToPricing, goToMap }
 
 function generateLinkCode() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
@@ -1423,6 +1554,7 @@ sb.auth.onAuthStateChange((event, session) => {
       loadFieldsFromSupabase()
       loadAoisFromSupabase()
       loadTelegramChatId()
+      loadSubscription()
       if (localStorage.getItem('ndvi_fields') && !localStorage.getItem('ndvi_import_skipped')) {
         importLocalFieldsIfAny()
       }
@@ -1436,6 +1568,10 @@ sb.auth.onAuthStateChange((event, session) => {
     state.aoiCoords = DEFAULT_AOI.slice()
     state.telegramChatId = null
     state.telegramLinking = false
+    Object.assign(state.subscription, FREE_DEFAULTS)
+    state.settingsVisible = false
+    state.checkoutTier = null
+    state.paywall.visible = false
     stopTelegramPolling()
     if (mapReg.aoiRectangle) {
       if (mapReg.map) mapReg.map.removeLayer(mapReg.aoiRectangle)
@@ -1499,6 +1635,14 @@ export async function importLocalFieldsIfAny() {
 
 export async function saveField(name, geojson, plantingDate) {
   if (!state.supabaseUser) { showToast('Sign in to save fields'); return null }
+  const area = getFieldAreaHectares(geojson)
+  // UI-only hectare cap (TODO(backend): enforce server-side too — see
+  // add_subscription_tiers.sql "NOT covered"). Blocks right after the field is
+  // drawn, but is NOT a real server-side limit yet.
+  if (getTotalFieldHectares() + area > state.subscription.maxHectares) {
+    showPaywall('hectare')
+    return null
+  }
   let planting_date = plantingDate || null
   let planting_date_source = 'manual'
   // Feature 3 — if the farmer didn't enter a planting date, try to estimate one
@@ -1518,7 +1662,7 @@ export async function saveField(name, geojson, plantingDate) {
     const field = await supabase.insertField({
       name,
       geojson,
-      area_ha: getFieldAreaHectares(geojson),
+      area_ha: area,
       planting_date,
       planting_date_source,
     })

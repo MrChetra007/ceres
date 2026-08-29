@@ -268,3 +268,41 @@
   background: var(--panel-border-strong);
 }
 .tg-status-dot.on { background: var(--accent); }
+
+/* ---- Subscription plan chip (topbar) ---- */
+.plan-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.plan-chip .plan-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-faint);
+}
+.plan-chip .plan-dot.individual { background: var(--accent); }
+.plan-chip .plan-dot.coop { background: var(--amber); }
+
+.tier-badge {
+  margin-left: auto;
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: var(--accent);
+  background: var(--accent-dim);
+  border-radius: 999px;
+  padding: 2px 8px;
+}
+.user-menu-tier {
+  margin-left: auto;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--accent);
+  background: var(--accent-dim);
+  border-radius: 999px;
+  padding: 2px 8px;
+}

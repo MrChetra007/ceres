@@ -51,12 +51,12 @@
       <div class="areas-group" ref="areasGroupWrap">
         <span class="areas-group-label">{{ t('band.area_monitoring') }}</span>
         <div class="band-areas" ref="areasWrap">
-          <button class="areas-btn" :class="{ active: areasOpen || state.aois.length >= 5 }" :title="t('band.switch_area')" @click="areasOpen = !areasOpen">
+          <button class="areas-btn" :class="{ active: areasOpen || atAreaCap }" :title="t('band.switch_area')" @click="areasOpen = !areasOpen">
             <i class="ti ti-map-pin"></i>
             <span class="areas-btn-label">{{ selectedAoiLabel }}</span>
             <i class="ti ti-chevron-down"></i>
             <span class="band-btn-caption">{{ t('band.areas') }}</span>
-            <span v-if="state.aois.length >= 5" class="areas-cap-dot" :title="t('band.areas_cap')"></span>
+            <span v-if="atAreaCap" class="areas-cap-dot" :title="t('band.areas_cap')"></span>
           </button>
           <Teleport to="body">
             <div class="areas-menu" v-show="areasOpen" ref="areasMenuRef">
@@ -72,7 +72,7 @@
                 <i class="ti ti-trash" :title="t('band.delete_area')" @click.stop="remove(a)"></i>
               </button>
               <div class="areas-empty" v-if="state.aois.length === 0">{{ t('band.no_areas') }}</div>
-              <button v-if="state.aois.length < 5" class="areas-new" @click="openNewArea">
+              <button v-if="!atAreaCap" class="areas-new" @click="openNewArea">
                 <i class="ti ti-plus"></i> {{ t('band.new_area') }}
               </button>
               <div v-else class="areas-cap">{{ t('band.areas_cap') }}</div>
@@ -113,6 +113,10 @@ const selectedAoiLabel = computed(() => {
   const aoi = state.aois.find((a) => a.id === state.selectedAoiId)
   return aoi ? displayAoiName(aoi) : t('band.areas')
 })
+
+// Area cap comes from the user's current plan (profiles.max_aois), not a
+// hardcoded number — Free=1, Individual=5, Co-op=20+.
+const atAreaCap = computed(() => state.aois.length >= state.subscription.maxAois)
 
 function displayAoiName(aoi) {
   return aoi.name === 'Battambang (default)' ? t('band.default_area') : aoi.name
@@ -185,8 +189,8 @@ function remove(a) {
 
 function openNewArea() {
   areasOpen.value = false
-  if (state.aois.length >= 5) {
-    store.showToast(t('toast.limit_areas'))
+  if (atAreaCap.value) {
+    store.showPaywall('aoi')
     return
   }
   store.openAoiEditorEdit(null)

@@ -2,10 +2,12 @@ import { createRouter, createWebHistory } from 'vue-router'
 import { state } from '../store'
 import LandingPage from '../views/LandingPage.vue'
 import MapView from '../views/MapView.vue'
+import PricingPage from '../views/PricingPage.vue'
 
 const routes = [
   { path: '/', name: 'landing', component: LandingPage },
   { path: '/map', name: 'map', component: MapView },
+  { path: '/pricing', name: 'pricing', component: PricingPage },
 ]
 
 const router = createRouter({

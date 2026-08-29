@@ -155,9 +155,49 @@ export async function signOut() {
 // Telegram linking (Phase 8.3)
 // ---------------------------------------------------------------------------
 export async function getMyProfile() {
-  const { data, error } = await sb.from('profiles').select('telegram_chat_id, preferred_language').maybeSingle()
+  const { data, error } = await sb
+    .from('profiles')
+    .select(
+      'telegram_chat_id, preferred_language, subscription_tier, subscription_status, subscription_source, subscription_renews_at, max_aois, max_hectares, consult_ai_enabled'
+    )
+    .maybeSingle()
   if (error) throw error
-  return data || { telegram_chat_id: null, preferred_language: 'en' }
+  return data || {
+    telegram_chat_id: null,
+    preferred_language: 'en',
+    subscription_tier: 'free',
+    subscription_status: 'active',
+    subscription_source: 'none',
+    subscription_renews_at: null,
+    max_aois: 1,
+    max_hectares: 10,
+    consult_ai_enabled: false,
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Subscription / billing (placeholder checkout until ABA PayWay is wired in)
+// ---------------------------------------------------------------------------
+// PLACEHOLDER: grants the tier via the DB RPC without charging anyone. When
+// ABA PayWay is unblocked, this body is swapped for the real Purchase API call
+// (or a redirect to ABA's hosted checkout) — the store/UI callers don't change.
+export async function upgradeSubscription(tier) {
+  const { error } = await sb.rpc('upgrade_my_subscription', { p_tier: tier })
+  if (error) throw error
+}
+
+export async function cancelSubscription() {
+  const { error } = await sb.rpc('cancel_my_subscription')
+  if (error) throw error
+}
+
+export async function loadBillingEvents() {
+  const { data, error } = await sb
+    .from('billing_events')
+    .select('event_type, tier, source, notes, created_at')
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  return data || []
 }
 
 export async function insertLinkCode(code, userId, expiresAt) {

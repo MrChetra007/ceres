@@ -43,11 +43,20 @@
           <i class="ti ti-list-details"></i>
         </button>
 
+        <button v-if="state.supabaseUser" class="glass-pill plan-chip" :title="t('subs.plan_and_billing')" @click="openPlanBilling">
+          <span class="plan-dot" :class="state.subscription.tier"></span>
+          <span class="pill-text">{{ tierLabel }}</span>
+        </button>
+
         <div class="settings-dropdown" ref="settingsWrap">
           <button class="glass-pill icon" :title="t('topbar.settings')" @click="toggleSettingsMenu">
             <i class="ti ti-dots-vertical"></i>
           </button>
           <div class="settings-menu" v-show="settingsOpen" @click.stop>
+            <button v-if="state.supabaseUser" class="settings-item" @click="openPlanBilling">
+              <i class="ti ti-crown"></i>{{ t('subs.plan_and_billing') }}
+              <span class="tier-badge">{{ tierLabel }}</span>
+            </button>
             <button class="settings-item" @click="chooseExport('png')"><i class="ti ti-photo"></i>{{ t('topbar.export_png') }}</button>
             <button class="settings-item" @click="chooseExport('pdf')"><i class="ti ti-file-text"></i>{{ t('topbar.export_pdf') }}</button>
             <button class="settings-item" :class="{ on: state.telegramChatId }" @click="openTelegram">
@@ -79,6 +88,10 @@
           <button v-if="state.supabaseUser" class="sign-out-btn" @click.stop="doSignOut">{{ t('common.sign_out') }}</button>
           <div class="topbar-user-menu" v-show="userMenuOpen" @click.stop>
             <span class="user-menu-email">{{ userLabel }}</span>
+            <button v-if="state.supabaseUser" class="user-menu-item" @click="openPlanBilling">
+              <i class="ti ti-crown"></i> {{ t('subs.plan_and_billing') }}
+              <span class="user-menu-tier">{{ tierLabel }}</span>
+            </button>
             <button v-if="state.supabaseUser" class="user-menu-item sign-out" @click="doSignOut">
               <i class="ti ti-logout"></i> {{ t('common.sign_out') }}
             </button>
@@ -99,6 +112,10 @@
             <i class="ti ti-user"></i>
             <span>{{ userLabel }}</span>
           </div>
+          <button class="settings-item" @click="openPlanBilling">
+            <i class="ti ti-crown"></i>{{ t('subs.plan_and_billing') }}
+            <span class="tier-badge">{{ tierLabel }}</span>
+          </button>
           <button
             class="settings-item"
             :class="{ on: state.compareMode }"
@@ -182,6 +199,18 @@ const hamburgerWrap = ref(null)
 const userLabel = computed(() =>
   state.supabaseUser ? (state.supabaseUser.email || t('topbar.signed_in')) : t('topbar.sign_in')
 )
+
+const tierLabel = computed(() => {
+  const map = { free: 'subs.free', individual: 'subs.individual', coop: 'subs.coop' }
+  return t(map[state.subscription.tier] || 'subs.free')
+})
+
+function openPlanBilling() {
+  userMenuOpen.value = false
+  settingsOpen.value = false
+  hamburgerOpen.value = false
+  store.openPlanBillingModal()
+}
 
 function onUserClick(e) {
   if (e.target.classList.contains('sign-out-btn')) return
