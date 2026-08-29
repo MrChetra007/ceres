@@ -144,3 +144,171 @@
   line-height: 1.45;
   opacity: 0.8;
 }
+
+/* ── F6: progressive disclosure ─────────────────────────────────────────── */
+.aim-details-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 12px;
+  padding: 7px 12px;
+  background: #f1ecdf;
+  color: var(--aim-ink);
+  border: 1px solid #e2d9c4;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.4;
+  cursor: pointer;
+  transition: background-color 0.15s var(--ease);
+}
+.aim-details-toggle:hover { background: #eae3d2; }
+
+.aim-details {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid #e7dfcd;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* ── F5: IndexLegend ────────────────────────────────────────────────────── */
+.aim-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.aim-legend-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+.aim-legend-title {
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+.aim-legend-sub {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  opacity: 0.55;
+}
+
+.aim-legend-bands {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.aim-band-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 8px;
+  border-radius: var(--radius-md);
+  background: #f4f0e4;
+}
+
+.aim-legend-sprout {
+  flex: 0 0 auto;
+  width: 26px;
+  height: 26px;
+}
+.aim-sprout-img {
+  width: 26px;
+  height: 26px;
+  display: block;
+}
+.aim-sp-soil { fill: var(--aim-clay-500); }
+.aim-sp-stem {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+}
+.aim-sp-leaf { fill: currentColor; }
+.sprout-unhealthy { color: #b08a5c; }
+.sprout-moderate { color: var(--aim-harvest-500); }
+.sprout-healthy { color: var(--aim-paddy-500); }
+
+.aim-band-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 84px;
+}
+.aim-band-name {
+  font-size: 14px;
+  line-height: 1.3;
+}
+.aim-band-row--dead .aim-band-name { color: var(--aim-clay-700); }
+.aim-band-row--unhealthy .aim-band-name { color: var(--aim-clay-500); }
+.aim-band-row--moderate .aim-band-name { color: var(--aim-harvest-700); }
+.aim-band-row--healthy .aim-band-name { color: var(--aim-paddy-700); }
+
+.aim-band-range {
+  font-size: 12px;
+  opacity: 0.75;
+}
+
+.aim-band-phrase {
+  font-size: 13px;
+  line-height: 1.35;
+  opacity: 0.85;
+  text-align: right;
+  margin-left: auto;
+}
+
+/* Domain bar — the whole min→max span in the same 4 bands + current marker. */
+.aim-fill {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.aim-fill-track {
+  position: relative;
+  height: 10px;
+  border-radius: 999px;
+  overflow: visible;
+  display: flex;
+}
+.aim-fill-seg {
+  flex: 1 1 0;
+  height: 100%;
+}
+.aim-fill-dead { background: var(--aim-clay-700); }
+.aim-fill-unhealthy { background: var(--aim-clay-500); }
+.aim-fill-moderate { background: var(--aim-harvest-500); }
+.aim-fill-healthy { background: var(--aim-paddy-500); }
+
+.aim-fill-marker {
+  position: absolute;
+  top: 50%;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--aim-ink);
+  border: 2.5px solid #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.aim-fill-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  opacity: 0.6;
+  user-select: none;
+}
+
+/* Compact (under the band tabs): bar + boundary numbers only. */
+.aim-legend--compact {
+  gap: 4px;
+  padding: 7px 10px;
+}
+.aim-legend--compact .aim-legend-head { display: none; }
+.aim-legend--compact .aim-fill-track { height: 8px; }
+.aim-legend--compact .aim-fill-labels { font-size: 10px; }

@@ -28,16 +28,35 @@
           <div v-if="aim.discrepancy" class="aim-disc" role="alert">
             <i class="ti ti-alert-triangle"></i><span>{{ aimDiscText }}</span>
           </div>
-          <div class="aim-components">
-            <span class="aim-components-label">{{ t('aim.components') }}</span>
-            <span
+          <button
+            v-if="aim"
+            class="aim-details-toggle"
+            :aria-expanded="aimDetailsOpen"
+            @click="aimDetailsOpen = !aimDetailsOpen"
+          >
+            <span>{{ aimDetailsOpen ? t('aim.hide_details') : t('aim.show_details') }}</span>
+            <i class="ti" :class="aimDetailsOpen ? 'ti-chevron-up' : 'ti-chevron-down'"></i>
+          </button>
+          <!-- Details: how the score combines + a consistent per-index legend
+               for each component (learned once, reused across all indices). -->
+          <div v-if="aimDetailsOpen" class="aim-details">
+            <div class="aim-components">
+              <span class="aim-components-label">{{ t('aim.components') }}</span>
+              <span
+                v-for="chip in aimChips"
+                :key="chip.name"
+                class="aim-chip"
+                :title="chip.raw != null ? INDICES[chip.name].name + ' · raw ' + chip.raw.toFixed(2) : INDICES[chip.name].name"
+              >
+                {{ INDICES[chip.name].name }} {{ Math.round(chip.norm * 100) }}%
+              </span>
+            </div>
+            <IndexLegend
               v-for="chip in aimChips"
-              :key="chip.name"
-              class="aim-chip"
-              :title="chip.raw != null ? INDICES[chip.name].name + ' · raw ' + chip.raw.toFixed(2) : INDICES[chip.name].name"
-            >
-              {{ INDICES[chip.name].name }} {{ Math.round(chip.norm * 100) }}%
-            </span>
+              :key="'lg-' + chip.name"
+              :index="chip.name"
+              :value="chip.raw"
+            />
           </div>
         </div>
       </div>
@@ -187,6 +206,7 @@ import { state, fieldStatus, fieldTrends, setInfoChart, getStageAtDate, fieldCon
 import * as store from '../store'
 import { getOrComputeArea, formatHectares } from '../store'
 import ConfidenceBadge from './ConfidenceBadge.vue'
+import IndexLegend from './IndexLegend.vue'
 import { buildChartConfig } from '../services/chart'
 import { INDICES, MONTHS, CONSULT_AI_URL } from '../config'
 import { sb, requireSession } from '../services/supabase'
@@ -226,6 +246,7 @@ const { km, t } = useI18n()
 // to an empty-state when the score outright can't be computed (noData).
 const aim = ref(null)
 const aimLoading = ref(false)
+const aimDetailsOpen = ref(false)
 let aimReq = 0
 
 const aimPhrase = computed(() => {
@@ -757,7 +778,7 @@ watch(() => state.benchmarkValue, () => {
   if (state.chartData && state.infoPanelVisible) render(state.chartData)
 })
 watch(() => state.mainMonth, () => updateMarker())
-watch(() => state.currentFieldId, () => { aiExplanation.value = ''; aiTruncated.value = false; photos.value = []; state.photosLightboxIndex = null; loadPhotos(); aim.value = null; loadAim() })
+watch(() => state.currentFieldId, () => { aiExplanation.value = ''; aiTruncated.value = false; photos.value = []; state.photosLightboxIndex = null; loadPhotos(); aim.value = null; aimDetailsOpen.value = false; loadAim() })
 watch(() => currentField.value && currentField.value.id, () => { loadWeather(); loadAim() })
 watch(() => state.infoPanelVisible, async (open) => {
   if (open && currentField.value) {
