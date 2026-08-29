@@ -75,24 +75,95 @@ function computeNdviOverWindow(
   });
 }
 
-function getNdviForGeometry(
-  geojson: any,
-): Promise<{
-  ndvi: number | null;
-  confidence: "high" | "low";
-  windowDays: number;
-}> {
-  const geom = toEeGeometry(geojson);
-  return computeNdviOverWindow(geom, 14).then((ndvi) => {
-    if (ndvi !== null) {
-      return { ndvi, confidence: "high" as const, windowDays: 14 };
-    }
-    return computeNdviOverWindow(geom, 90).then((wideNdvi) => ({
-      ndvi: wideNdvi,
-      confidence: "low" as const,
-      windowDays: 90,
-    }));
+// ── Sentinel-1 RVI (radar) fallback ─────────────────────────────────────
+// Ported from ee-data.ts's getRadarVegetationIndex — same math, same ±15-day
+// window around "now" (S1's ~6-12 day revisit needs that much slack). Backscatter
+// arrives in dB (log scale); RVI must be computed on LINEAR power or the ratio
+// saturates into a flat, meaningless image — see the dB→linear fix already
+// validated for the cement-factory AOI.
+function getRadarVegetationIndex(geom: any): Promise<number | null> {
+  return new Promise((resolve, reject) => {
+    const end = ee.Date(Date.now()).advance(15, "day");
+    const start = ee.Date(Date.now()).advance(-15, "day");
+    const s1 = ee
+      .ImageCollection("COPERNICUS/S1_GRD")
+      .filterBounds(geom)
+      .filterDate(start, end)
+      .filter(ee.Filter.eq("instrumentMode", "IW"))
+      .filter(ee.Filter.listContains("transmitterReceiverPolarisation", "VV"))
+      .filter(ee.Filter.listContains("transmitterReceiverPolarisation", "VH"));
+    s1.size().evaluate((count: number, err: string) => {
+      if (err) return reject(new Error(err));
+      if (!count) return resolve(null);
+      const composite = s1.median().clip(geom);
+      const vvLinear = ee.Image(10).pow(composite.select("VV").divide(10));
+      const vhLinear = ee.Image(10).pow(composite.select("VH").divide(10));
+      const rvi = vhLinear
+        .multiply(4)
+        .divide(vvLinear.add(vhLinear))
+        .rename("RVI");
+      rvi
+        .reduceRegion({
+          reducer: ee.Reducer.mean(),
+          geometry: geom,
+          scale: 10,
+          maxPixels: 1e9,
+        })
+        .evaluate((result: any, e: string) => {
+          if (e) reject(new Error(e));
+          else resolve(result?.RVI ?? null);
+        });
+    });
   });
+}
+
+// PLACEHOLDER threshold, not yet calibrated against real paired NDVI/RVI
+// readings — see the note in getFieldReading() below. Treat any radar-only
+// reading as directional, never as precise as an optical growth-stage call.
+const RVI_STRESS_THRESHOLD = 0.4;
+
+type FieldReading =
+  | {
+      source: "ndvi";
+      ndvi: number;
+      confidence: "high" | "low";
+      windowDays: number;
+    }
+  | { source: "radar"; rvi: number }
+  | { source: "none" };
+
+// Single entry point the worker loop calls: optical NDVI (tight, then wide),
+// and ONLY when optical has nothing at all in 90 days, try Sentinel-1 RVI as
+// a "can we say anything at all" fallback. This mirrors the map view's
+// cloud-blocked → radar fallback order in ee-data.ts's getIndexTile, but here
+// it feeds an alert message instead of a tile, so the radar branch is kept
+// separate from statusFromNdvi() rather than merged into it: RVI's 0–1 scale
+// and its "stressed" cutoff are NOT the same as NDVI's — they haven't been
+// calibrated against this app's growth-stage thresholds yet (that needs a
+// side-by-side comparison on a few clear-sky days where both NDVI and RVI
+// exist for the same field). Until that calibration happens, a radar reading
+// is reported as a directional, unconfirmed signal only — never as a precise
+// growth-stage classification.
+async function getFieldReading(geojson: any): Promise<FieldReading> {
+  const geom = toEeGeometry(geojson);
+  const ndvi14 = await computeNdviOverWindow(geom, 14);
+  if (ndvi14 !== null) {
+    return { source: "ndvi", ndvi: ndvi14, confidence: "high", windowDays: 14 };
+  }
+  const ndvi90 = await computeNdviOverWindow(geom, 90);
+  if (ndvi90 !== null) {
+    return { source: "ndvi", ndvi: ndvi90, confidence: "low", windowDays: 90 };
+  }
+  const rvi = await getRadarVegetationIndex(geom).catch((e) => {
+    console.warn(
+      `Radar fallback failed: ${e instanceof Error ? e.message : String(e)}`,
+    );
+    return null;
+  });
+  if (rvi !== null) {
+    return { source: "radar", rvi };
+  }
+  return { source: "none" };
 }
 
 function getRainfallMm(geojson: any): Promise<number | null> {
@@ -241,6 +312,29 @@ function buildAlertMessage(
   return `${fieldName}: ${statusLabel}${stageText} — NDVI ${ndvi.toFixed(2)}, ${rainText} rain (21d)${wxText}`;
 }
 
+// Radar-derived message — deliberately simpler and more hedged than the
+// optical template. No growth-stage claim, no precise NDVI-style number:
+// just "possible stress" vs "no anomaly" framed as unconfirmed, plus a note
+// that this is a photo-free (radar) reading, so farmers/co-ops know it's a
+// weaker signal than a normal alert and shouldn't be read as a diagnosis.
+function buildRadarAlertMessage(
+  fieldName: string,
+  rvi: number,
+  lang: string,
+): string {
+  const possibleStress = rvi < RVI_STRESS_THRESHOLD;
+  if (lang === "km") {
+    const verdict = possibleStress
+      ? "ប្រហែលជាមានស្ត្រេស (មិនទាន់បញ្ជាក់)"
+      : "មិនឃើញភាពមិនប្រក្រតីច្បាស់លាស់ (មិនទាន់បញ្ជាក់)";
+    return `វាល ${fieldName}: ${verdict} — ផ្អែកលើទិន្នន័យរ៉ាដា ដោយសារគ្មានរូបភាពផ្កាយរណបច្បាស់លាស់ក្នុងរយៈពេល 90 ថ្ងៃ។`;
+  }
+  const verdict = possibleStress
+    ? "possible stress (unconfirmed)"
+    : "no clear anomaly detected (unconfirmed)";
+  return `${fieldName}: ${verdict} — based on radar data, since no clear satellite photo has been available in over 90 days.`;
+}
+
 async function sendTelegram(chatId: string, text: string): Promise<boolean> {
   try {
     const res = await fetch(
@@ -273,7 +367,8 @@ function safeText(text: string | null, fallback: string): string {
 // Builds the prompt for the advisory LLM (Phase 13 Feature 1). Kept as its own
 // function so the "reasoning task" is explicit and easy to tune/adjust.
 function forecastContextLine(weather: WeatherContext | null): string {
-  if (!weather || !weather.forecast_days?.length) return "weather forecast: n/a";
+  if (!weather || !weather.forecast_days?.length)
+    return "weather forecast: n/a";
   const days = weather.forecast_days
     .map(
       (d) =>
@@ -334,17 +429,15 @@ Deno.serve(async (_req) => {
         const lang = (field as any).profiles?.preferred_language || "en";
         if (!chatId) continue;
 
-        const { ndvi, confidence, windowDays } = await getNdviForGeometry(
-          field.geojson,
-        );
+        const reading = await getFieldReading(field.geojson);
 
-        if (ndvi === null) {
-          // No clean scene even in the widened 90-day window. Look up the
-          // last logged status so we still only send the "can't monitor"
-          // notice once on transition into no_data, not every run — this
-          // one stays deliberately quiet on repeat, unlike the always-send
-          // policy below, because a daily "still can't see your field"
-          // message adds no information after the first one.
+        if (reading.source === "none") {
+          // No optical scene in 90 days AND no S1 coverage either. Look up
+          // the last logged status so we still only send the "can't
+          // monitor" notice once on transition into no_data, not every run
+          // — this stays deliberately quiet on repeat, unlike the
+          // always-send policy below, because a daily "still can't see
+          // your field" message adds no information after the first one.
           const { data: lastAlert } = await supabase
             .from("alerts_log")
             .select("status")
@@ -381,6 +474,38 @@ Deno.serve(async (_req) => {
           continue;
         }
 
+        if (reading.source === "radar") {
+          // Radar-only reading: optical had nothing for 90 days. Send the
+          // simpler, explicitly-hedged radar message directly — no LLM call,
+          // no growth-stage classification, since RVI thresholds aren't
+          // calibrated against this app's stage system yet (see the note on
+          // getFieldReading). Logged as its own "radar_flag" status so it's
+          // easy to filter these out of any accuracy analysis later, and so
+          // the no_data dedup check above never confuses a radar_flag with a
+          // true no_data.
+          const message = buildRadarAlertMessage(field.name, reading.rvi, lang);
+          const telegramSent = await sendTelegram(chatId, message);
+
+          await supabase.from("alerts_log").insert({
+            field_id: field.id,
+            status: "radar_flag",
+            ndvi_value: null,
+            message,
+            chat_id: chatId,
+            telegram_sent: telegramSent,
+          });
+          results.push({
+            field: field.name,
+            status: "radar_flag",
+            rvi: reading.rvi,
+            sent: true,
+            telegramSent,
+          });
+          continue;
+        }
+
+        // reading.source === "ndvi" — unchanged optical path below.
+        const { ndvi, confidence, windowDays } = reading;
         const { status, stage } = statusFromNdvi(ndvi, field.planting_date);
 
         // Always send — every run, regardless of whether status changed or
@@ -425,7 +550,15 @@ Deno.serve(async (_req) => {
           modelUsed = result.model;
           message = safeText(
             result.text,
-            buildAlertMessage(field.name, status, stage, ndvi, rainfall, weather, lang),
+            buildAlertMessage(
+              field.name,
+              status,
+              stage,
+              ndvi,
+              rainfall,
+              weather,
+              lang,
+            ),
           );
         } else {
           if (result?.truncated) {
