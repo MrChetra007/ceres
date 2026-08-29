@@ -193,6 +193,7 @@ import { sb, requireSession } from '../services/supabase'
 import { loadFieldPhotos, createSignedPhotoUrl } from '../services/supabase'
 import { getRecentIndexValue, getRainfallMm, getFieldHealthScore, polygonGeometry } from '../services/earthEngine'
 import { getWeatherContext } from '../services/weatherService'
+import { getAimCache, setAimCache } from '../services/aimScoreCache'
 import { centroid as turfCentroid } from '@turf/turf'
 import { formatMonthYear, stageName as stageNameKm, daySinceLabel } from '../services/format'
 import { useI18n } from '../i18n'
@@ -251,6 +252,14 @@ const aimChips = computed(() => {
 async function loadAim() {
   const field = currentField.value
   if (!field || !state.eeReady) return
+  // Closed/reopened fields reuse the cached score (keyed by field + planting
+  // date) instead of re-running Earth Engine compute — see aimScoreCache.js.
+  const cached = getAimCache(field)
+  if (cached) {
+    aim.value = cached
+    aimLoading.value = false
+    return
+  }
   const geom = field.geojson && (field.geojson.geometry || field.geojson)
   if (!geom || !geom.coordinates) return
   const geometry = polygonGeometry(geom.coordinates)
@@ -260,6 +269,7 @@ async function loadAim() {
     if (req !== aimReq) return
     aim.value = snap
     aimLoading.value = false
+    if (snap) setAimCache(field, snap)
   })
 }
 const status = computed(() => fieldStatus[state.currentFieldId] || null)
