@@ -51,7 +51,7 @@ const VIS: Record<string, Record<string, unknown>> = {
 const TRUE_COLOR_BANDS = ["B4", "B3", "B2"];
 // Wide stretch so bright cloud-free areas of a rice scene don't clamp to a
 // single saturated green block (same reasoning as the frontend TRUE_COLOR_VIS).
-const TRUE_COLOR_VIS = { min: 0, max: 5000 };
+const TRUE_COLOR_VIS = { min: 0, max: 3000, gamma: 1.4 };
 const DRY_MONTH_THRESHOLD = 50;
 
 // Apply the band math for a given index to a (single) image and rename the
@@ -64,31 +64,38 @@ function applyIndex(img: any, index: string, name: string) {
   if (index === "savi") {
     const L = 0.5;
     return img
-      .expression(
-        "((NIR - RED) / (NIR + RED + L)) * (1 + L)",
-        { NIR: img.select("B8"), RED: img.select("B4"), L: L },
-      )
+      .expression("((NIR - RED) / (NIR + RED + L)) * (1 + L)", {
+        NIR: img.select("B8"),
+        RED: img.select("B4"),
+        L: L,
+      })
       .rename(name);
   }
   if (index === "evi") {
-    const G = 2.5, C1 = 6, C2 = 7.5, L = 1;
+    const G = 2.5,
+      C1 = 6,
+      C2 = 7.5,
+      L = 1;
     return img
-      .expression(
-        "G * ((NIR - RED) / (NIR + C1 * RED - C2 * BLUE + L))",
-        {
-          NIR: img.select("B8"),
-          RED: img.select("B4"),
-          BLUE: img.select("B2"),
-          G, C1, C2, L,
-        },
-      )
+      .expression("G * ((NIR - RED) / (NIR + C1 * RED - C2 * BLUE + L))", {
+        NIR: img.select("B8"),
+        RED: img.select("B4"),
+        BLUE: img.select("B2"),
+        G,
+        C1,
+        C2,
+        L,
+      })
       .rename(name);
   }
   return img.normalizedDifference(BANDS[index]).rename(name);
 }
 
-
-function jsonResponse(body: unknown, status = 200, corsHeaders: Record<string, string>): Response {
+function jsonResponse(
+  body: unknown,
+  status = 200,
+  corsHeaders: Record<string, string>,
+): Response {
   return new Response(JSON.stringify(body), {
     status,
     headers: { "Content-Type": "application/json", ...corsHeaders },
@@ -105,8 +112,12 @@ async function initEE(): Promise<void> {
     ee.data.authenticateViaPrivateKey(
       EE_KEY,
       () =>
-        ee.initialize(null, null, () => resolve(), (e: string) =>
-          reject(new Error(e))),
+        ee.initialize(
+          null,
+          null,
+          () => resolve(),
+          (e: string) => reject(new Error(e)),
+        ),
       (e: string) => reject(new Error(e)),
     );
   });
@@ -183,7 +194,10 @@ function tsToISO(ts: any): string | null {
 // ── getIndexTile ───────────────────────────────────────────────────────────
 // Port of loadIndexTile(): monthly composite per index, with radar fallback,
 // true-color cloud-blocked fallback and no-data detection.
-async function getLastValidDate(geom: any, monthStart: any): Promise<string | null> {
+async function getLastValidDate(
+  geom: any,
+  monthStart: any,
+): Promise<string | null> {
   const lookback = monthStart.advance(-90, "day");
   const prior = s2Collection(geom, lookback, monthStart).sort(
     "system:time_start",
@@ -195,7 +209,11 @@ async function getLastValidDate(geom: any, monthStart: any): Promise<string | nu
   return tsToISO(ts);
 }
 
-async function getRadarVegetationIndex(geom: any, startDate: any, endDate: any) {
+async function getRadarVegetationIndex(
+  geom: any,
+  startDate: any,
+  endDate: any,
+) {
   const s1 = ee
     .ImageCollection("COPERNICUS/S1_GRD")
     .filterBounds(geom)
@@ -210,10 +228,7 @@ async function getRadarVegetationIndex(geom: any, startDate: any, endDate: any) 
   // LINEAR power or the ratio saturates into a flat image.
   const vvLinear = ee.Image(10).pow(composite.select("VV").divide(10));
   const vhLinear = ee.Image(10).pow(composite.select("VH").divide(10));
-  const rvi = vhLinear
-    .multiply(4)
-    .divide(vvLinear.add(vhLinear))
-    .rename("RVI");
+  const rvi = vhLinear.multiply(4).divide(vvLinear.add(vhLinear)).rename("RVI");
   const url = await getMapUrl(rvi, {
     min: 0,
     max: 1,
@@ -260,7 +275,12 @@ async function actionGetIndexTile(payload: any) {
       end.advance(15, "day"),
     );
     if (radar.count > 0 && radar.url) {
-      return { mode: "radar_fallback", count: radar.count, url: radar.url, indexUsed: "RVI" };
+      return {
+        mode: "radar_fallback",
+        count: radar.count,
+        url: radar.url,
+        indexUsed: "RVI",
+      };
     }
   } catch (e) {
     console.error("radar fallback failed:", e);
@@ -303,7 +323,10 @@ async function actionGetTrueColorScene(payload: any) {
   );
   const result = await evaluate(list);
   const scenes = ((result && result.features) || [])
-    .map((f: any) => ({ date: f.properties.date, cloudPct: f.properties.cloudPct }))
+    .map((f: any) => ({
+      date: f.properties.date,
+      cloudPct: f.properties.cloudPct,
+    }))
     .sort((a: any, b: any) => a.date.localeCompare(b.date));
 
   if (scenes.length === 0) {
@@ -316,11 +339,15 @@ async function actionGetTrueColorScene(payload: any) {
   if (payload.sceneDate) {
     const sameDate = scenes.filter((s: any) => s.date === payload.sceneDate);
     if (sameDate.length) {
-      chosen = sameDate.reduce((a: any, b: any) => (b.cloudPct < a.cloudPct ? b : a));
+      chosen = sameDate.reduce((a: any, b: any) =>
+        b.cloudPct < a.cloudPct ? b : a,
+      );
     }
   }
   if (!chosen) {
-    chosen = scenes.reduce((a: any, b: any) => (b.cloudPct < a.cloudPct ? b : a));
+    chosen = scenes.reduce((a: any, b: any) =>
+      b.cloudPct < a.cloudPct ? b : a,
+    );
   }
   const day = ee.Date(chosen.date);
   const picked = all
@@ -368,7 +395,10 @@ async function actionGetLatestTrueColor(payload: any) {
 // into 10 ranges, returning AREA per bucket in ONE batched reduceRegion.
 function zoneBuckets(kind: string) {
   if (kind === "rvi") {
-    return Array.from({ length: 10 }, (_, i) => ({ lo: i * 0.1, hi: (i + 1) * 0.1 }));
+    return Array.from({ length: 10 }, (_, i) => ({
+      lo: i * 0.1,
+      hi: (i + 1) * 0.1,
+    }));
   }
   const arr = [{ lo: -1.0, hi: 0.1 }];
   for (let i = 1; i < 10; i++) arr.push({ lo: i * 0.1, hi: (i + 1) * 0.1 });
@@ -388,19 +418,21 @@ async function reduceZoneBands(indexImage: any, buckets: any[], geom: any) {
   names.push("total");
   parts.push(area.updateMask(indexImage.mask()).rename("total"));
   const result = await evaluate(
-    ee
-      .Image(parts)
-      .reduceRegion({
-        reducer: ee.Reducer.sum(),
-        geometry: geom,
-        scale: 10,
-        maxPixels: 1e9,
-        bestEffort: true,
-      }),
+    ee.Image(parts).reduceRegion({
+      reducer: ee.Reducer.sum(),
+      geometry: geom,
+      scale: 10,
+      maxPixels: 1e9,
+      bestEffort: true,
+    }),
   );
   if (!result) return null;
   return {
-    buckets: buckets.map((b, i) => ({ lo: b.lo, hi: b.hi, areaSqm: result["a" + i] || 0 })),
+    buckets: buckets.map((b, i) => ({
+      lo: b.lo,
+      hi: b.hi,
+      areaSqm: result["a" + i] || 0,
+    })),
     totalAreaSqm: result.total || 0,
   };
 }
@@ -528,7 +560,10 @@ async function actionDetectPlantingDate(payload: any) {
     const delta = cur.value - prev.value;
     if (delta > 0.1 && prev.value < 0.25 && cur.value >= 0.3) {
       if (!best || delta > best.deltaMagnitude) {
-        best = { estimatedDate: midpoint(prev.date, cur.date), deltaMagnitude: delta };
+        best = {
+          estimatedDate: midpoint(prev.date, cur.date),
+          deltaMagnitude: delta,
+        };
       }
     }
   }
@@ -572,7 +607,8 @@ async function actionGetDryMonths(payload: any) {
   const dryMonths: number[] = [];
   ((fc && fc.features) || []).forEach((f: any) => {
     const mm = f.properties.totalMm;
-    if (mm != null && mm < DRY_MONTH_THRESHOLD) dryMonths.push(f.properties.idx);
+    if (mm != null && mm < DRY_MONTH_THRESHOLD)
+      dryMonths.push(f.properties.idx);
   });
   return { dryMonths };
 }
@@ -581,7 +617,10 @@ async function actionGetDryMonths(payload: any) {
 // NDVI status for a field geometry using the shared growth-stage logic (same
 // source of truth as ee-alerts-worker): tight 14-day window first, widened to
 // 90 days (low confidence) only when the short window has zero clean scenes.
-async function computeNdviOverWindow(geom: any, days: number): Promise<number | null> {
+async function computeNdviOverWindow(
+  geom: any,
+  days: number,
+): Promise<number | null> {
   const end = ee.Date(Date.now());
   const start = end.advance(-days, "day");
   const collection = s2Collection(geom, start, end);
@@ -608,10 +647,22 @@ async function actionGetFieldStatus(payload: any) {
     confidence = "low";
   }
   if (ndvi === null) {
-    return { ndviValue: null, status: "no_data", stage: null, confidence, windowDays: 90 };
+    return {
+      ndviValue: null,
+      status: "no_data",
+      stage: null,
+      confidence,
+      windowDays: 90,
+    };
   }
   const { status, stage } = statusFromNdvi(ndvi, payload.plantingDate ?? null);
-  return { ndviValue: ndvi, status, stage, confidence, windowDays: confidence === "low" ? 90 : 14 };
+  return {
+    ndviValue: ndvi,
+    status,
+    stage,
+    confidence,
+    windowDays: confidence === "low" ? 90 : 14,
+  };
 }
 
 // ── getRecentIndexValue ────────────────────────────────────────────────────
@@ -631,7 +682,8 @@ async function actionGetRecentIndexValue(payload: any) {
     .sort("system:time_start", false);
 
   const totalCount = await evaluate(all.size());
-  if (totalCount === 0) return { count: 0, value: null, date: null, cloudBlocked: false };
+  if (totalCount === 0)
+    return { count: 0, value: null, date: null, cloudBlocked: false };
 
   // Resolve the freshest DAY first so a cloudier same-day duplicate orbit
   // can't flag the reading cloud-blocked when a clean scene of that date
@@ -642,12 +694,15 @@ async function actionGetRecentIndexValue(payload: any) {
     f && !isNaN(f.getTime())
       ? new Date(Date.UTC(f.getUTCFullYear(), f.getUTCMonth(), f.getUTCDate()))
       : null;
-  if (!dayStart) return { count: 0, value: null, date: null, cloudBlocked: false };
+  if (!dayStart)
+    return { count: 0, value: null, date: null, cloudBlocked: false };
 
   const freshestDay = all
     .filterDate(dayStart, new Date(dayStart.getTime() + 86400000))
     .sort("CLOUDY_PIXEL_PERCENTAGE");
-  const cloudPct = await evaluate(freshestDay.first().get("CLOUDY_PIXEL_PERCENTAGE"));
+  const cloudPct = await evaluate(
+    freshestDay.first().get("CLOUDY_PIXEL_PERCENTAGE"),
+  );
   const cloudBlocked = cloudPct != null && cloudPct >= 40;
 
   const clean = all.filter(ee.Filter.lt("CLOUDY_PIXEL_PERCENTAGE", 40));
@@ -720,7 +775,11 @@ async function actionGetObservations(payload: any) {
     const stale = ee.Number(ageDays).gte(21);
     // Server-side branching must use ee.Algorithms.If — a plain JS ternary on
     // an EE object always picks the first branch.
-    const status = ee.Algorithms.If(blocked, "blocked", ee.Algorithms.If(stale, "low", "clear"));
+    const status = ee.Algorithms.If(
+      blocked,
+      "blocked",
+      ee.Algorithms.If(stale, "low", "clear"),
+    );
     const ndvi = img
       .normalizedDifference(["B8", "B4"])
       .rename("ndvi")
@@ -784,8 +843,7 @@ async function actionGetAllFieldStatuses(payload: any) {
   // 0 instead of a divide-by-zero mask. -100000 days ≈ year 1696.
   const PAD_TS = -8640000000000;
   const pad = () =>
-    ee
-      .Image.constant([1, 1])
+    ee.Image.constant([1, 1])
       .rename(bands)
       .set("system:time_start", PAD_TS)
       .set("CLOUDY_PIXEL_PERCENTAGE", 100);
@@ -811,7 +869,9 @@ async function actionGetAllFieldStatuses(payload: any) {
     const freshestDay = allPad
       .filterDate(dayStart, dayStart.advance(1, "day"))
       .sort("CLOUDY_PIXEL_PERCENTAGE");
-    const cloudPct = ee.Number(freshestDay.first().get("CLOUDY_PIXEL_PERCENTAGE"));
+    const cloudPct = ee.Number(
+      freshestDay.first().get("CLOUDY_PIXEL_PERCENTAGE"),
+    );
 
     // Latest clean reading (pad appended after filtering, so it can only win
     // when the field genuinely has zero clean scenes).
@@ -819,9 +879,9 @@ async function actionGetAllFieldStatuses(payload: any) {
       .merge(ee.ImageCollection([pad()]))
       .sort("system:time_start", false)
       .first();
-    const dateStr = ee.Date(
-      ee.Number(recent.get("system:time_start")),
-    ).format("YYYY-MM-dd");
+    const dateStr = ee
+      .Date(ee.Number(recent.get("system:time_start")))
+      .format("YYYY-MM-dd");
     const value = applyIndex(recent, index, name)
       .reduceRegion({
         reducer: ee.Reducer.mean(),
@@ -908,7 +968,7 @@ async function actionGetAllFieldTrends(payload: any) {
   const result = await evaluate(trends);
   const rows = ((result && result.features) || []).map((f: any) => ({
     id: f.properties.fid,
-    points: ((((f.properties.points || {}).features) || [])).map(
+    points: ((f.properties.points || {}).features || []).map(
       (p: any) => p.properties,
     ),
   }));
@@ -948,7 +1008,11 @@ Deno.serve(async (req) => {
 
   const handler = body && HANDLERS[body.action];
   if (!handler) {
-    return jsonResponse({ ok: false, error: "unknown_action" }, 400, corsHeaders);
+    return jsonResponse(
+      { ok: false, error: "unknown_action" },
+      400,
+      corsHeaders,
+    );
   }
 
   // Timing instrumentation: `supabase functions logs ee-data` will show, per
@@ -970,7 +1034,10 @@ Deno.serve(async (req) => {
       e,
     );
     const status = typeof e?.code === "number" ? e.code : 500;
-    const error = e?.message === "invalid_geometry" ? "invalid_geometry" : String(e?.message || e);
+    const error =
+      e?.message === "invalid_geometry"
+        ? "invalid_geometry"
+        : String(e?.message || e);
     return jsonResponse({ ok: false, error }, status, corsHeaders);
   }
 });
