@@ -12,15 +12,18 @@
         </span>
       </div>
       <div class="segmented" role="group" aria-label="Index">
-        <button
+        <Tooltip
           v-for="idx in ['ndvi', 'ndwi', 'lswi', 'savi', 'evi', 'gndvi', 'truecolor']"
           :key="idx"
-          class="segmented-btn"
-          :class="{ active: state.currentIndex === idx }"
-          :data-index="idx"
-          :title="indexTitle(idx)"
-          @click="store.setIndex(idx)"
-        >{{ idx === 'truecolor' ? t('band.truecolor') : idx.toUpperCase() }}</button>
+          :text="bandTip(idx)"
+        >
+          <button
+            class="segmented-btn"
+            :class="{ active: state.currentIndex === idx }"
+            :data-index="idx"
+            @click="store.setIndex(idx)"
+          >{{ idx === 'truecolor' ? t('band.truecolor') : idx.toUpperCase() }}</button>
+        </Tooltip>
       </div>
       <div class="band-divider"></div>
       <div class="known-scenes" v-show="state.currentIndex === 'truecolor' && state.trueColorScenes.length > 1">
@@ -91,6 +94,7 @@
 import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import { state } from '../store'
 import * as store from '../store'
+import Tooltip from './Tooltip.vue'
 import { INDICES, TRUE_COLOR } from '../config'
 import { useI18n } from '../i18n'
 
@@ -114,15 +118,15 @@ function displayAoiName(aoi) {
   return aoi.name === 'Battambang (default)' ? t('band.default_area') : aoi.name
 }
 
-function indexTitle(idx) {
+function bandTip(idx) {
   const map = {
-    ndvi: t('index.ndvi_title'),
-    ndwi: t('index.ndwi_title'),
-    lswi: t('index.lswi_title'),
-    savi: t('index.savi_title'),
-    evi: t('index.evi_title'),
-    gndvi: t('index.gndvi_title'),
-    truecolor: t('index.truecolor_title'),
+    ndvi: t('band.tip_ndvi'),
+    ndwi: t('band.tip_ndwi'),
+    lswi: t('band.tip_lswi'),
+    savi: t('band.tip_savi'),
+    evi: t('band.tip_evi'),
+    gndvi: t('band.tip_gndvi'),
+    truecolor: t('band.tip_truecolor'),
   }
   return map[idx]
 }
