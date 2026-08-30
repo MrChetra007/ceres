@@ -75,6 +75,7 @@ export default {
   'band.tip_savi': '',
   'band.tip_evi': '',
   'band.tip_gndvi': '',
+  'band.tip_rvi': '',
   'band.tip_truecolor': '',
   'band.scene_precision': 'ឈុតឆាក',
   'band.scene_pick_tip': 'ជ្រើសកាលបរិច្ឆេទថតជាក់លាក់ — រូបភាពមួយសន្លឹក មិនមែនជាការរួបរួមប្រចាំខែ',

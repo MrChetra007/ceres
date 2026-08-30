@@ -255,11 +255,39 @@ async function getRadarVegetationIndex(
 }
 
 async function actionGetIndexTile(payload: any) {
-  const index = payload.index && BANDS[payload.index] ? payload.index : "ndvi";
+  // RVI is deliberately resolved BEFORE the BANDS gate: it has no optical band
+  // pair, and selecting it means "show me the radar view", not "fall back to
+  // NDVI silently". Unlike the automatic radar_fallback (used when optical is
+  // cloud-blocked), a direct RVI request returns no data rather than quietly
+  // showing an optical index under an RVI tab.
+  const rawIndex = payload.index;
+  const index =
+    rawIndex === "rvi"
+      ? "rvi"
+      : rawIndex && BANDS[rawIndex]
+        ? rawIndex
+        : "ndvi";
   const vis = VIS[index];
   const geom = toEeGeometry(payload.geometry);
   const start = ee.Date.fromYMD(payload.year, payload.month, 1);
   const end = start.advance(1, "month");
+
+  if (index === "rvi") {
+    const radar = await getRadarVegetationIndex(
+      geom,
+      start.advance(-15, "day"),
+      end.advance(15, "day"),
+    );
+    if (radar.count > 0 && radar.url) {
+      return {
+        mode: "radar_index",
+        count: radar.count,
+        url: radar.url,
+        indexUsed: "RVI",
+      };
+    }
+    return { mode: "no_data", count: 0, url: null };
+  }
 
   const rawCollection = ee
     .ImageCollection("COPERNICUS/S2_SR_HARMONIZED")
@@ -531,6 +559,64 @@ async function actionGetIndexTimeSeries(payload: any) {
   const points = ((result && result.features) || []).map((f: any) => ({
     date: f.properties.date,
     cloudPct: f.properties.cloudPct,
+    value: f.properties.value,
+  }));
+  return { points };
+}
+
+// ── getRviTimeSeries ──────────────────────────────────────────────────────
+// Radar Vegetation Index over time, from Sentinel-1 GRD — for comparing
+// against the optical NDVI trend (actionGetIndexTimeSeries) to validate the
+// radar fallback against ground-truthed NDVI. Same RVI formula as
+// getRadarVegetationIndex (dB→linear power conversion — required, S1_GRD
+// backscatter arrives in dB and RVI must be computed on linear power or the
+// ratio saturates flat).
+//
+// `orbit` (ASCENDING/DESCENDING) is included per point deliberately: RVI can
+// differ slightly by pass direction over the same field, so when comparing
+// against NDVI, filter to one orbit direction first if the RVI series looks
+// noisier than expected — that's often an orbit-mixing artifact, not a real
+// signal.
+async function actionGetRviTimeSeries(payload: any) {
+  const months = payload.months || [];
+  if (!months.length) return { points: [] };
+  const geom =
+    payload.lat != null && payload.lng != null
+      ? ee.Geometry.Point([payload.lng, payload.lat])
+      : toEeGeometry(payload.geometry);
+  const startDate = ee.Date.fromYMD(months[0].year, months[0].month, 1);
+  const last = months[months.length - 1];
+  const endDate = ee.Date.fromYMD(last.year, last.month, 1).advance(1, "month");
+
+  const s1 = ee
+    .ImageCollection("COPERNICUS/S1_GRD")
+    .filterBounds(geom)
+    .filterDate(startDate, endDate)
+    .filter(ee.Filter.eq("instrumentMode", "IW"))
+    .filter(ee.Filter.listContains("transmitterReceiverPolarisation", "VV"))
+    .filter(ee.Filter.listContains("transmitterReceiverPolarisation", "VH"));
+
+  const series = s1.map((img: any) => {
+    const vvLinear = ee.Image(10).pow(img.select("VV").divide(10));
+    const vhLinear = ee.Image(10).pow(img.select("VH").divide(10));
+    const rvi = vhLinear.multiply(4).divide(vvLinear.add(vhLinear)).rename("RVI");
+    const value = rvi.reduceRegion({
+      reducer: ee.Reducer.mean(),
+      geometry: geom,
+      scale: 10, // matches S1 GRD IW native resolution, same reasoning as NDVI's scale:10
+      maxPixels: 1e9,
+    });
+    return ee.Feature(null, {
+      date: img.date().format("YYYY-MM-dd"),
+      orbit: img.get("orbitProperties_pass"), // "ASCENDING" | "DESCENDING"
+      value: value.get("RVI"),
+    });
+  });
+  const filtered = series.filter(ee.Filter.notNull(["value"]));
+  const result = await evaluate(filtered);
+  const points = ((result && result.features) || []).map((f: any) => ({
+    date: f.properties.date,
+    orbit: f.properties.orbit,
     value: f.properties.value,
   }));
   return { points };
@@ -1369,6 +1455,7 @@ const HANDLERS: Record<string, Handler> = {
   getLatestTrueColor: actionGetLatestTrueColor,
   getZoneBreakdown: actionGetZoneBreakdown,
   getIndexTimeSeries: actionGetIndexTimeSeries,
+  getRviTimeSeries: actionGetRviTimeSeries,
   detectPlantingDate: actionDetectPlantingDate,
   getDryMonths: actionGetDryMonths,
   getFieldStatus: actionGetFieldStatus,

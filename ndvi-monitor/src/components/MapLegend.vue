@@ -35,6 +35,7 @@ const LEGEND_SCALE = {
   savi: ['0.0', '0.5', '1.0'],
   evi: ['0.0', '0.5', '1.0'],
   gndvi: ['-0.2', '0.3', '0.8'],
+  rvi: ['0.0', '0.5', '1.0'],
 }
 const scale = computed(() => LEGEND_SCALE[state.currentIndex] || ['0.0', '0.4', '1.0'])
 </script>

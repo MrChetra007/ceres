@@ -27,6 +27,7 @@ export const LSWI_VIS = { min: -0.3, max: 0.6, palette: ['tan', 'lightblue', 'da
 export const SAVI_VIS = { min: 0, max: 1, palette: ['brown', 'yellow', 'green'] }
 export const EVI_VIS = { min: 0, max: 1, palette: ['red', 'orange', 'green'] }
 export const GNDVI_VIS = { min: -0.2, max: 0.8, palette: ['red', 'purple', 'green'] }
+export const RVI_VIS = { min: 0, max: 1, palette: ['blue', 'white', 'green'] }
 
 // True Color photo mode — real Sentinel-2 RGB (B4·B3·B2), not an index.
 // Deliberately NOT in INDICES: the trend functions normalizeDifference() over
@@ -93,6 +94,14 @@ export const INDICES = {
     fullKhm: 'សន្ទស្សន៍ NDVI បៃតង',
     explain: 'Mirror of NDVI but using the green band (B3), which responds more to chlorophyll and canopy water content. Placeholder scale — tune the breakpoints.',
     explainKhm: 'ដូច NDVI ប៉ុន្តែប្រើបទបៃតង (B3) ដែលឆ្លើយតបខ្លាំងជាងនឹងក្លរ៉ូហ្វីល និងសំណើមក្នុងសំបកដំណាំ។ មាត្រដ្ឋានបណ្ដោះអាសន្ន — អាចកែតម្រូវបាន។',
+  },
+  rvi: {
+    name: 'RVI', bands: ['VV', 'VH'], vis: RVI_VIS, label: 'Radar',
+    color: '#a78bfa',
+    full: 'Radar Vegetation Index (Sentinel-1)',
+    fullKhm: 'សន្ទស្សន៍រុក្ខជាតិរ៉ាដា (Sentinel-1)',
+    explain: 'Radar vegetation index from Sentinel-1 — works through clouds (RVI = 4·VH/(VV+VH)). A different measurement than optical NDVI: compare the shape and direction of the two trends over a date range, not absolute values.',
+    explainKhm: 'សន្ទស្សន៍រុក្ខជាតិរ៉ាដាពី Sentinel-1 — មើលឃើញទោះមានពពក (RVI = 4·VH/(VV+VH))។ ជាការវាស់ដែលខុសពី NDVI អុបទិក៖ ប្រៀបធៀបរូបរាង និងទិសដៅនៃក្រាហ្វទាំងពីរលើជួរកាលបរិច្ឆេទដូចគ្នា មិនមែនតម្លៃដាច់ខាតទេ។',
   },
 }
 

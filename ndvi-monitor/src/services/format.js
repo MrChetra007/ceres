@@ -80,7 +80,15 @@ export function daySinceLabel(lang, days) {
   return 'Day ' + days
 }
 
-export function observationCount(lang, count) {
+export function observationCount(lang, count, source) {
+  // `source` names WHAT is being counted (e.g. "Sentinel-2 scenes" vs
+  // "Sentinel-1 passes") so two very different counts under the same generic
+  // "observations" label never look like they measure the same thing. When
+  // omitted it keeps the legacy generic wording.
+  if (source) {
+    if (lang === 'km') return 'ការសង្កេត ' + source + ' ចំនួន ' + toKhmerDigits(count)
+    return count + ' ' + source
+  }
   if (lang === 'km') return 'ការសង្កេតចំនួន ' + toKhmerDigits(count)
   return count + ' observations'
 }

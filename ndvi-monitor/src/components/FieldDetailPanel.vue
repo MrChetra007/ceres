@@ -83,7 +83,9 @@
       </div>
 
       <!-- Growth stage is planting-date based, not band-derived, so it stays
-           identical across the NDVI/NDWI/LSWI tabs (intentional). -->
+           identical across the NDVI/NDWI/LSWI/RVI tabs. The "day since planting"
+           is anchored to the NDVI (Sentinel-2) observation series — never the
+           RVI (Sentinel-1) series, which has a different revisit cadence. -->
       <div class="detail-section stage-card">
         <p class="detail-card-label">{{ t('field.growth_stage') }}</p>
         <p class="stage-name">{{ stageName }}</p>
@@ -349,6 +351,64 @@ const activeObservation = computed(() => {
   return obs ? { value: obs.value, date: obs.date } : null
 })
 
+// ---- Band-INDEPENDENT date resolution for the growth-stage / day-count
+// surface. Growth stage is a property of crop age (planting date + the scrubbed
+// month's as-of date) — it must NOT move when the band changes. NDVI/NDWI/LSWI
+// used to share one Sentinel-2 series, so the "stays identical" comment was
+// accidentally true; RVI is Sentinel-1 (different sensor, revisit cadence,
+// every-orbit passes) and would silently drift the day count. THIS anchor is
+// therefore populated ONLY from the optical (NDVI) fetch path in store.js
+// (state.ndviChartData) — the RVI path never touches it.
+
+// Mirror of activeObservation, but read from the NDVI-anchored series so it
+// resolves to the same scene date no matter which band tab is active.
+const ndviActiveObservation = computed(() => {
+  const data = state.ndviChartData
+  if (!Array.isArray(data) || !data.length) return null
+  const w = selectedMonthWindow.value
+  if (!w) return null
+  const within = data.filter((d) => {
+    const ts = new Date(d.date).getTime()
+    return ts >= w.start && ts < w.end
+  })
+  if (!within.length) return null
+  const obs = pickLowestCloud(within)
+  return obs ? { value: obs.value, date: obs.date } : null
+})
+
+// The scene date the growth-stage logic resolves to:
+//   1. True Color mode  -> the capture the user picked (unchanged).
+//   2. Otherwise        -> the NDVI-anchored observation date (band-independent).
+//      Until an optical series has loaded for this subject, a non-radar band's
+//      own scene / last-clear-reading is a safe stand-in (it IS the optical
+//      series); the RVI tab's Sentinel-1 dates are never allowed to feed it.
+const selectedGrowthDate = computed(() => {
+  if (state.currentIndex === 'truecolor' && state.trueColorDate) return state.trueColorDate
+  const nd = ndviActiveObservation.value
+  if (nd && nd.date) return nd.date
+  if (state.currentIndex !== 'rvi') {
+    const obs = activeObservation.value
+    if (obs && obs.date) return obs.date
+    const block = state.cloudBlock.main
+    if (block && block.lastValidDate) return block.lastValidDate
+  }
+  return null
+})
+
+const growthAsOfDate = computed(() => {
+  const scene = selectedGrowthDate.value
+  if (scene) return scene
+  const m = MONTHS[state.mainMonth]
+  if (m) return monthEndISO(m)
+  return new Date().toISOString().slice(0, 10)
+})
+
+const stagePrePlanting = computed(() => {
+  const f = currentField.value
+  if (!f || !f.plantingDate) return false
+  return new Date(growthAsOfDate.value).getTime() < new Date(f.plantingDate).getTime()
+})
+
 // Reconstruct a date-only string (YYYY-MM-DD) in UTC without the ISO UTC shift
 // that could roll a boundary date to the previous day in local time.
 // monthEndISO returns the LAST day of the selected month: when the scrubbed
@@ -483,28 +543,30 @@ const showHeroStaleNote = computed(() => {
 const growthStageDays = computed(() => {
   const f = currentField.value
   if (!f || !f.plantingDate) return null
-  const asOf = new Date(asOfDate.value).getTime()
+  const asOf = new Date(growthAsOfDate.value).getTime()
   const planting = new Date(f.plantingDate).getTime()
   const d = Math.floor((asOf - planting) / 86400000)
   console.log(
     '[daysSincePlanting]', f.name,
     '| plantingDate=' + f.plantingDate,
-    '| asOfDate=' + asOfDate.value,
+    '| asOfDate=' + growthAsOfDate.value,
       '| days=' + d,
     '| source=' + (state.currentIndex === 'truecolor' && state.trueColorDate
       ? 'truecolor scene ' + state.trueColorDate
-      : activeObservation.value && activeObservation.value.date
-        ? 'per-scene observation ' + activeObservation.value.date
-        : state.cloudBlock.main && state.cloudBlock.main.lastValidDate
-          ? 'last clear reading ' + state.cloudBlock.main.lastValidDate
-          : 'month-END fallback'),
+      : ndviActiveObservation.value && ndviActiveObservation.value.date
+        ? 'NDVI-anchored observation ' + ndviActiveObservation.value.date
+        : state.currentIndex !== 'rvi' && activeObservation.value && activeObservation.value.date
+          ? 'per-scene observation ' + activeObservation.value.date
+          : state.cloudBlock.main && state.cloudBlock.main.lastValidDate
+            ? 'last clear reading ' + state.cloudBlock.main.lastValidDate
+            : 'month-END fallback'),
   )
   return d
 })
 const stageName = computed(() => {
   const d = growthStageDays.value
   if (d == null) return t('field.no_planting_date')
-  if (prePlanting.value) return t('field.stage_future')
+  if (stagePrePlanting.value) return t('field.stage_future')
   return stageNameKm(state.preferredLanguage, store.getGrowthStage(d).stage)
 })
 const stageDaysText = computed(() => {
@@ -590,7 +652,7 @@ async function render(data) {
   const ctx = chartCanvas.value.getContext('2d')
   if (chart) chart.destroy()
   if (chartResizeObs) { chartResizeObs.disconnect(); chartResizeObs = null }
-  chart = new Chart(ctx, buildChartConfig(ctx, data, state.chartIndex, false, (date) => getStageAtDate(date), state.benchmarkValue))
+  chart = new Chart(ctx, buildChartConfig(ctx, data, state.chartIndex, false, state.chartIndex === 'rvi' ? null : (date) => getStageAtDate(date), state.benchmarkValue))
   setInfoChart(chart)
   updateMarker()
   await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))

@@ -13,7 +13,7 @@
       </div>
       <div class="segmented" role="group" aria-label="Index">
         <Tooltip
-          v-for="idx in ['ndvi', 'ndwi', 'lswi', 'savi', 'evi', 'gndvi', 'truecolor']"
+          v-for="idx in ['ndvi', 'ndwi', 'lswi', 'savi', 'evi', 'gndvi', 'rvi', 'truecolor']"
           :key="idx"
           :text="bandTip(idx)"
         >
@@ -134,6 +134,7 @@ function bandTip(idx) {
     savi: t('band.tip_savi'),
     evi: t('band.tip_evi'),
     gndvi: t('band.tip_gndvi'),
+    rvi: t('band.tip_rvi'),
     truecolor: t('band.tip_truecolor'),
   }
   return map[idx]

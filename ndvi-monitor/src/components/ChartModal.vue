@@ -30,7 +30,7 @@ const title = computed(() => INDICES[state.chartIndex].name + ' ' + t('field.tre
 function render(data) {
   const ctx = largeCanvas.value.getContext('2d')
   if (chart) chart.destroy()
-  chart = new Chart(ctx, buildChartConfig(ctx, data, state.chartIndex, true, (date) => getStageAtDate(date)))
+  chart = new Chart(ctx, buildChartConfig(ctx, data, state.chartIndex, true, state.chartIndex === 'rvi' ? null : (date) => getStageAtDate(date)))
   requestAnimationFrame(() => { if (chart) chart.resize() })
   updateMarker()
 }

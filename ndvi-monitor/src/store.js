@@ -74,6 +74,11 @@ export const state = reactive({
   currentFieldName: null,
   lastClickPoint: null,
   chartData: null,
+  // NDVI-anchored per-scene series for the current field/point. Populated only
+  // from the optical (Sentinel-2) fetch path, never from the RVI path, so date
+  // resolution that must stay band-independent (growth stage / day-since-
+  // planting) keeps reading the SAME scene dates no matter which tab is active.
+  ndviChartData: null,
   chartIndex: 'ndvi',
   chartSubtitle: '\u2014',
   infoPanelVisible: false,
@@ -824,6 +829,16 @@ export function loadIndexForMonth(idx, geometry, silent) {
       setStatus('ready', 'Radar view (RVI) for ' + m.label + ' \u2014 clouds blocked optical view')
       return
     }
+    // Direct RVI band selection (Sentinel-1 radar) — the radar view IS the
+    // requested index, so it is NOT a fallback: no cloud badge, no 'other'
+    // health zone. Just apply the tile and report the radar scene count.
+    if (res.mode === 'radar_index') {
+      endLoading()
+      if (res.url) mapReg.ndviLayer = applyTileLayer(mapReg.map, mapReg.ndviLayer, res.url, 1)
+      else if (mapReg.ndviLayer) { mapReg.map.removeLayer(mapReg.ndviLayer); mapReg.ndviLayer = null }
+      setStatus('ready', cfg.name + ' radar layer loaded \u2014 ' + m.label)
+      return
+    }
     if (res.mode === 'cloud_blocked') {
       endLoading()
       if (res.url) mapReg.ndviLayer = applyTileLayer(mapReg.map, mapReg.ndviLayer, res.url, 1)
@@ -901,6 +916,12 @@ export function loadIndexForMonthRight(idx, silent) {
       if (res.url) mapReg.ndviLayerRight = applyTileLayer(mapReg.mapRight, mapReg.ndviLayerRight, res.url, 1)
       else if (mapReg.ndviLayerRight) { mapReg.mapRight.removeLayer(mapReg.ndviLayerRight); mapReg.ndviLayerRight = null }
       state.radarFallback.right = { month: m.label, indexUsed: res.indexUsed || 'RVI' }
+      return
+    }
+    if (res.mode === 'radar_index') {
+      endLoading()
+      if (res.url) mapReg.ndviLayerRight = applyTileLayer(mapReg.mapRight, mapReg.ndviLayerRight, res.url, 1)
+      else if (mapReg.ndviLayerRight) { mapReg.mapRight.removeLayer(mapReg.ndviLayerRight); mapReg.ndviLayerRight = null }
       return
     }
     if (res.mode === 'cloud_blocked') {
@@ -1212,7 +1233,9 @@ export function fetchHealthZone(force) {
   if (!geom) return
   const m = MONTHS[state.mainMonth]
   if (!m) return
-  const view = state.radarFallback.main ? 'rvi' : state.currentIndex === 'ndvi' ? 'ndvi' : 'other'
+  // Direct RVI band selection is a radar view too (server buckets RVI);
+  // radar_fallback only fires the auto case when optical is cloud-blocked.
+  const view = state.currentIndex === 'rvi' || state.radarFallback.main ? 'rvi' : state.currentIndex === 'ndvi' ? 'ndvi' : 'other'
   const key = state.mainMonth + '|' + view + '|' + (state.currentFieldId || 'aoi')
   if (!force && state.healthZone.monthKey === key) return
   if (view === 'other') {
@@ -1253,6 +1276,14 @@ function activeRangeKey() {
   return (state.rangeStart || '') + '|' + (state.rangeEnd || '')
 }
 
+// What the count in the chart subtitle actually counts. NDVI/NDWI/LSWI all
+// share ONE cloud-filtered, deduped Sentinel-2 series; RVI is an every-orbit
+// (ascending + descending) Sentinel-1 series. Labeling them differently is
+// honest — the two numbers are not the same kind of count.
+function trendSource(index) {
+  return index === 'rvi' ? 'Sentinel-1 passes' : 'Sentinel-2 scenes'
+}
+
 export function loadChartForPoint(lat, lng, index, onEmpty) {
   const cfg = INDICES[index] || TRUE_COLOR
   const key = chartCacheKey('point:' + lat.toFixed(4) + ',' + lng.toFixed(4), index, activeRangeKey())
@@ -1260,13 +1291,16 @@ export function loadChartForPoint(lat, lng, index, onEmpty) {
   if (cached && Date.now() - cached.fetchedAt < CHART_CACHE_TTL_MS) {
     state.chartData = cached.data
     state.chartIndex = index
-    state.chartSubtitle = cached.subtitle
+    state.chartSubtitle = lat.toFixed(4) + ', ' + lng.toFixed(4) + ' \u00b7 ' + observationCount(state.preferredLanguage, cached.data.length, trendSource(index))
+    // Anchor the band-independent date source (growth-stage day count) on the
+    // optical series only — the RVI fetch path never touches it.
+    if (index !== 'rvi') state.ndviChartData = cached.data
     checkStress(cached.data, lat, lng, index)
     setStatus('ready', cfg.name + ' trend loaded \u2014 ' + cached.data.length + ' observations')
     return
   }
   setStatus('computing', 'Fetching ' + cfg.name + ' trend...')
-  ee.getIndexTimeSeries(lat, lng, index, activeMonths(), (data) => {
+  const onPointTrend = (data) => {
     if (data.length === 0) {
       setStatus('error', 'No ' + cfg.name + ' data for this point')
       if (onEmpty) onEmpty()
@@ -1274,11 +1308,16 @@ export function loadChartForPoint(lat, lng, index, onEmpty) {
     }
     state.chartData = data
     state.chartIndex = index
-    state.chartSubtitle = lat.toFixed(4) + ', ' + lng.toFixed(4) + ' \u00b7 ' + observationCount(state.preferredLanguage, data.length)
+    state.chartSubtitle = lat.toFixed(4) + ', ' + lng.toFixed(4) + ' \u00b7 ' + observationCount(state.preferredLanguage, data.length, trendSource(index))
+    if (index !== 'rvi') state.ndviChartData = data
     chartCache.set(key, { data, subtitle: state.chartSubtitle, fetchedAt: Date.now() })
     checkStress(data, lat, lng, index)
     setStatus('ready', cfg.name + ' trend loaded \u2014 ' + data.length + ' observations')
-  })
+  }
+  // RVI is radar (Sentinel-1), not optical: it has no cloud dedupe and keeps
+  // both same-day passes (ascending + descending) so the orbit shape shows.
+  if (index === 'rvi') ee.getRviTimeSeries(lat, lng, activeMonths(), onPointTrend)
+  else ee.getIndexTimeSeries(lat, lng, index, activeMonths(), onPointTrend)
 }
 
 export function loadChartForGeometry(geometry, index, label) {
@@ -1292,32 +1331,44 @@ export function loadChartForGeometry(geometry, index, label) {
   if (cached && Date.now() - cached.fetchedAt < CHART_CACHE_TTL_MS) {
     state.chartData = cached.data
     state.chartIndex = index
-    state.chartSubtitle = cached.subtitle
+    state.chartSubtitle = label + ' \u00b7 ' + observationCount(state.preferredLanguage, cached.data.length, trendSource(index))
+    if (index !== 'rvi') state.ndviChartData = cached.data
     checkStress(cached.data, null, null, index)
     setStatus('ready', cfg.name + ' trend loaded \u2014 ' + cached.data.length + ' observations')
     return
   }
   setStatus('computing', 'Fetching ' + cfg.name + ' trend...')
-  ee.getIndexTimeSeriesForGeometry(geometry, index, activeMonths(), (data) => {
+  const onGeomTrend = (data) => {
     if (!data || data.length === 0) {
       setStatus('error', 'No ' + cfg.name + ' data for this area')
       return
     }
     state.chartData = data
     state.chartIndex = index
-    state.chartSubtitle = label + ' \u00b7 ' + observationCount(state.preferredLanguage, data.length)
+    state.chartSubtitle = label + ' \u00b7 ' + observationCount(state.preferredLanguage, data.length, trendSource(index))
+    if (index !== 'rvi') state.ndviChartData = data
     chartCache.set(key, { data, subtitle: state.chartSubtitle, fetchedAt: Date.now() })
     checkStress(data, null, null, index)
     setStatus('ready', cfg.name + ' trend loaded \u2014 ' + data.length + ' observations')
-  })
+  }
+  if (index === 'rvi') ee.getRviTimeSeriesForGeometry(geometry, activeMonths(), onGeomTrend)
+  else ee.getIndexTimeSeriesForGeometry(geometry, index, activeMonths(), onGeomTrend)
 }
 
 export function setIndex(index) {
+  const wasRvi = state.currentIndex === 'rvi'
   state.currentIndex = index
   loadIndexForMonth(state.mainMonth, currentGeometry.value)
   if (state.compareMode) loadIndexForMonthRight(state.rightMonth)
   if (index === 'truecolor') return // photo mode — no index trend/status to refresh
-  refreshAllFieldStatuses()
+  // RVI: radar can't score growth stages, and its absolute scale isn't
+  // comparable to the NDVI-based area benchmark (y-axis 0..1) — hide both.
+  if (index === 'rvi') {
+    state.benchmarkValue = null
+  } else {
+    refreshAllFieldStatuses()
+    if (wasRvi && state.benchmarkValue === null && currentGeometry.value) loadBenchmark(currentGeometry.value)
+  }
   if (state.currentFieldId && currentGeometry.value) {
     loadChartForGeometry(currentGeometry.value, index, state.currentFieldName)
   } else {
@@ -1375,6 +1426,7 @@ export function setTrueColorDate(date, side = 'main') {
 export function onMapClick(lat, lng) {
   state.currentFieldName = null
   state.currentFieldId = null
+  state.ndviChartData = null // new subject (point) — drop the previous anchor
   state.lastClickPoint = { lat, lng }
   state.chartSubtitle = lat.toFixed(4) + ', ' + lng.toFixed(4)
   state.infoPanelVisible = true
@@ -1710,6 +1762,7 @@ export async function deleteField(id) {
 export function loadField(field) {
   state.currentFieldName = field.name
   state.currentFieldId = field.id
+  state.ndviChartData = null // new subject — the old field's anchor no longer applies
   mapReg.drawnItems.clearLayers()
   const geo = window.L.geoJSON(field.geojson)
   geo.eachLayer((l) => {

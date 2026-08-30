@@ -75,6 +75,7 @@ export default {
   'band.tip_savi': 'Vegetation health, adjusted for bare soil in sparse crops',
   'band.tip_evi': 'Vegetation density, corrected for haze and canopy shadow',
   'band.tip_gndvi': 'Vegetation health, more sensitive to chlorophyll/nitrogen',
+  'band.tip_rvi': 'Radar vegetation index from Sentinel-1 — works through clouds',
   'band.tip_truecolor': 'Real satellite photo — no index calculation',
   'band.scene_precision': 'Scene',
   'band.scene_pick_tip': 'Pick an individual capture date — a single scene, not a monthly composite',

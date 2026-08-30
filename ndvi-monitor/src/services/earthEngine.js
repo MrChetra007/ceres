@@ -159,6 +159,28 @@ export function getIndexTimeSeriesForGeometry(geometry, index, months, cb) {
     })
 }
 
+// RVI (Sentinel-1 radar) time series. Deliberately does NOT run
+// dedupeLowestCloud: S1 scenes have no cloud score, and ascending +
+// descending passes on the same day are two legitimate observations with
+// different orbitProperties_pass. The server already filters notNull values.
+export function getRviTimeSeries(lat, lng, months, cb) {
+  callEE('getRviTimeSeries', { lat, lng, months })
+    .then((body) => cb(body.points || []))
+    .catch((err) => {
+      fail(err)
+      cb([])
+    })
+}
+
+export function getRviTimeSeriesForGeometry(geometry, months, cb) {
+  callEE('getRviTimeSeries', { geometry, months })
+    .then((body) => cb(body.points || []))
+    .catch((err) => {
+      fail(err)
+      cb([])
+    })
+}
+
 // Feature 3 — Auto-planting-date detection (LSWI spike).
 // A transplant floods the field: LSWI jumps from dry soil (~0.0–0.2) toward
 // flooded (~0.4+). The trailing ~90 days of cloud-free LSWI at the given field
