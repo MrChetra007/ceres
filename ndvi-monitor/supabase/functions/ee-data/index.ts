@@ -19,6 +19,7 @@
 // src/services/earthEngine.js — behavior unchanged, only where it runs.
 
 import ee from "npm:@google/earthengine@0.1.395";
+import { createClient } from "npm:@supabase/supabase-js@2";
 import { statusFromNdvi } from "../_shared/growthStage.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
 import { translateIndexValue } from "../_shared/indexTranslations.ts";
@@ -31,6 +32,14 @@ import {
 import { detectDiscrepancy } from "../_shared/discrepancy.ts";
 
 const EE_KEY = JSON.parse(Deno.env.get("EE_SERVICE_ACCOUNT_KEY") || "{}");
+
+// Service-role Supabase client for the closed-period caches (§0 of the
+// ee-cost-control directive). This function is already a trusted server
+// context (it holds the EE service account key), so service_role reads/writes
+// simply bypass RLS on the ee_*_cache tables — no end-user policies exist.
+const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
+const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+const supabase = createClient(SUPABASE_URL, SERVICE_ROLE);
 
 // ── Index/visualization config (mirrors src/config.js INDICES) ────────────
 const BANDS: Record<string, string[]> = {
@@ -884,61 +893,166 @@ async function actionGetRainfall(payload: any) {
 // ── getObservations ────────────────────────────────────────────────────────
 // Port of getObservations(): every S2 pass over the window with cloud cover,
 // derived status and mean NDVI — one batched evaluate, no per-image loop.
+//
+// Per-scene caching (§2 of the ee-cost-control directive): a scene that is
+// already in ee_observation_cache (one row per field+scene_date, permanent)
+// is never recomputed. Only scenes NEWER than the newest cached one are
+// fetched from EE, so steady-state calls run a near-empty query. `status`
+// depends on how old a scene is RELATIVE TO TODAY, so it is deliberately NOT
+// cached — it is recomputed at read time for every row, cached and fresh.
 async function actionGetObservations(payload: any) {
   const geom = toEeGeometry(payload.geometry);
+  const fieldId = payload.fieldId || null;
   const endISO = payload.endISO;
   const startISO = payload.startISO;
-  const end =
-    endISO && !isNaN(new Date(endISO).getTime())
-      ? ee.Date(endISO)
-      : ee.Date(Date.now());
-  const start =
-    startISO && !isNaN(new Date(startISO).getTime())
-      ? ee.Date(startISO)
-      : end.advance(-14, "month");
 
-  const collection = ee
-    .ImageCollection("COPERNICUS/S2_SR_HARMONIZED")
-    .filterBounds(geom)
-    .filterDate(start, end);
-  const series = collection.map((img: any) => {
-    const cloudCover = ee.Number(img.get("CLOUDY_PIXEL_PERCENTAGE"));
-    const blocked = cloudCover.gte(40);
-    const ageDays = ee.Date(Date.now()).difference(img.date(), "day");
-    const stale = ee.Number(ageDays).gte(21);
-    // Server-side branching must use ee.Algorithms.If — a plain JS ternary on
-    // an EE object always picks the first branch.
-    const status = ee.Algorithms.If(
-      blocked,
-      "blocked",
-      ee.Algorithms.If(stale, "low", "clear"),
-    );
-    const ndvi = img
-      .normalizedDifference(["B8", "B4"])
-      .rename("ndvi")
-      .reduceRegion({
-        reducer: ee.Reducer.mean(),
-        geometry: geom,
-        scale: 10,
-        maxPixels: 1e9,
-      })
-      .get("ndvi");
-    return ee.Feature(null, {
-      date: img.date().format("YYYY-MM-dd"),
-      source: "Sentinel-2",
-      cloudCover,
-      status,
-      ndvi,
+  // Resolve the window in plain JS first so the cache query and the EE query
+  // share the exact same bounds (no EE Date → ISO round-trip needed). The
+  // relative default (now − 14 calendar months) gets a 1-day margin on the
+  // front so an EE/JS month-arithmetic edge can never drop an in-window scene.
+  const endTs = endISO && !isNaN(new Date(endISO).getTime())
+    ? new Date(endISO).getTime()
+    : Date.now();
+  const startTs = startISO && !isNaN(new Date(startISO).getTime())
+    ? new Date(startISO).getTime()
+    : (() => {
+        const d = new Date(endTs);
+        d.setMonth(d.getMonth() - 14);
+        return d.getTime() - 86400000;
+      })();
+  const iso = (ts: number) => new Date(ts).toISOString().slice(0, 10);
+  const qStart = iso(startTs);
+  const qEnd = iso(endTs);
+  const end = ee.Date(endTs);
+  const start = ee.Date(startTs);
+
+  // 1. Read whatever scenes are already permanent-cached in this window.
+  let cached: any[] = [];
+  let cachedMax: string | null = null;
+  if (fieldId) {
+    try {
+      const { data } = await supabase
+        .from("ee_observation_cache")
+        .select("scene_date, source, cloud_cover, ndvi")
+        .eq("field_id", fieldId)
+        .gte("scene_date", qStart)
+        .lte("scene_date", qEnd);
+      cached = (data as any[]) || [];
+      for (const row of cached) {
+        if (!cachedMax || row.scene_date > cachedMax) cachedMax = row.scene_date;
+      }
+    } catch (e) {
+      // Cache read failed — fall back to computing the full window this call.
+      console.error("[ee-data] ee_observation_cache read failed:", e);
+    }
+  }
+
+  // 2. Restrict the EE query to scenes after the newest cached one. If nothing
+  //    is cached yet (or the cache is skipped for lack of field_id), the query
+  //    is the full window (first-time population / uncacheable fallback).
+  let computeStart: any = start;
+  let computeEnd = end;
+  let needsCompute = true;
+  if (cachedMax) {
+    const next = new Date(cachedMax + "T00:00:00Z");
+    next.setUTCDate(next.getUTCDate() + 1);
+    if (next.getTime() > endTs) {
+      needsCompute = false; // everything requested is already cached
+    } else {
+      computeStart = ee.Date(next.getTime());
+    }
+  }
+
+  // 3. Fetch only the not-yet-cached tail of the window.
+  const freshByDate = new Map<string, any>();
+  if (needsCompute) {
+    const collection = ee
+      .ImageCollection("COPERNICUS/S2_SR_HARMONIZED")
+      .filterBounds(geom)
+      .filterDate(computeStart, computeEnd);
+    const series = collection.map((img: any) => {
+      const cloudCover = ee.Number(img.get("CLOUDY_PIXEL_PERCENTAGE"));
+      const ndvi = img
+        .normalizedDifference(["B8", "B4"])
+        .rename("ndvi")
+        .reduceRegion({
+          reducer: ee.Reducer.mean(),
+          geometry: geom,
+          scale: 10,
+          maxPixels: 1e9,
+        })
+        .get("ndvi");
+      return ee.Feature(null, {
+        date: img.date().format("YYYY-MM-dd"),
+        source: "Sentinel-2",
+        cloudCover,
+        ndvi,
+      });
     });
-  });
-  const result = await evaluate(series);
-  const rows = ((result && result.features) || []).map((feat: any) => ({
-    date: feat.properties.date,
-    source: feat.properties.source,
-    cloudCover: feat.properties.cloudCover,
-    status: feat.properties.status,
-    ndvi: feat.properties.ndvi,
-  }));
+    const result = await evaluate(series);
+    // The cache key is (field_id, scene_date), so same-day duplicate S2 orbits
+    // must collapse here — keep the least-cloudy row (same rule the frontend's
+    // dedupeLowestCloud applies to the final list).
+    for (const feat of (result && result.features) || []) {
+      const p = feat.properties;
+      const existing = freshByDate.get(p.date);
+      // Keep the best (lowest cloud) scene seen for this date; never replace a
+      // known-cloud value with an unknown one (same rule the frontend's
+      // dedupeLowestCloud applies to the final list).
+      if (
+        !existing ||
+        (p.cloudCover != null &&
+          (existing.cloudCover == null || p.cloudCover < existing.cloudCover))
+      ) {
+        freshByDate.set(p.date, {
+          date: p.date,
+          source: p.source,
+          cloudCover: p.cloudCover,
+          ndvi: p.ndvi,
+        });
+      }
+    }
+  }
+  const fresh = [...freshByDate.values()];
+
+  // 4. Persist the newly computed scenes (permanent — never recomputed after).
+  if (fieldId && fresh.length) {
+    try {
+      const { error } = await supabase
+        .from("ee_observation_cache")
+        .upsert(
+          fresh.map((r: any) => ({
+            field_id: fieldId,
+            scene_date: r.date,
+            source: r.source || "Sentinel-2",
+            cloud_cover: r.cloudCover,
+            ndvi: r.ndvi,
+          })),
+          { onConflict: "field_id,scene_date" },
+        );
+      if (error) console.error("[ee-data] ee_observation_cache upsert failed:", error);
+    } catch (e) {
+      console.error("[ee-data] ee_observation_cache upsert failed:", e);
+    }
+  }
+
+  // 5. Merge cached + fresh, then derive status AT READ TIME for every row —
+  //    cached scenes age past the 21-day "low" line even though their
+  //    cloud_cover/ndvi never change.
+  const rows = [
+    ...cached.map((r: any) => ({
+      date: r.scene_date,
+      source: r.source || "Sentinel-2",
+      cloudCover: r.cloud_cover,
+      ndvi: r.ndvi,
+    })),
+    ...fresh,
+  ];
+  for (const r of rows) {
+    const ageDays = (Date.now() - new Date(r.date).getTime()) / 86400000;
+    r.status = r.cloudCover >= 40 ? "blocked" : ageDays >= 21 ? "low" : "clear";
+  }
+  rows.sort((a: any, b: any) => a.date.localeCompare(b.date));
   return { rows };
 }
 
@@ -1058,6 +1172,16 @@ async function actionGetAllFieldStatuses(payload: any) {
 // mapping actionGetIndexTimeSeries does) nested as a property per field, all
 // resolved in ONE evaluate. Heaviest action here — fields × months
 // reduceRegions in a single graph.
+//
+// Closed-month caching (§1 of the ee-cost-control directive): every fully
+// elapsed (closed) calendar month is permanent in ee_trend_cache, keyed on
+// (field_id, index, year, month), and is served from there instead of being
+// recomputed. Only the current (open) month — plus any closed month that has
+// never been cached — is sent to Earth Engine, so steady-state calls hit EE
+// for just the open month (~93% reduction). A month that _transitioned_ from
+// open to closed since it was last written is treated as not-yet-cached: its
+// stale mid-month row is ignored and one recompute "finalizes" it
+// (is_closed_period flips to true and it is never touched again).
 async function actionGetAllFieldTrends(payload: any) {
   const index = payload.index && BANDS[payload.index] ? payload.index : "ndvi";
   const name = index.toUpperCase();
@@ -1065,53 +1189,176 @@ async function actionGetAllFieldTrends(payload: any) {
   const incoming = Array.isArray(payload.fields) ? payload.fields : [];
   if (!incoming.length || !months.length) return { trends: [] };
 
-  // Every field shares the same window — compute it once, outside the map.
-  const startDate = ee.Date.fromYMD(months[0].year, months[0].month, 1);
-  const last = months[months.length - 1];
-  const endDate = ee.Date.fromYMD(last.year, last.month, 1).advance(1, "month");
+  // 1. Split months into closed (fully elapsed → cacheable) vs open (still in
+  //    progress → always recomputed). Plain-JS calendar math, no EE: month M
+  //    is closed once the first day of M+1 has passed. Date.UTC is 0-indexed,
+  //    so Date.UTC(year, month, 1) is the start of the NEXT real month.
+  const monthKey = (y: number, m: number) => `${y}-${String(m).padStart(2, "0")}`;
+  const now = Date.now();
+  const closed = months.filter((m: any) => Date.UTC(m.year, m.month, 1) <= now);
+  const open = months.filter((m: any) => Date.UTC(m.year, m.month, 1) > now);
+  const closedKeys = new Set(closed.map((m: any) => monthKey(m.year, m.month)));
 
-  const fc = ee.FeatureCollection(
-    incoming.map((f: any) =>
-      ee.Feature(toEeGeometry(f.geometry), { fid: String(f.id) }),
-    ),
-  );
+  // 2. Load every cached row for these fields + index in ONE query. Only rows
+  //    flagged is_closed_period are served — an open-month row is interim, and
+  //    a closed-marked month is the final, permanent one.
+  const cacheMap = new Map<string, any[]>();
+  try {
+    const { data } = await supabase
+      .from("ee_trend_cache")
+      .select("field_id, year, month, points, is_closed_period")
+      .eq("index", index)
+      .in("field_id", incoming.map((f: any) => f.id));
+    for (const row of data || []) {
+      if (!row.is_closed_period) continue;
+      const mk = monthKey(row.year, row.month);
+      if (!closedKeys.has(mk)) continue;
+      cacheMap.set(`${row.field_id}|${mk}`, row.points ?? []);
+    }
+  } catch (e) {
+    // Cache read failed — recompute everything this call and try to write.
+    console.error("[ee-data] ee_trend_cache read failed:", e);
+  }
 
-  const trends = fc.map((ft: any) => {
-    const geom = ee.Feature(ft).geometry();
-    const all = ee
-      .ImageCollection("COPERNICUS/S2_SR_HARMONIZED")
-      .filterBounds(geom)
-      .filterDate(startDate, endDate)
-      .filter(ee.Filter.lt("CLOUDY_PIXEL_PERCENTAGE", 40));
-    const series = all
-      .map((img: any) => {
-        const idxImg = applyIndex(img, index, name);
-        const value = idxImg.reduceRegion({
-          reducer: ee.Reducer.mean(),
-          geometry: geom,
-          scale: 10,
-          maxPixels: 1e9,
+  // 3. Compute set = the open months + any closed month missing from the cache
+  //    for AT LEAST one field (union across fields, per the directive §1 edge
+  //    case — fields that already have such a month cached recompute it this
+  //    one call; self-correcting on the next). Empty when everything is cached.
+  const missing = new Set<string>();
+  for (const m of closed) {
+    const mk = monthKey(m.year, m.month);
+    const anyFieldCached = incoming.some((f: any) =>
+      cacheMap.has(`${f.id}|${mk}`),
+    );
+    if (!anyFieldCached) missing.add(mk);
+  }
+  for (const m of open) missing.add(monthKey(m.year, m.month));
+
+  const computeMonths = months
+    .filter((m: any) => missing.has(monthKey(m.year, m.month)))
+    .sort((a: any, b: any) => a.year - b.year || a.month - b.month);
+
+  const freshByField = new Map<string, Map<string, any[]>>();
+
+  if (computeMonths.length) {
+    // Every field shares the same window — compute it once, outside the map.
+    const startDate = ee.Date.fromYMD(
+      computeMonths[0].year,
+      computeMonths[0].month,
+      1,
+    );
+    const last = computeMonths[computeMonths.length - 1];
+    const endDate = ee.Date.fromYMD(last.year, last.month, 1).advance(1, "month");
+
+    const fc = ee.FeatureCollection(
+      incoming.map((f: any) =>
+        ee.Feature(toEeGeometry(f.geometry), { fid: String(f.id) }),
+      ),
+    );
+
+    const trends = fc.map((ft: any) => {
+      const geom = ee.Feature(ft).geometry();
+      const all = ee
+        .ImageCollection("COPERNICUS/S2_SR_HARMONIZED")
+        .filterBounds(geom)
+        .filterDate(startDate, endDate)
+        .filter(ee.Filter.lt("CLOUDY_PIXEL_PERCENTAGE", 40));
+      const series = all
+        .map((img: any) => {
+          const idxImg = applyIndex(img, index, name);
+          const value = idxImg.reduceRegion({
+            reducer: ee.Reducer.mean(),
+            geometry: geom,
+            scale: 10,
+            maxPixels: 1e9,
+          });
+          return ee.Feature(null, {
+            date: img.date().format("YYYY-MM-dd"),
+            cloudPct: ee.Number(img.get("CLOUDY_PIXEL_PERCENTAGE")),
+            value: value.get(name),
+          });
+        })
+        // Missing-key properties read as null here, so notNull cleanly drops
+        // masked/no-data scenes (same as actionGetIndexTimeSeries).
+        .filter(ee.Filter.notNull(["value"]));
+      return ee.Feature(null, { fid: ft.get("fid"), points: series });
+    });
+
+    const result = await evaluate(trends);
+    const rows = ((result && result.features) || []).map((f: any) => ({
+      id: f.properties.fid,
+      points: ((f.properties.points || {}).features || []).map(
+        (p: any) => p.properties,
+      ),
+    }));
+
+    // Bucket each field's flat 14-month series into per-month arrays
+    // (YYYY-MM from the scene date) so each calendar month becomes one row.
+    for (const r of rows) {
+      const buckets = new Map<string, any[]>();
+      for (const p of r.points) {
+        const mk = p.date && p.date.slice(0, 7);
+        if (!mk) continue;
+        if (!buckets.has(mk)) buckets.set(mk, []);
+        buckets.get(mk)!.push(p);
+      }
+      freshByField.set(r.id, buckets);
+    }
+
+    // 4. Persist per-(field, index, year, month). Closed months are marked
+    //    permanent (is_closed_period = true, never recomputed again); the open
+    //    month is overwritten on every call (false). Empty buckets are written
+    //    too — a month with zero clean scenes must still converge, otherwise
+    //    it would be re-queried as "missing" on every call forever.
+    const upserts: any[] = [];
+    for (const f of incoming) {
+      const buckets = freshByField.get(String(f.id)) ?? new Map<string, any[]>();
+      for (const m of computeMonths) {
+        const mk = monthKey(m.year, m.month);
+        upserts.push({
+          field_id: f.id,
+          index,
+          year: m.year,
+          month: m.month,
+          points: (buckets.get(mk) || [])
+            .slice()
+            .sort((a: any, b: any) => a.date.localeCompare(b.date)),
+          is_closed_period: closedKeys.has(mk),
         });
-        return ee.Feature(null, {
-          date: img.date().format("YYYY-MM-dd"),
-          cloudPct: ee.Number(img.get("CLOUDY_PIXEL_PERCENTAGE")),
-          value: value.get(name),
-        });
-      })
-      // Missing-key properties read as null here, so notNull cleanly drops
-      // masked/no-data scenes (same as actionGetIndexTimeSeries).
-      .filter(ee.Filter.notNull(["value"]));
-    return ee.Feature(null, { fid: ft.get("fid"), points: series });
+      }
+    }
+    try {
+      const { error } = await supabase
+        .from("ee_trend_cache")
+        .upsert(upserts, { onConflict: "field_id,index,year,month" });
+      if (error) console.error("[ee-data] ee_trend_cache upsert failed:", error);
+    } catch (e) {
+      console.error("[ee-data] ee_trend_cache upsert failed:", e);
+    }
+  }
+
+  // 5. Merge, per field: seed each requested month from cache, overlay freshly
+  //    computed months, flatten in the caller's month order and sort by date —
+  //    the trend chart depends on the merged list being date-ordered.
+  const trends = incoming.map((f: any) => {
+    const idStr = String(f.id);
+    const byMonth = new Map<string, any[]>();
+    for (const m of months) {
+      const mk = monthKey(m.year, m.month);
+      const cached = cacheMap.get(`${idStr}|${mk}`);
+      if (cached) byMonth.set(mk, cached);
+    }
+    const freshBuckets = freshByField.get(idStr);
+    if (freshBuckets) {
+      for (const [mk, pts] of freshBuckets) byMonth.set(mk, pts);
+    }
+    const points = months
+      .flatMap((m: any) => byMonth.get(monthKey(m.year, m.month)) || [])
+      .sort((a: any, b: any) => a.date.localeCompare(b.date));
+    return { id: idStr, points };
   });
 
-  const result = await evaluate(trends);
-  const rows = ((result && result.features) || []).map((f: any) => ({
-    id: f.properties.fid,
-    points: ((f.properties.points || {}).features || []).map(
-      (p: any) => p.properties,
-    ),
-  }));
-  return { trends: rows };
+  return { trends };
 }
 
 // ── Router ─────────────────────────────────────────────────────────────────

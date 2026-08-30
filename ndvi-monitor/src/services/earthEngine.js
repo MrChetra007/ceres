@@ -276,8 +276,10 @@ export function getRainfallMm(geometry, daysBack, cb) {
 //                                       Cloud-blocked / LOW CONFIDENCE)
 //   - < 40 but older than 21 days (CONFIDENCE_STALE_DAYS) → 'low'
 //   - otherwise                        → 'clear'
-export function getObservations(geometry, startISO, endISO, cb) {
-  callEE('getObservations', { geometry, startISO: startISO || null, endISO: endISO || null })
+// fieldId keys the server-side per-scene cache (ee_observation_cache): scenes
+// already cached are served without touching Earth Engine.
+export function getObservations(fieldId, geometry, startISO, endISO, cb) {
+  callEE('getObservations', { fieldId: fieldId || null, geometry, startISO: startISO || null, endISO: endISO || null })
     .then((body) => {
       // Same-day duplicate S2 orbits produce 2+ rows for one date; collapse
       // them to the LEAST-cloudy row (via dedupeLowestCloud) so the

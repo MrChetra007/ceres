@@ -1144,7 +1144,7 @@ export function fetchObservations() {
   }
   state.observationsLoading = true
   const geometry = polygonGeometry(geom.coordinates)
-  ee.getObservations(geometry, state.rangeStart, state.rangeEnd, (rows) => {
+  ee.getObservations(field.id, geometry, state.rangeStart, state.rangeEnd, (rows) => {
     state.observationsLoading = false
     state.observations = rows
     observationsFieldId = field.id
