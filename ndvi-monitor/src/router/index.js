@@ -3,11 +3,13 @@ import { state } from '../store'
 import LandingPage from '../views/LandingPage.vue'
 import MapView from '../views/MapView.vue'
 import PricingPage from '../views/PricingPage.vue'
+import BillingRedirect from '../views/BillingRedirect.vue'
 
 const routes = [
   { path: '/', name: 'landing', component: LandingPage },
   { path: '/map', name: 'map', component: MapView },
   { path: '/pricing', name: 'pricing', component: PricingPage },
+  { path: '/billing', name: 'billing', component: BillingRedirect },
 ]
 
 const router = createRouter({

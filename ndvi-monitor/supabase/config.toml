@@ -2,3 +2,6 @@ project_id = "wopwwtnvqyomiwbsxiks"
 
 [functions.telegram-webhook]
 verify_jwt = false
+
+[functions.aba-payway-webhook]
+verify_jwt = false

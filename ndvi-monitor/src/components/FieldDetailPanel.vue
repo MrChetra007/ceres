@@ -449,11 +449,15 @@ const asOfDate = computed(() => {
 
 // Primary month-scoped status -> falls back to the one-shot latest reading only
 // while the trend series is still loading (chartData not yet populated).
+// NOTE: the as-of DATE passed into buildStatusObject is the NDVI-anchored one
+// (growthAsOfDate), not the per-band asOfDate — the "Day N" portion of the
+// hero subtitle stays pinned across NDVI/NDWI/LSWI/RVI tabs even though the
+// reading value (obs.value) below still comes from the active band.
 const monthStatus = computed(() => {
   const f = currentField.value
   const obs = activeObservation.value
   if (!f || !obs || obs.value == null) return null
-  return store.buildStatusObject(f, obs.value, state.currentIndex, asOfDate.value)
+  return store.buildStatusObject(f, obs.value, state.currentIndex, growthAsOfDate.value)
 })
 
 const heroStatus = computed(() => monthStatus.value || (Array.isArray(state.chartData) && state.chartData.length ? null : status.value))
@@ -494,14 +498,17 @@ const stageText = computed(() => {
   const st = status.value
   if (!st || !st.stageLabel) return ''
   // One-shot fallback: status.stageLabel is built (store.updateFieldStatus) with
-  // Date.now() as the as-of date, so "Day N" there can drift from the Growth
-  // box (which uses the slider's asOfDate). Rebuild the day count from the SAME
-  // asOfDate the Growth box uses so both surfaces always agree.
+  // Date.now() as the as-of date, so "Day N" there drifts from the Growth box.
+  // Rebuild from the SAME NDVI-anchored day count the Growth box uses so both
+  // surfaces always agree; the reading still comes from the ACTIVE band (RVI
+  // on the RVI tab, etc.) — only Day N is band-independent.
   const f = currentField.value
   const days = growthStageDays.value
-  if (state.currentIndex === 'ndvi' && f && f.plantingDate && days != null && !prePlanting.value) {
+  const obs = activeObservation.value
+  if (f && f.plantingDate && days != null && !stagePrePlanting.value) {
     const stage = store.getGrowthStage(days).stage
-    const val = st.value != null ? ' \u00b7 NDVI ' + st.value.toFixed(2) : ''
+    const bandName = (INDICES[state.currentIndex] && INDICES[state.currentIndex].name) || 'NDVI'
+    const val = obs && obs.value != null ? ' \u00b7 ' + bandName + ' ' + obs.value.toFixed(2) : ''
     return stageNameKm(state.preferredLanguage, stage) + ' \u00b7 ' + daySinceLabel(state.preferredLanguage, days) + val
   }
   return st.stageLabel

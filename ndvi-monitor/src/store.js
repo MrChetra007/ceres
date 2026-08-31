@@ -589,16 +589,6 @@ export function closeCheckout() {
   state.checkoutTier = null
 }
 
-// PLACEHOLDER checkout: upgrade_my_subscription() grants the tier directly in
-// the DB with NO payment (ABA PayWay is blocked). This is the exact spot a
-// real ABA Purchase API call (or hosted-checkout redirect) replaces later —
-// nothing upstream changes. Also reloads the subscription + opens billing.
-export async function confirmCheckout(tier) {
-  await supabase.upgradeSubscription(tier)
-  await loadSubscription()
-  closeCheckout()
-}
-
 export async function cancelMySubscription() {
   await supabase.cancelSubscription()
   await loadSubscription()
@@ -2167,7 +2157,7 @@ export function updateFieldStatus(field) {
       return
     }
     fieldStatus[field.id] = {
-      ...buildStatusObject(field, value, state.currentIndex),
+      ...buildStatusObject(field, value, state.currentIndex, date),
       value, count, date: date || null, cloudBlocked: !!cloudBlocked,
     }
     if (field.id === state.currentFieldId) applyFieldStyle()
@@ -2203,7 +2193,7 @@ export function refreshAllFieldStatuses() {
         }
       } else {
         fieldStatus[id] = {
-          ...buildStatusObject(field, value, state.currentIndex),
+          ...buildStatusObject(field, value, state.currentIndex, date),
           value, count, date: date || null, cloudBlocked: !!cloudBlocked,
         }
       }

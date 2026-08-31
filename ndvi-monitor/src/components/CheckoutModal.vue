@@ -35,7 +35,7 @@ import { ref, computed, watch } from 'vue'
 import { state } from '../store'
 import * as store from '../store'
 import { useI18n } from '../i18n'
-import { upgradeSubscription } from '../services/supabase'
+import { startAbaCheckout } from '../services/supabase'
 
 const { t } = useI18n()
 const working = ref(false)
@@ -49,23 +49,79 @@ const priceKey = computed(() => PRICE_KEYS[state.checkoutTier] || 'subs.individu
 const descKey = computed(() => DESC_KEYS[state.checkoutTier] || 'subs.individual_desc')
 
 // ---------------------------------------------------------------------------
-// PLACEHOLDER checkout payment function — THE single swap point for real ABA
-// PayWay later. Today it grants the tier directly in the DB via
-// upgrade_my_subscription() with NO real payment (ABA sandbox is blocked).
-// To wire in real billing, replace only the body of this function with a call
-// to ABA's Purchase API (or a redirect to their hosted checkout); nothing else
-// in this component or the store needs to change.
+// REAL ABA PayWay hosted checkout. Calls the initiate-payment Edge Function to
+// get a server-computed Purchase payload + HMAC-SHA512 signature, then lets the
+// browser POST that form to ABA's hosted checkout (bottom-sheet via the
+// AbaPayway plugin when available, else a plain form redirect). No amount is
+// ever trusted from the client — it's looked up from subscription_prices on the
+// server.
 async function initiatePayment(tier) {
-  await upgradeSubscription(tier)
+  const data = await startAbaCheckout(tier)
+
+  // Build a hidden form mirroring ABA's sample — same field names/order that
+  // the Edge Function hashed.
+  const form = document.createElement('form')
+  form.method = 'POST'
+  form.action = data.checkout_url
+  form.style.display = 'none'
+  form.id = 'aba-checkout-form'
+  for (const [name, value] of Object.entries(data.fields)) {
+    const input = document.createElement('input')
+    input.type = 'hidden'
+    input.name = name
+    input.value = value
+    form.appendChild(input)
+  }
+  const hashInput = document.createElement('input')
+  hashInput.type = 'hidden'
+  hashInput.name = 'hash'
+  hashInput.value = data.hash
+  form.appendChild(hashInput)
+  document.body.appendChild(form)
+
+  // Prefer ABA's hosted checkout bottom-sheet for the dark in-app feel; fall
+  // back to a plain submit if the plugin script can't load. Removed after
+  // redirect so repeated checkouts always build a fresh form.
+  try {
+    await loadAbaCheckoutScript(data.checkout_script)
+    if (typeof window.AbaPayway !== 'undefined') {
+      window.AbaPayway.checkout({
+        checkoutUrl: data.checkout_url,
+        key: data.hash,
+        ...data.fields,
+      })
+      return
+    }
+  } catch (e) {
+    console.warn('[checkout] AbaPayway plugin unavailable, falling back to form submit', e)
+  }
+  form.submit()
+}
+
+// Load ABA's checkout plugin once. This single script URL works for both
+// sandbox and production — do NOT swap it for ABA_API_BASE_URL.
+function loadAbaCheckoutScript(src) {
+  if (window.__abaScriptLoaded) return Promise.resolve()
+  return new Promise((resolve, reject) => {
+    const s = document.createElement('script')
+    s.src = src
+    s.async = true
+    s.onload = () => { window.__abaScriptLoaded = true; resolve() }
+    s.onerror = () => reject(new Error('failed to load ABA checkout script'))
+    document.head.appendChild(s)
+  })
 }
 
 async function confirm() {
   if (!state.checkoutTier || working.value) return
   working.value = true
   try {
-    await store.confirmCheckout(state.checkoutTier)
-    store.showToast(t('subs.checkout_success', { plan: t(planKey.value) }))
-    store.openPlanBillingModal()
+    await initiatePayment(state.checkoutTier)
+    // On redirect back from ABA (/billing?status=success|cancelled) the subscription
+    // is re-fetched and the plan modal shown; tier flip already happened server-side
+    // via the webhook, so this is just a UI sync. The plugin may open an in-app
+    // overlay rather than navigate away — resetting state keeps the modal usable.
+    store.closeCheckout()
   } catch (e) {
     store.showToast(t('subs.checkout_failed') + (e.message ? ': ' + e.message : ''))
   } finally {

@@ -178,12 +178,20 @@ export async function getMyProfile() {
 // ---------------------------------------------------------------------------
 // Subscription / billing (placeholder checkout until ABA PayWay is wired in)
 // ---------------------------------------------------------------------------
-// PLACEHOLDER: grants the tier via the DB RPC without charging anyone. When
-// ABA PayWay is unblocked, this body is swapped for the real Purchase API call
-// (or a redirect to ABA's hosted checkout) — the store/UI callers don't change.
-export async function upgradeSubscription(tier) {
-  const { error } = await sb.rpc('upgrade_my_subscription', { p_tier: tier })
-  if (error) throw error
+// Real checkout: calls the initiate-payment Edge Function (server-computed ABA
+// Purchase payload + signature). Returns the ordered field set + hash the
+// browser populates a hidden form with and posts to ABA's hosted checkout.
+// Replaces the old upgrade_my_subscription() placeholder, which migration 014
+// locked to service_role (that RPC now fails for signed-in users — intended).
+export async function startAbaCheckout(tier) {
+  const { data, error } = await sb.functions.invoke('initiate-payment', {
+    body: { tier },
+  })
+  if (error) throw new Error(error.message || 'Could not start checkout')
+  if (!data || data.ok === false) {
+    throw new Error((data && data.error) || 'Could not start checkout')
+  }
+  return data
 }
 
 export async function cancelSubscription() {
