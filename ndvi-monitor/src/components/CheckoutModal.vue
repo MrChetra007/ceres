@@ -89,7 +89,7 @@ import { ref, computed, watch, onUnmounted } from 'vue'
 import { state } from '../store'
 import * as store from '../store'
 import { useI18n } from '../i18n'
-import { startAbaCheckout, waitForPayment } from '../services/supabase'
+import { startAbaCheckout, waitForPayment, sb } from '../services/supabase'
 
 const { t } = useI18n()
 const working = ref(false)
@@ -138,6 +138,16 @@ async function startPayment() {
     appStore.value = data.app_store || ''
     playStore.value = data.play_store || ''
     watchPayment()
+
+    // TEMP: dev-only payment simulation — remove this block before production launch.
+    if (import.meta.env.DEV) {
+      setTimeout(async () => {
+        const { data, error } = await sb.functions.invoke('simulate-payment', {
+          body: { tran_id: tranId },
+        })
+        if (error) console.error('[simulate-payment]', error)
+      }, 2000)
+    }
   } catch (e) {
     phase.value = 'failed'
     store.showToast(t('subs.checkout_failed') + (e.message ? ': ' + e.message : ''))
