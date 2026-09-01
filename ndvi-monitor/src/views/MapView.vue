@@ -1,7 +1,9 @@
 <template>
   <TopBar @menu="openDashboard" />
   <LeafletMap />
-  <div v-if="state.loading" class="map-loading"></div>
+  <div v-if="state.loading" class="map-loading">
+    <div ref="satLoaderEl" class="map-loader-lottie"></div>
+  </div>
 
   <TimeControl />
   <MapLegend />
@@ -46,7 +48,9 @@
 </template>
 
 <script setup>
-import { ref, watch, onMounted } from 'vue'
+import { ref, watch, nextTick, onMounted, onBeforeUnmount } from 'vue'
+import lottie from 'lottie-web'
+import satLoaderJson from '../assets/animations/satellite_loader.json'
 import { state } from '../store'
 import * as store from '../store'
 import TopBar from '../components/TopBar.vue'
@@ -73,7 +77,32 @@ import { useI18n } from '../i18n'
 
 const { t } = useI18n()
 const leftDrawerOpen = ref(false)
+const satLoaderEl = ref(null)
+let satAnim = null
 let statusTimer = null
+
+function destroySatAnim() {
+  if (satAnim) {
+    try { satAnim.destroy() } catch (e) {}
+    satAnim = null
+  }
+}
+
+// Render the Lottie "satellite" spinner while the map is loading a scene, and
+// tear it down as soon as loading finishes so it never lingers over the map.
+watch(() => state.loading, async (loading) => {
+  if (!loading) { destroySatAnim(); return }
+  await nextTick()
+  if (!satLoaderEl.value) return
+  destroySatAnim()
+  satAnim = lottie.loadAnimation({
+    container: satLoaderEl.value,
+    renderer: 'svg',
+    loop: true,
+    autoplay: true,
+    animationData: satLoaderJson,
+  })
+})
 
 function openDashboard() {
   leftDrawerOpen.value = true
@@ -96,6 +125,10 @@ onMounted(() => {
     if (e.key === 'Escape' && state.isDrawing) store.cancelDraw()
     else if (e.key === 'Escape' && state.isAoiDraw) store.cancelAoiDraw()
   })
+})
+
+onBeforeUnmount(() => {
+  destroySatAnim()
 })
 
 watch(
