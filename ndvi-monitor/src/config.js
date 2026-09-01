@@ -1,8 +1,7 @@
 // Earth Engine data proxy — all satellite computation runs server-side in the
 // `ee-data` Edge Function (service-account auth); the browser never talks to
 // Earth Engine or holds an EE OAuth client.
-export const EE_DATA_URL = 'https://wopwwtnvqyomiwbsxiks.functions.supabase.co/ee-data'
-;
+export const EE_DATA_URL = 'https://wopwwtnvqyomiwbsxiks.functions.supabase.co/ee-data';
 export const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'https://wopwwtnvqyomiwbsxiks.supabase.co'
 export const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndvcHd3dG52cXlvbWl3YnN4aWtzIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk1NjAyMzcsImV4cCI6MjA5NTEzNjIzN30.2Wl7erPZYi5iuqrF-4UvMObDEYMmt6M86Pg3p89YGeU'
 

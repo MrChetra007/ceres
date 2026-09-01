@@ -86,7 +86,9 @@ async function initiatePayment(tier) {
     await loadAbaCheckoutScript(data.checkout_script)
     if (typeof window.AbaPayway !== 'undefined') {
       window.AbaPayway.checkout({
-        checkoutUrl: data.checkout_url,
+        // The plugin appends "/api/payment-gateway/v1/payments/purchase" to this
+        // bare host itself — passing the full endpoint would duplicate the path.
+        checkoutUrl: data.api_base_url,
         key: data.hash,
         ...data.fields,
       })

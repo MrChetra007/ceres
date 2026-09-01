@@ -32,7 +32,6 @@
   <DatePickerModal />
   <TelegramModal />
   <SettingsModal />
-  <CheckoutModal />
   <PaywallModal />
 
   <div id="toast-stack" class="toast-stack">
@@ -69,7 +68,6 @@ import AuthOverlay from '../components/AuthOverlay.vue'
 import DatePickerModal from '../components/DatePickerModal.vue'
 import TelegramModal from '../components/TelegramModal.vue'
 import SettingsModal from '../components/SettingsModal.vue'
-import CheckoutModal from '../components/CheckoutModal.vue'
 import PaywallModal from '../components/PaywallModal.vue'
 import { useI18n } from '../i18n'
 

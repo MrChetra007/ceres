@@ -100,6 +100,7 @@ export function benchmarkLabel(lang) {
 const CONF_REASONS = {
   en: {
     cloudBlocked: 'Cloud-blocked',
+    noRecentCapture: 'No new capture yet \u2014 showing the most recent available image',
     noData: 'No cloud-free imagery available',
     stale: 'Last valid reading is {days} days old',
     fewScenes: 'Only {count} cloud-free scene{s} this period',
@@ -109,6 +110,7 @@ const CONF_REASONS = {
   },
   km: {
     cloudBlocked: 'បាំងដោយពពក',
+    noRecentCapture: 'មិនទាន់មានរូបភាពថ្មី — បង្ហាញរូបភាពចុងក្រោយដែលមាន',
     noData: 'គ្មានរូបភាពគ្មានពពកក្នុងរយៈពេលនេះ',
     stale: 'ការអានត្រឹមត្រូវចុងក្រោយមានអាយុ {days} ថ្ងៃ',
     fewScenes: 'មានតែ {count} រូបភាពគ្មានពពកក្នុងរយៈពេលនេះ',

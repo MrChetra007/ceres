@@ -21,8 +21,11 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
 const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
 const MERCHANT_ID = Deno.env.get("ABA_MERCHANT_ID") || "";
 const API_KEY = Deno.env.get("ABA_API_KEY") || "";
-const ABA_API_BASE_URL =
-  Deno.env.get("ABA_API_BASE_URL") || "https://checkout-sandbox.payway.com.kh";
+// Trim any stray trailing slash from the configured base so the paths we
+// concatenate below never produce a double slash.
+const ABA_API_BASE_URL = (
+  Deno.env.get("ABA_API_BASE_URL") || "https://checkout-sandbox.payway.com.kh"
+).replace(/\/+$/, "");
 const APP_URL = (Deno.env.get("APP_URLS") || "").split(",")[0].trim() || "";
 
 // Functions live on the `.functions.supabase.co` subdomain of the same project.
@@ -39,11 +42,16 @@ const TIERS: Record<string, { itemsLabel: string }> = {
 
 // ABA's own docs pin the checkout plugin script to this single URL for BOTH
 // sandbox and production, so the frontend should hardcode this, not the API base.
-export const ABA_CHECKOUT_SCRIPT = "https://checkout.payway.com.kh/plugins/checkout2-0.js";
+export const ABA_CHECKOUT_SCRIPT =
+  "https://checkout-sandbox.payway.com.kh/plugins/checkout2-0.js";
 
 const supabase = createClient(SUPABASE_URL, SERVICE_ROLE);
 
-function jsonResponse(body: unknown, status = 200, corsHeaders: Record<string, string>): Response {
+function jsonResponse(
+  body: unknown,
+  status = 200,
+  corsHeaders: Record<string, string>,
+): Response {
   return new Response(JSON.stringify(body), {
     status,
     headers: { "Content-Type": "application/json", ...corsHeaders },
@@ -86,13 +94,22 @@ Deno.serve(async (req) => {
     const {
       data: { user },
     } = await supabase.auth.getUser(authHeader.replace("Bearer ", ""));
-    if (!user) return jsonResponse({ ok: false, error: "Not signed in" }, 401, corsHeaders);
+    if (!user)
+      return jsonResponse(
+        { ok: false, error: "Not signed in" },
+        401,
+        corsHeaders,
+      );
 
     // 2. Read + validate tier. The amount NEVER comes from the client.
     const body = await req.json().catch(() => ({}));
     const tier = String(body.tier || "").toLowerCase();
     if (!TIERS[tier]) {
-      return jsonResponse({ ok: false, error: "invalid_tier" }, 400, corsHeaders);
+      return jsonResponse(
+        { ok: false, error: "invalid_tier" },
+        400,
+        corsHeaders,
+      );
     }
 
     // 3. Look up the amount from subscription_prices — sole source of truth.
@@ -102,11 +119,16 @@ Deno.serve(async (req) => {
       .eq("tier", tier)
       .maybeSingle();
     if (priceErr || !price) {
-      return jsonResponse({ ok: false, error: "price_not_found" }, 500, corsHeaders);
+      return jsonResponse(
+        { ok: false, error: "price_not_found" },
+        500,
+        corsHeaders,
+      );
     }
     const amount = String(price.amount);
     const currency = price.currency || "USD";
-    const firstName = user.user_metadata?.first_name || user.user_metadata?.full_name || "";
+    const firstName =
+      user.user_metadata?.first_name || user.user_metadata?.full_name || "";
     const lastName = user.user_metadata?.last_name || "";
     const email = user.email || "";
 
@@ -130,9 +152,7 @@ Deno.serve(async (req) => {
     const paymentOption = "";
     const returnDeeplink = "";
     const customFields = "";
-    const returnParams = btoa(
-      JSON.stringify({ profile_id: user.id, tier }),
-    );
+    const returnParams = btoa(JSON.stringify({ profile_id: user.id, tier }));
     const payout = "";
     const lifetime = "60"; // minutes — 30-60 is recommended for a subscription
     const additionalParams = "";
@@ -141,14 +161,35 @@ Deno.serve(async (req) => {
 
     const returnUrl = `${functionsBase()}/aba-payway-webhook`;
     const cancelUrl = APP_URL ? `${APP_URL}/billing?status=cancelled` : "";
-    const continueSuccessUrl = APP_URL ? `${APP_URL}/billing?status=success` : "";
+    const continueSuccessUrl = APP_URL
+      ? `${APP_URL}/billing?status=success`
+      : "";
 
     const b4hash =
-      reqTime + MERCHANT_ID + tranId + amount + items + shipping +
-      firstName + lastName + email + phone + type + paymentOption +
-      returnUrl + cancelUrl + continueSuccessUrl + returnDeeplink +
-      currency + customFields + returnParams + payout + lifetime +
-      additionalParams + googlePayToken + skipSuccessPage;
+      reqTime +
+      MERCHANT_ID +
+      tranId +
+      amount +
+      items +
+      shipping +
+      firstName +
+      lastName +
+      email +
+      phone +
+      type +
+      paymentOption +
+      returnUrl +
+      cancelUrl +
+      continueSuccessUrl +
+      returnDeeplink +
+      currency +
+      customFields +
+      returnParams +
+      payout +
+      lifetime +
+      additionalParams +
+      googlePayToken +
+      skipSuccessPage;
 
     // 7. Sign, insert pending row, and return everything the browser needs to
     // POST the form to ABA directly.
@@ -156,18 +197,24 @@ Deno.serve(async (req) => {
 
     // Insert the pending transaction using service_role (the user-JWT client
     // has no write policy on payment_transactions).
-    const { error: insertErr } = await supabase.from("payment_transactions").insert({
-      profile_id: user.id,
-      tier,
-      tran_id: tranId,
-      amount: Number(amount),
-      currency,
-      status: "pending",
-      req_time: reqTime,
-    });
+    const { error: insertErr } = await supabase
+      .from("payment_transactions")
+      .insert({
+        profile_id: user.id,
+        tier,
+        tran_id: tranId,
+        amount: Number(amount),
+        currency,
+        status: "pending",
+        req_time: reqTime,
+      });
     if (insertErr) {
       console.error("[initiate-payment] insert failed", insertErr);
-      return jsonResponse({ ok: false, error: "transaction_create_failed" }, 500, corsHeaders);
+      return jsonResponse(
+        { ok: false, error: "transaction_create_failed" },
+        500,
+        corsHeaders,
+      );
     }
 
     return jsonResponse(
@@ -201,8 +248,11 @@ Deno.serve(async (req) => {
           skip_success_page: skipSuccessPage,
         },
         hash,
-        // Informational (frontend already knows); handy for debugging.
+        // checkout_url is the full endpoint for a plain HTML form POST;
+        // api_base_url is the bare host the AbaPayway plugin expects (it appends
+        // "/api/payment-gateway/v1/payments/purchase" itself).
         checkout_url: `${ABA_API_BASE_URL}/api/payment-gateway/v1/payments/purchase`,
+        api_base_url: ABA_API_BASE_URL,
         checkout_script: ABA_CHECKOUT_SCRIPT,
       },
       200,
@@ -210,6 +260,10 @@ Deno.serve(async (req) => {
     );
   } catch (err) {
     console.error("[initiate-payment]", err);
-    return jsonResponse({ ok: false, error: "internal_error" }, 500, corsHeaders);
+    return jsonResponse(
+      { ok: false, error: "internal_error" },
+      500,
+      corsHeaders,
+    );
   }
 });

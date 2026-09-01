@@ -6,15 +6,31 @@ the frontend `initiatePayment()` swap.
 
 ## 0. Before you start
 
-- Sandbox Merchant ID and API Key are already issued (Sozin has these).
-- Store them as Supabase Edge Function secrets, never in frontend code:
-  ```
-  supabase secrets set ABA_MERCHANT_ID=xxxx
-  supabase secrets set ABA_API_KEY=xxxx
-  supabase secrets set ABA_API_BASE_URL=https://checkout-sandbox.payway.com.kh
-  ```
-  `ABA_API_BASE_URL` is the one thing that changes for production later
-  (`https://checkout.payway.com.kh`) — never hardcode the sandbox host.
+Sandbox credentials are already issued. **Credential mapping** — ABA's sandbox
+email issues five items, but only two are used by this integration:
+
+| Emailed as      | Maps to                                                                                                                                                                                       | Used here?                           |
+| --------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------ |
+| Merchant Id     | `ABA_MERCHANT_ID`                                                                                                                                                                             | Yes                                  |
+| Public Key      | `ABA_API_KEY` — this is the HMAC-SHA512 secret. ABA's own docs confusingly name this variable `$public_key` in their PHP examples even though it's a symmetric secret, never actually public. | Yes                                  |
+| API Url         | `ABA_API_BASE_URL`                                                                                                                                                                            | Yes                                  |
+| RSA Public Key  | Encrypts `merchant_auth` for Refund / Pre-auth completion / Pre-auth cancellation endpoints                                                                                                   | **Not used** by anything in this doc |
+| RSA Private Key | Paired with the RSA Public Key above                                                                                                                                                          | **Not used** by anything in this doc |
+
+Store the two credentials that matter as Supabase Edge Function secrets,
+never in frontend code:
+
+```
+supabase secrets set ABA_MERCHANT_ID=<Merchant Id>
+supabase secrets set ABA_API_KEY=<Public Key>
+supabase secrets set ABA_API_BASE_URL=https://checkout-sandbox.payway.com.kh
+```
+
+`ABA_API_BASE_URL` is the one thing that changes for production later
+(`https://checkout.payway.com.kh`) — never hardcode the sandbox host.
+Hold onto the RSA key pair for a future refund/pre-auth feature; nothing
+here calls for it yet.
+
 - Currency is fixed at USD (matches the $5 / $39 pricing already in
   `subscription_prices`).
 
@@ -76,21 +92,43 @@ uses service_role internally to write the pending row.
      redirect back into the app.
 
 7. Compute the hash:
+
    ```ts
-   const b4hash = req_time + merchant_id + tran_id + amount + items + shipping
-     + firstname + lastname + email + phone + type + payment_option
-     + return_url + cancel_url + continue_success_url + return_deeplink
-     + currency + custom_fields + return_params + payout + lifetime
-     + additional_params + google_pay_token + skip_success_page;
+   const b4hash =
+     req_time +
+     merchant_id +
+     tran_id +
+     amount +
+     items +
+     shipping +
+     firstname +
+     lastname +
+     email +
+     phone +
+     type +
+     payment_option +
+     return_url +
+     cancel_url +
+     continue_success_url +
+     return_deeplink +
+     currency +
+     custom_fields +
+     return_params +
+     payout +
+     lifetime +
+     additional_params +
+     google_pay_token +
+     skip_success_page;
 
    const hash = base64(hmacSha512(b4hash, ABA_API_KEY));
    ```
+
    Use Deno's `crypto.subtle` (HMAC key algorithm `SHA-512`) in the Edge
    Function runtime — do not shell out to an external library for this.
 
 8. Return the full field set + hash to the frontend. Do **not** call ABA's
    endpoint from the Edge Function itself for the Hosted Checkout flow — the
-   *browser* posts this form directly to
+   _browser_ posts this form directly to
    `${ABA_API_BASE_URL}/api/payment-gateway/v1/payments/purchase`, exactly
    like the `<form>` sample in ABA's docs, so the customer lands on ABA's
    hosted page. The Edge Function's job is only to generate a trustworthy,
@@ -129,9 +167,13 @@ involved. Runs with service_role.
 2. Recompute the signature:
    ```ts
    const sorted = Object.keys(payload).sort();
-   const b4hash = sorted.map(k =>
-     typeof payload[k] === "object" ? JSON.stringify(payload[k]) : String(payload[k])
-   ).join("");
+   const b4hash = sorted
+     .map((k) =>
+       typeof payload[k] === "object"
+         ? JSON.stringify(payload[k])
+         : String(payload[k]),
+     )
+     .join("");
    const expected = base64(hmacSha512(b4hash, ABA_API_KEY));
    ```
 3. Compare `expected` against the `X-PAYWAY-HMAC-SHA512` request header using
@@ -164,5 +206,5 @@ involved. Runs with service_role.
 - Auto-downgrade-on-cancel pg_cron job — still not built, unrelated to ABA wiring
 - Hectare-cap server-side enforcement — unrelated
 - Going from sandbox to production is a config change only (`ABA_API_BASE_URL`
-  + new merchant credentials) — no schema or code changes needed if this is
-  implemented as written
+  - new merchant credentials) — no schema or code changes needed if this is
+    implemented as written

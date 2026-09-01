@@ -208,24 +208,9 @@ function tsToISO(ts: any): string | null {
   return ts == null ? null : new Date(ts).toISOString().slice(0, 10);
 }
 
-// ── getIndexTile ───────────────────────────────────────────────────────────
-// Port of loadIndexTile(): monthly composite per index, with radar fallback,
-// true-color cloud-blocked fallback and no-data detection.
-async function getLastValidDate(
-  geom: any,
-  monthStart: any,
-): Promise<string | null> {
-  const lookback = monthStart.advance(-90, "day");
-  const prior = s2Collection(geom, lookback, monthStart).sort(
-    "system:time_start",
-    false,
-  );
-  const n = await evaluate(prior.size());
-  if (!n) return null;
-  const ts = await evaluate(prior.first().get("system:time_start"));
-  return tsToISO(ts);
-}
-
+// ── getRadarVegetationIndex ────────────────────────────────────────────────
+// Sentinel-1 radar RVI composite over a date window — the radar fallback
+// and the direct RVI band tab.
 async function getRadarVegetationIndex(
   geom: any,
   startDate: any,
@@ -289,6 +274,7 @@ async function actionGetIndexTile(payload: any) {
     return { mode: "no_data", count: 0, url: null };
   }
 
+  // 1. Exact requested month, clean optical scenes — the ideal case.
   const rawCollection = ee
     .ImageCollection("COPERNICUS/S2_SR_HARMONIZED")
     .filterBounds(geom)
@@ -308,11 +294,9 @@ async function actionGetIndexTile(payload: any) {
     return { mode: "index", count, url };
   }
 
-  const rawCount = await evaluate(rawCollection.size());
-  if (rawCount === 0) return { mode: "no_data", count: 0, url: null };
-
-  // Cloud-blocked — try the Sentinel-1 radar fallback first (sees through
-  // clouds; ±15-day window covers S1's ~6-12 day revisit).
+  // 2. No clean scene THIS month (either none captured yet, or all too
+  //    cloudy) — try Sentinel-1 radar. It has its own independent revisit
+  //    schedule, so it doesn't care whether S2 has anything yet this month.
   try {
     const radar = await getRadarVegetationIndex(
       geom,
@@ -331,9 +315,24 @@ async function actionGetIndexTile(payload: any) {
     console.error("radar fallback failed:", e);
   }
 
-  // No S1 coverage either — least-cloudy scene rendered as true color.
-  const bestScene = rawCollection.sort("CLOUDY_PIXEL_PERCENTAGE").first();
+  // 3. No radar either — widen the OPTICAL search backward up to 90 days,
+  //    not bound to the calendar month, and show the least-cloudy scene
+  //    found in that window as true color. Covers BOTH "current month has
+  //    zero captures yet" (early-month case) AND genuine cloud-heavy months
+  //    with the same one code path.
+  const lookbackStart = start.advance(-90, "day");
+  const widenedRaw = ee
+    .ImageCollection("COPERNICUS/S2_SR_HARMONIZED")
+    .filterBounds(geom)
+    .filterDate(lookbackStart, end);
+  const widenedCount = await evaluate(widenedRaw.size());
+  if (widenedCount === 0) return { mode: "no_data", count: 0, url: null };
+
+  const bestScene = widenedRaw.sort("CLOUDY_PIXEL_PERCENTAGE").first();
   const cloudPct = await evaluate(bestScene.get("CLOUDY_PIXEL_PERCENTAGE"));
+  const lastValidDate = tsToISO(
+    await evaluate(bestScene.get("system:time_start")),
+  );
   let url: string | null = null;
   try {
     url = await getMapUrl(bestScene.clip(geom), {
@@ -343,7 +342,6 @@ async function actionGetIndexTile(payload: any) {
   } catch (e) {
     console.error("cloud-blocked true-color getMap failed:", e);
   }
-  const lastValidDate = url ? await getLastValidDate(geom, start) : null;
   return { mode: "cloud_blocked", count: 0, url, cloudPct, lastValidDate };
 }
 

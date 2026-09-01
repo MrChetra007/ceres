@@ -833,16 +833,33 @@ export function loadIndexForMonth(idx, geometry, silent) {
       endLoading()
       if (res.url) mapReg.ndviLayer = applyTileLayer(mapReg.map, mapReg.ndviLayer, res.url, 1)
       else if (mapReg.ndviLayer) { mapReg.map.removeLayer(mapReg.ndviLayer); mapReg.ndviLayer = null }
-      state.cloudBlock.main = { month: m.label, cloudPct: res.cloudPct, lastValidDate: res.lastValidDate }
+
+      // Distinguish "this month IS cloudy" from "this month has no capture yet,
+      // showing an older clear one" — same res.mode, different real reason.
+      const sameMonth = res.lastValidDate
+        ? isSameMonth(res.lastValidDate, m)
+        : true // no date at all — treat as the original cloudy case
+      state.cloudBlock.main = {
+        month: m.label,
+        cloudPct: res.cloudPct,
+        lastValidDate: res.lastValidDate,
+        sameMonth,
+      }
       if (!silent && !cloudToastShown) {
         cloudToastShown = true
-        const pctText = res.cloudPct != null ? Math.round(res.cloudPct) + '%' : 'high'
-        const lastText = res.lastValidDate
-          ? 'Last valid reading: ' + res.lastValidDate
-          : 'No cloud-free imagery available in the last 90 days.'
-        showToast('\u2601\uFE0F Cloud-covered on ' + m.label + ' (' + pctText + ' cloud) \u2014 showing true-color image. NDVI can\u2019t be reliably calculated. ' + lastText, 4000)
+        if (sameMonth) {
+          const pctText = res.cloudPct != null ? Math.round(res.cloudPct) + '%' : 'high'
+          const lastText = res.lastValidDate
+            ? 'Last valid reading: ' + res.lastValidDate
+            : 'No cloud-free imagery available in the last 90 days.'
+          showToast('\u2601\uFE0F Cloud-covered on ' + m.label + ' (' + pctText + ' cloud) \u2014 showing true-color image. NDVI can\u2019t be reliably calculated. ' + lastText, 4000)
+        } else {
+          showToast('\ud83d\udcf7 No capture yet for ' + m.label + ' \u2014 showing the most recent available image (' + res.lastValidDate + ')', 4000)
+        }
       }
-      setStatus('ready', 'Cloud-blocked ' + m.label + ' \u2014 true-color shown')
+      setStatus('ready', sameMonth
+        ? 'Cloud-blocked ' + m.label + ' \u2014 true-color shown'
+        : 'No capture yet for ' + m.label + ' \u2014 showing ' + res.lastValidDate)
       return
     }
     if (res.mode === 'no_data' || !res.url) {
@@ -918,10 +935,22 @@ export function loadIndexForMonthRight(idx, silent) {
       endLoading()
       if (res.url) mapReg.ndviLayerRight = applyTileLayer(mapReg.mapRight, mapReg.ndviLayerRight, res.url, 1)
       else if (mapReg.ndviLayerRight) { mapReg.mapRight.removeLayer(mapReg.ndviLayerRight); mapReg.ndviLayerRight = null }
-      state.cloudBlock.right = { month: m.label, cloudPct: res.cloudPct, lastValidDate: res.lastValidDate }
+      const sameMonth = res.lastValidDate
+        ? isSameMonth(res.lastValidDate, m)
+        : true
+      state.cloudBlock.right = {
+        month: m.label,
+        cloudPct: res.cloudPct,
+        lastValidDate: res.lastValidDate,
+        sameMonth,
+      }
       if (!silent && !cloudToastShown) {
         cloudToastShown = true
-        showToast('\u2601\uFE0F Compare view cloud-covered on ' + m.label + ' \u2014 showing true-color image', 4000)
+        if (sameMonth) {
+          showToast('\u2601\uFE0F Compare view cloud-covered on ' + m.label + ' \u2014 showing true-color image', 4000)
+        } else {
+          showToast('\ud83d\udcf7 Compare view \u2014 no capture yet for ' + m.label + ' \u2014 showing the most recent available image (' + res.lastValidDate + ')', 4000)
+        }
       }
       return
     }
@@ -996,6 +1025,11 @@ export function toISODate(d) {
   const m = String(d.getMonth() + 1).padStart(2, '0')
   const dd = String(d.getDate()).padStart(2, '0')
   return y + '-' + m + '-' + dd
+}
+
+function isSameMonth(dateStr, m) {
+  const d = new Date(dateStr)
+  return d.getFullYear() === m.year && d.getMonth() + 1 === m.month
 }
 
 function monthWindow(m) {
@@ -2106,7 +2140,9 @@ export function viewConfidence(side) {
         return { tier: 'medium', reason: confReason(lang, 'radarBlocked') }
       }
       if (state.cloudBlock.main) {
-        return { tier: 'low', reason: confReason(lang, 'cloudBlocked') }
+        return state.cloudBlock.main.sameMonth
+          ? { tier: 'low', reason: confReason(lang, 'cloudBlocked') }
+          : { tier: 'low', reason: confReason(lang, 'noRecentCapture') }
       }
       return fieldConfidence(field)
     }
