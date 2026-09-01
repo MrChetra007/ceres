@@ -39,8 +39,11 @@
           v-else-if="state.radarFallback.main"
           class="pill radar-fallback"
           :title="radarTooltip(state.radarFallback.main)"
-          >📡 {{ t("time.radar_view") }}</span
-        >
+          >📡 {{ t("time.radar_view") }}
+          <Tooltip :text="t('time.radar_fallback_info')" position="bottom">
+            <span class="radar-info" role="button" tabindex="0" aria-label="info">ⓘ</span>
+          </Tooltip>
+        </span>
         <span
           v-else-if="state.cloudBlock.main"
           class="pill cloud-blocked"
@@ -49,7 +52,11 @@
         >
         <span v-else class="pill" :class="scenePillClass">{{
           mainSceneText || t("common.no_scenes")
-        }}</span>
+        }}<span v-if="state.currentIndex === 'rvi'" class="radar-info-inline"
+          ><Tooltip :text="t('time.radar_tab_info')" position="bottom"
+            ><span class="radar-info" role="button" tabindex="0" aria-label="info">ⓘ</span></Tooltip
+          ></span
+        ></span>
         <button
           v-if="!state.loading && state.cloudBlock.main && mainJumpDate"
           class="jump-btn"
@@ -156,8 +163,11 @@
             v-if="state.radarFallback.right"
             class="pill radar-fallback"
             :title="radarTooltip(state.radarFallback.right)"
-            >📡 {{ t("time.radar_view") }}</span
-          >
+            >📡 {{ t("time.radar_view") }}
+            <Tooltip :text="t('time.radar_fallback_info')" position="bottom">
+              <span class="radar-info" role="button" tabindex="0" aria-label="info">ⓘ</span>
+            </Tooltip>
+          </span>
           <span
             v-else-if="state.cloudBlock.right"
             class="pill cloud-blocked"
@@ -166,7 +176,11 @@
           >
           <span v-else class="pill">{{
             rightSceneText || t("common.no_scenes")
-          }}</span>
+          }}<span v-if="state.currentIndex === 'rvi'" class="radar-info-inline"
+            ><Tooltip :text="t('time.radar_tab_info')" position="bottom"
+              ><span class="radar-info" role="button" tabindex="0" aria-label="info">ⓘ</span></Tooltip
+            ></span
+          ></span>
           <button
             v-if="!state.loading && state.cloudBlock.right && rightJumpDate"
             class="jump-btn"
@@ -232,6 +246,7 @@ import {
   CUSTOM_RANGE_ID,
 } from "../config";
 import ConfidenceBadge from "./ConfidenceBadge.vue";
+import Tooltip from "./Tooltip.vue";
 import { useI18n } from "../i18n";
 import { formatMonthYear } from "../services/format";
 

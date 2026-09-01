@@ -7,6 +7,7 @@
     @mouseleave="onHide"
     @focusin="onShow"
     @focusout="onHide"
+    @click="onTap"
   >
     <slot></slot>
     <span v-if="visible && text" :id="bubbleId" class="tt-bubble" role="tooltip">{{ text }}</span>
@@ -36,6 +37,14 @@ function onHide() {
   visible.value = false
 }
 
+// Touch devices have no hover — tap toggles the bubble so mobile users can
+// read the explanation (desktop click toggles harmlessly too). The delayed
+// show from onShow is cancelled by onHide, so click shows immediately.
+function onTap() {
+  clearTimeout(timer)
+  visible.value = !visible.value
+}
+
 const bubbleId = 'tt-' + Math.random().toString(36).slice(2, 10)
 </script>
 
@@ -52,8 +61,12 @@ const bubbleId = 'tt-' + Math.random().toString(36).slice(2, 10)
   left: 50%;
   transform: translateX(-50%);
   z-index: 2001;
-  max-width: 220px;
+  max-width: min(220px, calc(100vw - 24px));
   width: max-content;
+  /* Opt out of any nowrap inherited from the wrapped control (e.g. the
+     .pill) so a long tooltip sentence wraps within max-width instead of
+     overflowing the panel. */
+  white-space: normal;
   padding: 7px 10px;
   font-size: 11px;
   line-height: 1.45;

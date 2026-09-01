@@ -78,6 +78,31 @@
 .pill.cloud-blocked { background: rgba(125, 180, 255, 0.14); color: #8ab6ff; }
 .pill.radar-fallback { background: rgba(165, 100, 255, 0.16); color: #c39aff; }
 
+/* Info affordance inside a pill — the ⓘ that opens the radar explanation
+   tooltip. Rendered inline so it reads as part of the pill. */
+.radar-info {
+  display: inline-block;
+  margin-left: 5px;
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+  color: inherit;
+  opacity: 0.75;
+  vertical-align: middle;
+}
+.radar-info:hover,
+.radar-info:focus-visible {
+  opacity: 1;
+}
+.radar-info-inline {
+  display: inline-flex;
+  vertical-align: middle;
+}
+.radar-info-inline .tt-wrap {
+  display: inline-flex;
+  vertical-align: middle;
+}
+
 .jump-btn {
   font-family: 'JetBrains Mono', monospace;
   font-size: 10.5px;
