@@ -1783,6 +1783,49 @@ export async function deleteField(id) {
   }
 }
 
+// Shared by loadField's bundled callback — applies a getIndexTile-shaped
+// result to the MAIN map layer + related state. Mirrors the mode-branching
+// in loadIndexForMonth's ee.loadIndexTile callback (which keeps its own copy
+// for the toast-on-first-cloud-block behavior; loadIndexForMonthRight keeps
+// its own duplicate for the right/compare panel).
+function applyTileResult(res, m) {
+  state.sceneCount.main = res.count
+  if (res.mode === 'error') {
+    if (mapReg.ndviLayer) { mapReg.map.removeLayer(mapReg.ndviLayer); mapReg.ndviLayer = null }
+    showToast('Satellite request failed \u2014 ' + (res.err || 'please try again'))
+    setStatus('error', 'Satellite request failed for ' + m.label)
+    return
+  }
+  if (res.mode === 'radar_fallback') {
+    if (res.url) mapReg.ndviLayer = applyTileLayer(mapReg.map, mapReg.ndviLayer, res.url, 1)
+    else if (mapReg.ndviLayer) { mapReg.map.removeLayer(mapReg.ndviLayer); mapReg.ndviLayer = null }
+    state.radarFallback.main = { month: m.label, indexUsed: res.indexUsed || 'RVI' }
+    setStatus('ready', 'Radar view (RVI) for ' + m.label + ' \u2014 clouds blocked optical view')
+    return
+  }
+  if (res.mode === 'radar_index') {
+    if (res.url) mapReg.ndviLayer = applyTileLayer(mapReg.map, mapReg.ndviLayer, res.url, 1)
+    else if (mapReg.ndviLayer) { mapReg.map.removeLayer(mapReg.ndviLayer); mapReg.ndviLayer = null }
+    setStatus('ready', (INDICES[state.currentIndex]?.name || 'RVI') + ' radar layer loaded \u2014 ' + m.label)
+    return
+  }
+  if (res.mode === 'cloud_blocked') {
+    if (res.url) mapReg.ndviLayer = applyTileLayer(mapReg.map, mapReg.ndviLayer, res.url, 1)
+    else if (mapReg.ndviLayer) { mapReg.map.removeLayer(mapReg.ndviLayer); mapReg.ndviLayer = null }
+    const sameMonth = res.lastValidDate ? isSameMonth(res.lastValidDate, m) : true
+    state.cloudBlock.main = { month: m.label, cloudPct: res.cloudPct, lastValidDate: res.lastValidDate, sameMonth }
+    setStatus('ready', sameMonth ? 'Cloud-blocked ' + m.label + ' \u2014 true-color shown' : 'No capture yet for ' + m.label + ' \u2014 showing ' + res.lastValidDate)
+    return
+  }
+  if (res.mode === 'no_data' || !res.url) {
+    if (mapReg.ndviLayer) { mapReg.map.removeLayer(mapReg.ndviLayer); mapReg.ndviLayer = null }
+    setStatus('error', 'No cloud-free imagery yet for ' + m.label + ' \u2014 check back later in the month')
+    return
+  }
+  mapReg.ndviLayer = applyTileLayer(mapReg.map, mapReg.ndviLayer, res.url)
+  setStatus('ready', (INDICES[state.currentIndex]?.name || 'Index') + ' layer loaded \u2014 ' + m.label)
+}
+
 export function loadField(field) {
   state.currentFieldName = field.name
   state.currentFieldId = field.id
@@ -1814,12 +1857,60 @@ export function loadField(field) {
   // last manual toggle wins there.
   state.observationsVisible = true
   state.chartSubtitle = field.name
-  loadIndexForMonth(state.mainMonth, currentGeometry.value)
+
+  // Compare mode's right-panel tile still needs its own request (different
+  // month) — that one stays as-is, it wasn't part of the burst.
   if (state.compareMode) loadIndexForMonthRight(state.rightMonth)
-  loadFieldTrend(field)
-  loadRainfall(currentGeometry.value)
-  loadBenchmark()
-  loadChartForGeometry(currentGeometry.value, state.currentIndex, field.name)
+
+  if (!state.eeReady) return
+  const m = MONTHS[state.mainMonth]
+  if (!m) return
+
+  // Mirror the state resets loadIndexForMonth used to do up front — the
+  // bundle path no longer goes through it, but the badges must not carry
+  // stale month signals from a previous load.
+  state.latestView = null
+  state.latestViewLoading = false
+  state.sceneCount.main = 0
+  state.cloudBlock.main = null
+  state.radarFallback.main = null
+
+  beginLoading()
+  setStatus('computing', 'Loading field data...')
+  ee.getFieldBundle(
+    currentGeometry.value,
+    m.year, m.month,
+    activeMonths(),
+    state.currentIndex,
+    (res) => {
+      endLoading()
+      if (!res) {
+        setStatus('error', 'Failed to load field data')
+        return
+      }
+
+      // 1. Map tile — same handling as loadIndexForMonth's ee.loadIndexTile
+      //    callback (shared applyTileResult applies it to the main map).
+      applyTileResult(res.tile, m)
+
+      // 2. Dashboard sparkline trend (always NDVI).
+      fieldTrends[field.id] = res.ndviTrend
+
+      // 3. Current-tab trend chart.
+      const cfg = INDICES[state.currentIndex] || TRUE_COLOR
+      state.chartData = res.chartTrend
+      state.chartIndex = state.currentIndex
+      state.chartSubtitle = field.name + ' \u00b7 ' + observationCount(state.preferredLanguage, res.chartTrend.length, trendSource(state.currentIndex))
+      if (state.currentIndex !== 'rvi') state.ndviChartData = res.chartTrend
+      checkStress(res.chartTrend, null, null, state.currentIndex)
+
+      // 4. Rainfall + benchmark.
+      state.rainfallMm = res.rainfall
+      state.benchmarkValue = res.benchmark
+
+      setStatus('ready', cfg.name + ' field data loaded')
+    },
+  )
 }
 
 export function loadFieldById(id) {

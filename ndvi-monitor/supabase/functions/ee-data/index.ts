@@ -1445,6 +1445,71 @@ async function actionGetAllFieldTrends(payload: any) {
   return { trends };
 }
 
+// ── getFieldBundle ──────────────────────────────────────────────────────────
+// Consolidates the several per-field reads that fire together when a field
+// is selected (tile, ndvi dashboard trend, current-tab trend, rainfall,
+// benchmark) into ONE request. Runs them concurrently INSIDE this single
+// already-authenticated isolate — the earlier per-action version fired
+// each as a separate ee-data invocation, paying EE auth/isolate-cold-start
+// latency N times instead of once. See field-bundle-fix-guide.md.
+async function actionGetFieldBundle(payload: any) {
+  const currentIndex = payload.currentIndex && BANDS[payload.currentIndex]
+    ? payload.currentIndex
+    : "ndvi";
+  const months = payload.months || [];
+  const year = payload.year;
+  const month = payload.month;
+
+  const tilePromise = actionGetIndexTile({
+    index: currentIndex,
+    year,
+    month,
+    geometry: payload.geometry,
+  });
+  const ndviTrendPromise = actionGetIndexTimeSeries({
+    index: "ndvi",
+    months,
+    geometry: payload.geometry,
+  });
+  // Skip a duplicate call if the current tab IS ndvi — reuse the same trend.
+  // RVI is radar (Sentinel-1), not an optical band pair — it must go through
+  // the radar series, not actionGetIndexTimeSeries (which resolves unknown
+  // indices back to ndvi).
+  let chartTrendPromise: Promise<any>;
+  if (currentIndex === "ndvi") {
+    chartTrendPromise = ndviTrendPromise;
+  } else if (currentIndex === "rvi") {
+    chartTrendPromise = actionGetRviTimeSeries({
+      months,
+      geometry: payload.geometry,
+    });
+  } else {
+    chartTrendPromise = actionGetIndexTimeSeries({
+      index: currentIndex,
+      months,
+      geometry: payload.geometry,
+    });
+  }
+  const rainfallPromise = actionGetRainfall({
+    geometry: payload.geometry,
+    daysBack: 21,
+  });
+  const benchmarkPromise = actionGetRecentIndexValue({
+    index: "ndvi",
+    geometry: payload.geometry,
+  });
+
+  const [tile, ndviTrend, chartTrend, rainfall, benchmark] = await Promise.all([
+    tilePromise,
+    ndviTrendPromise,
+    chartTrendPromise,
+    rainfallPromise,
+    benchmarkPromise,
+  ]);
+
+  return { tile, ndviTrend, chartTrend, rainfall, benchmark };
+}
+
 // ── Router ─────────────────────────────────────────────────────────────────
 type Handler = (payload: any) => Promise<Record<string, unknown>>;
 const HANDLERS: Record<string, Handler> = {
@@ -1463,6 +1528,7 @@ const HANDLERS: Record<string, Handler> = {
   getAllFieldTrends: actionGetAllFieldTrends,
   getRainfall: actionGetRainfall,
   getObservations: actionGetObservations,
+  getFieldBundle: actionGetFieldBundle,
 };
 
 Deno.serve(async (req) => {

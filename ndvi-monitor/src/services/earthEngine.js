@@ -226,6 +226,33 @@ export function getRecentIndexValue(geometry, index, cb) {
     })
 }
 
+// Bundled per-field load — combines tile + trends + rainfall + benchmark
+// into ONE ee-data request instead of 5 separate ones (see
+// field-bundle-fix-guide.md for why this matters: cold-isolate auth cost
+// was being paid once per request instead of once per field-select).
+export function getFieldBundle(geometry, year, month, months, currentIndex, cb) {
+  callEE('getFieldBundle', { geometry, year, month, months, currentIndex })
+    .then((body) => {
+      const chartPoints = body.chartTrend?.points || []
+      cb({
+        tile: body.tile || { mode: 'no_data', count: 0, url: null },
+        ndviTrend: dedupeLowestCloud(body.ndviTrend?.points || []),
+        // RVI (radar) points are NOT collapsed by date — ascending + descending
+        // passes on the same day are two legitimate observations, matching the
+        // dedicated getRviTimeSeriesForGeometry path (which never dedupes).
+        chartTrend: currentIndex === 'rvi'
+          ? chartPoints
+          : dedupeLowestCloud(chartPoints),
+        rainfall: body.rainfall?.mm == null ? null : body.rainfall.mm,
+        benchmark: body.benchmark?.value == null ? null : body.benchmark.value,
+      })
+    })
+    .catch((err) => {
+      fail(err)
+      cb(null)
+    })
+}
+
 // AIM composite health score — one 0-100 reading blending the growth-stage-
 // appropriate indices into a plain-language verdict (see ee-data
 // actionGetFieldHealthScore). cb(snapshot|null): the resolved payload, or null
