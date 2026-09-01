@@ -1,18 +1,20 @@
-// initiate-payment — generates a server-side-computed ABA PayWay Purchase
-// payload + HMAC-SHA512 signature for the Hosted Checkout flow.
+// initiate-payment — server-side ABA PayWay Purchase with KHQR + deeplink.
 //
-// This replaces the old placeholder which granted tiers for free via
-// upgrade_my_subscription() (now locked to service_role in migration 014).
+// Runs with the user's JWT to identify who's paying, then uses service_role
+// internally to write the pending row and call ABA. The amount NEVER comes
+// from the client — it's looked up from subscription_prices, the only source
+// of truth.
 //
-// Flow: the browser calls this with `{ tier }` using the user's JWT. This
-// function looks up the ONLY source of truth for the amount (subscription_prices),
-// records a `pending` row in payment_transactions, builds the ABA payload with
-// every field position in the exact order the hash covers, signs it, and returns
-// the full field set + hash to the browser. The BROWSER then posts directly to
-// ABA's hosted checkout — this function never calls ABA itself.
+// Flow: the browser calls this with `{ tier }`. This function records a
+// `pending` row in payment_transactions, builds the ABA Purchase payload with
+// payment_option "abapay_khqr" (which asks ABA for a scan-to-pay QR + ABA
+// Mobile deeplink instead of an HTML checkout page), signs it, POSTs directly
+// to ABA's Purchase endpoint server-side, and returns the QR/deeplink for the
+// frontend to display while it polls payment_transactions for the result.
 //
 // Secrets (set via `supabase secrets set`, never in code):
-//   ABA_MERCHANT_ID, ABA_API_KEY, ABA_API_BASE_URL (sandbox/prod host only).
+//   ABA_MERCHANT_ID, ABA_API_KEY, ABA_API_BASE_URL (sandbox/prod host only),
+//   APP_URL (the frontend's base URL, used to build cancel/success links).
 
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { getCorsHeaders } from "../_shared/cors.ts";
@@ -26,7 +28,14 @@ const API_KEY = Deno.env.get("ABA_API_KEY") || "";
 const ABA_API_BASE_URL = (
   Deno.env.get("ABA_API_BASE_URL") || "https://checkout-sandbox.payway.com.kh"
 ).replace(/\/+$/, "");
-const APP_URL = (Deno.env.get("APP_URLS") || "").split(",")[0].trim() || "";
+// FIX: the secret is actually named APP_URL (singular) in `supabase secrets
+// list` — this previously read APP_URLS (plural), which always returned "",
+// silently leaving cancel_url/continue_success_url blank on every request.
+const APP_URL = (Deno.env.get("APP_URL") || "").split(",")[0].trim() || "";
+
+// The billing page is where ABA's (never-visited in this flow) cancel/success
+// URLs point — the customer stays in-app, but the fields are still hashed.
+const BILLING_URL = APP_URL ? `${APP_URL}/billing` : "";
 
 // Functions live on the `.functions.supabase.co` subdomain of the same project.
 function functionsBase(): string {
@@ -35,15 +44,16 @@ function functionsBase(): string {
 }
 
 // "purchase" only — this map doubles as the allowed-tiers guard.
+// FIX: plain hyphens instead of an em dash. btoa() (used below) only accepts
+// Latin1 input and throws InvalidCharacterError on "—", which was the actual
+// cause of the 500 — it happens inside the try block, so it surfaced to the
+// client as the generic {"ok":false,"error":"internal_error"}. Fixed properly
+// via utf8ToBase64() below as well, so non-Latin1 text (e.g. Khmer item
+// names) won't hit this same wall later.
 const TIERS: Record<string, { itemsLabel: string }> = {
   individual: { itemsLabel: "Ceres - Individual plan" },
   coop: { itemsLabel: "Ceres - Co-op plan" },
 };
-
-// ABA's own docs pin the checkout plugin script to this single URL for BOTH
-// sandbox and production, so the frontend should hardcode this, not the API base.
-export const ABA_CHECKOUT_SCRIPT =
-  "https://checkout-sandbox.payway.com.kh/plugins/checkout2-0.js";
 
 const supabase = createClient(SUPABASE_URL, SERVICE_ROLE);
 
@@ -64,6 +74,19 @@ function yyyyMMddHHmmss(d: Date): string {
     `${d.getUTCFullYear()}${p(d.getUTCMonth() + 1)}${p(d.getUTCDate())}` +
     `${p(d.getUTCHours())}${p(d.getUTCMinutes())}${p(d.getUTCSeconds())}`
   );
+}
+
+// FIX: UTF-8-safe base64 encoding. Plain btoa() throws
+// "InvalidCharacterError: The string contains characters outside of the
+// Latin1 range" on any non-Latin1 character (em dashes, Khmer script,
+// accented letters, etc.) — this was the root cause of the 500. Encode to
+// UTF-8 bytes first, then base64 those bytes, same result as btoa() for
+// plain ASCII but safe for everything else too.
+function utf8ToBase64(str: string): string {
+  const bytes = new TextEncoder().encode(str);
+  let binary = "";
+  bytes.forEach((b) => (binary += String.fromCharCode(b)));
+  return btoa(binary);
 }
 
 // base64(HMAC-SHA512(message, API_KEY)) — the exact signature scheme ABA uses
@@ -140,30 +163,29 @@ Deno.serve(async (req) => {
 
     // 6. Build the payload. The ORDER below is exactly what gets hashed —
     // each field must be present in this position, even when empty.
-    const items = btoa(
+    const items = utf8ToBase64(
       JSON.stringify([
         { name: TIERS[tier].itemsLabel, quantity: 1, price: Number(amount) },
       ]),
     );
-    const shipping = "";
+    const shipping = "0"; // must be a numeric string — ABA rejects "" (code 10)
     const phone = "";
-    const type = "purchase"; // never "subscription" — ABA Product API plans use
-    // a different flow; this integration uses plain purchase.
-    const paymentOption = "";
+    const type = "purchase";
+    // THIS is the key field: it makes ABA respond with a scan-to-pay QR +
+    // ABA Mobile deeplink instead of an HTML hosted-checkout page.
+    const paymentOption = "abapay_khqr";
     const returnDeeplink = "";
     const customFields = "";
-    const returnParams = btoa(JSON.stringify({ profile_id: user.id, tier }));
+    const returnParams = JSON.stringify({ profile_id: user.id, tier });
     const payout = "";
-    const lifetime = "60"; // minutes — 30-60 is recommended for a subscription
+    const lifetime = "20"; // minutes — QR validity window (15-30 recommended)
     const additionalParams = "";
     const googlePayToken = "";
-    const skipSuccessPage = "1"; // redirect straight into the app on success
+    const skipSuccessPage = "0"; // irrelevant to KHQR (no page shown), keep hash consistent
 
     const returnUrl = `${functionsBase()}/aba-payway-webhook`;
-    const cancelUrl = APP_URL ? `${APP_URL}/billing?status=cancelled` : "";
-    const continueSuccessUrl = APP_URL
-      ? `${APP_URL}/billing?status=success`
-      : "";
+    const cancelUrl = BILLING_URL;
+    const continueSuccessUrl = BILLING_URL;
 
     const b4hash =
       reqTime +
@@ -191,12 +213,10 @@ Deno.serve(async (req) => {
       googlePayToken +
       skipSuccessPage;
 
-    // 7. Sign, insert pending row, and return everything the browser needs to
-    // POST the form to ABA directly.
+    // 7. Sign, then insert the pending row BEFORE calling ABA (so a partially
+    // failed attempt still leaves an auditable record).
     const hash = await sign(b4hash, API_KEY);
 
-    // Insert the pending transaction using service_role (the user-JWT client
-    // has no write policy on payment_transactions).
     const { error: insertErr } = await supabase
       .from("payment_transactions")
       .insert({
@@ -217,43 +237,92 @@ Deno.serve(async (req) => {
       );
     }
 
+    // 8. Call ABA's Purchase endpoint directly from the Edge Function (server
+    // role, not the browser). With payment_option "abapay_khqr" the response is
+    // JSON containing the QR + deeplink.
+    const formBody = new URLSearchParams({
+      req_time: reqTime,
+      merchant_id: MERCHANT_ID,
+      tran_id: tranId,
+      amount,
+      items,
+      shipping,
+      firstname: firstName,
+      lastname: lastName,
+      email,
+      phone,
+      type,
+      payment_option: paymentOption,
+      return_url: returnUrl,
+      cancel_url: cancelUrl,
+      continue_success_url: continueSuccessUrl,
+      return_deeplink: returnDeeplink,
+      currency,
+      custom_fields: customFields,
+      return_params: returnParams,
+      payout,
+      lifetime,
+      additional_params: additionalParams,
+      google_pay_token: googlePayToken,
+      skip_success_page: skipSuccessPage,
+      hash,
+    });
+
+    let aba;
+    try {
+      const res = await fetch(
+        `${ABA_API_BASE_URL}/api/payment-gateway/v1/payments/purchase`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: formBody.toString(),
+        },
+      );
+      // KHQR flow returns JSON (unlike the card/Hosted flow which returns HTML).
+      aba = await res.json();
+    } catch (err) {
+      console.error("[initiate-payment] ABA request failed", err);
+      return jsonResponse(
+        { ok: false, error: "aba_unreachable" },
+        502,
+        corsHeaders,
+      );
+    }
+
+    // A successful KHQR response has status.code "00". Mirror ABA's own
+    // status fields whether or not it succeeded, so the client can show a
+    // useful message on failure.
+    const code = aba?.status?.code;
+    if (code !== "00") {
+      console.error(
+        "[initiate-payment] ABA rejected",
+        code,
+        aba?.status?.message || aba,
+      );
+      return jsonResponse(
+        {
+          ok: false,
+          error: "aba_rejected",
+          code,
+          message: aba?.status?.message || "ABA rejected the request",
+        },
+        502,
+        corsHeaders,
+      );
+    }
+
+    // 9. Return only the fields the frontend needs: QR + deeplink store links.
+    // Note the camelCase qrString/qrImage in ABA's response (inconsistent with
+    // the snake_case used elsewhere) — preserve it here.
     return jsonResponse(
       {
         ok: true,
-        // The full ordered field set the form must POST + the computed hash.
-        fields: {
-          req_time: reqTime,
-          merchant_id: MERCHANT_ID,
-          tran_id: tranId,
-          amount,
-          items,
-          shipping,
-          firstname: firstName,
-          lastname: lastName,
-          email,
-          phone,
-          type,
-          payment_option: paymentOption,
-          return_url: returnUrl,
-          cancel_url: cancelUrl,
-          continue_success_url: continueSuccessUrl,
-          return_deeplink: returnDeeplink,
-          currency,
-          custom_fields: customFields,
-          return_params: returnParams,
-          payout,
-          lifetime,
-          additional_params: additionalParams,
-          google_pay_token: googlePayToken,
-          skip_success_page: skipSuccessPage,
-        },
-        hash,
-        // checkout_url is the full endpoint for a plain HTML form POST;
-        // api_base_url is the bare host the AbaPayway plugin expects (it appends
-        // "/api/payment-gateway/v1/payments/purchase" itself).
-        checkout_url: `${ABA_API_BASE_URL}/api/payment-gateway/v1/payments/purchase`,
-        api_base_url: ABA_API_BASE_URL,
-        checkout_script: ABA_CHECKOUT_SCRIPT,
+        tran_id: tranId,
+        qrImage: aba.qrImage || "",
+        qrString: aba.qrString || "",
+        abapay_deeplink: aba.abapay_deeplink || "",
+        app_store: aba.app_store || "",
+        play_store: aba.play_store || "",
       },
       200,
       corsHeaders,

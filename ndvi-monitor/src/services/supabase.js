@@ -176,22 +176,51 @@ export async function getMyProfile() {
 }
 
 // ---------------------------------------------------------------------------
-// Subscription / billing (placeholder checkout until ABA PayWay is wired in)
+// Subscription / billing (ABA PayWay)
 // ---------------------------------------------------------------------------
-// Real checkout: calls the initiate-payment Edge Function (server-computed ABA
-// Purchase payload + signature). Returns the ordered field set + hash the
-// browser populates a hidden form with and posts to ABA's hosted checkout.
-// Replaces the old upgrade_my_subscription() placeholder, which migration 014
-// locked to service_role (that RPC now fails for signed-in users — intended).
+// Real checkout: calls the initiate-payment Edge Function, which performs the
+// ABA Purchase server-side and returns a scan-to-pay QR + ABA Mobile deeplink
+// for display. Replaces the old upgrade_my_subscription() placeholder, which
+// migration 014 locked to service_role (that RPC now fails for signed-in users
+// — intended). The amount is never trusted from the client — it's looked up
+// from subscription_prices on the server.
 export async function startAbaCheckout(tier) {
   const { data, error } = await sb.functions.invoke('initiate-payment', {
     body: { tier },
   })
   if (error) throw new Error(error.message || 'Could not start checkout')
   if (!data || data.ok === false) {
-    throw new Error((data && data.error) || 'Could not start checkout')
+    throw new Error((data && data.message) || (data && data.error) || 'Could not start checkout')
   }
   return data
+}
+
+// Wait for the payment_transactions row for a given tran_id to leave 'pending'.
+// Polls every {intervalMs} until the status becomes 'approved' or 'failed', or
+// until {timeoutMs} elapses (matching the ABA QR lifetime) — resolves with the
+// final status ('pending' if it timed out). The authoritative status flip is
+// written by finalize_aba_payment via the webhook; RLS lets the owner select
+// their own rows.
+export async function waitForPayment(tranId, { intervalMs = 3000, timeoutMs = 120000 } = {}) {
+  const start = Date.now()
+  let lastStatus = 'pending'
+  for (;;) {
+    if (Date.now() - start >= timeoutMs) return lastStatus
+    try {
+      const { data, error } = await sb
+        .from('payment_transactions')
+        .select('status')
+        .eq('tran_id', tranId)
+        .maybeSingle()
+      if (!error && data) {
+        lastStatus = data.status
+        if (data.status === 'approved' || data.status === 'failed') return data.status
+      }
+    } catch (e) {
+      // transient — keep polling
+    }
+    await new Promise((r) => setTimeout(r, intervalMs))
+  }
 }
 
 export async function cancelSubscription() {
