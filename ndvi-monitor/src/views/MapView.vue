@@ -35,6 +35,7 @@
   <TelegramModal />
   <SettingsModal />
   <PaywallModal />
+  <SpotlightTutorial :on-open-left="openLeftDrawer" :on-open-right="openRightDrawer" />
 
   <div id="toast-stack" class="toast-stack">
     <transition-group name="toast">
@@ -73,6 +74,7 @@ import DatePickerModal from '../components/DatePickerModal.vue'
 import TelegramModal from '../components/TelegramModal.vue'
 import SettingsModal from '../components/SettingsModal.vue'
 import PaywallModal from '../components/PaywallModal.vue'
+import SpotlightTutorial from '../components/SpotlightTutorial.vue'
 import { useI18n } from '../i18n'
 
 const { t } = useI18n()
@@ -80,6 +82,9 @@ const leftDrawerOpen = ref(false)
 const satLoaderEl = ref(null)
 let satAnim = null
 let statusTimer = null
+
+function openLeftDrawer() { leftDrawerOpen.value = true }
+function openRightDrawer() { state.infoPanelVisible = true }
 
 function destroySatAnim() {
   if (satAnim) {
