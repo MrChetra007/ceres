@@ -1635,6 +1635,16 @@ sb.auth.onAuthStateChange((event, session) => {
         importLocalFieldsIfAny()
       }
     }
+  } else if (event === 'TOKEN_REFRESHED') {
+    // JWT refreshed (supabase-js does this periodically and after any auth
+    // state change). The session is still the SAME user — nothing was cleared
+    // — but if tier/plan were embedded in token claims and a plan switch
+    // triggered a refresh, re-read the plan-sensitive state here. We DO NOT
+    // re-fetch fields/AOIs on every token refresh (that would re-run the NDVI
+    // map computation on every ~hourly refresh); the authoritative field/AOI
+    // reload happens right after a plan switch completes (see
+    // CheckoutModal.watchPayment -> approved path).
+    if (user) loadSubscription()
   } else if (event === 'SIGNED_OUT') {
     lastLoadedUserId = null
     endSessionWork()

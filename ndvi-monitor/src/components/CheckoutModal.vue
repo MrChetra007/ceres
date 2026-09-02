@@ -164,7 +164,16 @@ async function watchPayment() {
   if (token !== pollToken || phase.value !== 'paying') return
   if (status === 'approved') {
     phase.value = 'approved'
+    // A plan switch updates profiles on the server but does NOT fire any
+    // supabase auth event (no SIGNED_IN/OUT, no TOKEN_REFRESHED). Re-fetch
+    // everything the plan governs — fields, AOIs and subscription — right
+    // here, so the upgraded limits (area cap, AI unlock) apply immediately
+    // instead of only after a manual page refresh.
     await store.loadSubscription()
+    if (state.supabaseUser) {
+      store.loadFieldsFromSupabase()
+      store.loadAoisFromSupabase()
+    }
     store.showToast(t('subs.checkout_success', { plan: t(planKey.value) }))
   } else if (status === 'failed') {
     phase.value = 'failed'
