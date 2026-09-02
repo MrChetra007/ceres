@@ -25,7 +25,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
-      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Instrument+Serif:ital@0;1&display=swap"
       rel="stylesheet"
     />
   </head>
@@ -41,6 +41,12 @@
   -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
+    <!--
+    Three.js (classic build exposes window.THREE) — used only by the marketing
+    landing page's hero globe. Loaded as a CDN global, same pattern as Leaflet:
+    the webgl/UMD style is not bundled by Vite.
+    -->
+    <script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
     <script type="module" src="/src/main.js"></script>
   </body>
 </html>
