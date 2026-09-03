@@ -26,7 +26,7 @@
           v-for="o in state.observations"
           :key="o.date"
           class="obs-day"
-          :class="[o.status, { active: rowActive(o.date) }]"
+          :class="[o.status, { active: rowActive(o.date), pinned: isPinned(o.date) }]"
           :title="t('obs.jump_tip', { date: fmtDate(o.date) })"
           @click="jump(o.date)"
         >
@@ -72,6 +72,14 @@ function rowActive(date) {
   if (!m) return false
   const d = new Date(date)
   return d.getFullYear() === m.year && d.getMonth() + 1 === m.month
+}
+
+// The user clicked a specific observation date — that exact scene is now
+// pinned on the map (per-scene NDVI/truecolor). Highlight it red so the
+// user can see which date in the strip is currently rendered, distinct from
+// the green "month active" highlight.
+function isPinned(date) {
+  return state.selectedObservationDate === date
 }
 
 function cloudText(o) {

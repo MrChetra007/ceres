@@ -212,6 +212,12 @@
   border-color: rgba(34, 201, 142, 0.5);
 }
 
+.obs-day.pinned {
+  background: var(--red-dim);
+  border-color: rgba(231, 76, 60, 0.5);
+  box-shadow: 0 0 0 1px rgba(231, 76, 60, 0.4);
+}
+
 .obs-day-date { font-size: 11px; white-space: nowrap; }
 
 /* Cloud icon carries the status tint; opacity ramps with cloud cover
