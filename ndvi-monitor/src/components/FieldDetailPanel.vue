@@ -342,6 +342,19 @@ function pickLowestCloud(rows) {
   }, null)
 }
 
+// A scene row the user explicitly clicked in the Observations strip wins over
+// the month's lowest-cloud pick. The clicked scene is pinned to the card so the
+// reading and Day count follow what the user pointed at; a brand-new slider
+// scrub (state.selectedObservationDate == null) falls back to lowest-cloud.
+function pickScene(within) {
+  const sel = state.selectedObservationDate
+  if (sel) {
+    const s = within.find((x) => x.date === sel)
+    if (s && s.value != null) return s
+  }
+  return pickLowestCloud(within)
+}
+
 const activeObservation = computed(() => {
   const data = state.chartData
   if (!Array.isArray(data) || !data.length) return null
@@ -352,7 +365,7 @@ const activeObservation = computed(() => {
     return ts >= w.start && ts < w.end
   })
   if (!within.length) return null
-  const obs = pickLowestCloud(within)
+  const obs = pickScene(within)
   return obs ? { value: obs.value, date: obs.date } : null
 })
 
@@ -377,7 +390,7 @@ const ndviActiveObservation = computed(() => {
     return ts >= w.start && ts < w.end
   })
   if (!within.length) return null
-  const obs = pickLowestCloud(within)
+  const obs = pickScene(within)
   return obs ? { value: obs.value, date: obs.date } : null
 })
 

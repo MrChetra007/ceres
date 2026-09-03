@@ -66,6 +66,11 @@ export const state = reactive({
   currentBase: 'satellite',
   trueColorDate: null,
   trueColorDateRight: null,
+  // Exact scene the user last clicked in the Observations strip. When set, the
+  // field card shows THAT scene's reading/date (within its month) instead of the
+  // month's lowest-cloud scene; cleared when the user scrubs the slider or loads
+  // a different field.
+  selectedObservationDate: null,
   trueColorScenes: [],
   trueColorScenesRight: [],
   latestView: null,
@@ -1352,16 +1357,17 @@ export function resetObservations() {
 export function jumpToObservationDate(dateStr) {
   const d = new Date(dateStr)
   if (isNaN(d.getTime())) return
-  let target = -1
-  for (let i = 0; i < MONTHS.length; i++) {
-    const start = new Date(MONTHS[i].year, MONTHS[i].month - 1, 1)
-    const end = new Date(MONTHS[i].year, MONTHS[i].month, 1)
-    if (d >= start && d < end) { target = i; break }
-  }
+  // Resolve the scene to a MONTHS index by its calendar year/month — the same
+  // clock the strip's rowActive highlight and the slider use. This avoids the
+  // old local-vs-UTC month-boundary arithmetic that could silently fail to
+  // match a scene (leaving the card frozen on the previous month).
+  const target = MONTHS.findIndex((m) => m.year === d.getFullYear() && m.month === d.getMonth() + 1)
   if (target < 0) return
   state.mainMonth = target
-  // True Color renders a single scene, not a monthly mosaic — use the exact
-  // capture date clicked in the Observations panel rather than re-picking.
+  // Pin the card to the exact clicked scene (within its month) so the reading
+  // and Day count follow the scene the user picked, not the month's lowest-cloud
+  // one. True Color additionally uses it as the exact scene to render.
+  state.selectedObservationDate = dateStr
   if (state.currentIndex === 'truecolor') state.trueColorDate = dateStr
   // Mirror the time slider: render over the selected field, not the AOI rect.
   loadIndexForMonth(target, currentGeometry.value)
@@ -2005,6 +2011,7 @@ function applyTileResult(res, m) {
 export function loadField(field) {
   state.currentFieldName = field.name
   state.currentFieldId = field.id
+  state.selectedObservationDate = null
   state.ndviChartData = null // new subject — the old field's anchor no longer applies
   mapReg.drawnItems.clearLayers()
   const geo = window.L.geoJSON(field.geojson)
@@ -2200,6 +2207,8 @@ export function clearFieldSelection() {
   currentGeometry.value = null
   state.rainfallMm = null
   state.infoPanelVisible = false
+  state.selectedObservationDate = null
+  state.trueColorDate = null
   mapReg.drawnItems.clearLayers()
   updateDrawEditVisibility()
   setBaseLayer(state.currentBase)
