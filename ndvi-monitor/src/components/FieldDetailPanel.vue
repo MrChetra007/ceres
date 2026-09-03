@@ -275,9 +275,14 @@ const aimChips = computed(() => {
 async function loadAim() {
   const field = currentField.value
   if (!field || !state.eeReady) return
+  // Scope the score to the scrubbed month (the same {year, month} the map tile
+  // and hero NDVI badge use) so the score follows the slider, not "now".
+  const m = MONTHS[state.mainMonth]
+  const month = m ? { year: m.year, month: m.month } : null
   // Closed/reopened fields reuse the cached score (keyed by field + planting
-  // date) instead of re-running Earth Engine compute — see aimScoreCache.js.
-  const cached = getAimCache(field)
+  // date + scrubbed month) instead of re-running Earth Engine compute — see
+  // aimScoreCache.js.
+  const cached = getAimCache(field, month)
   if (cached) {
     aim.value = cached
     aimLoading.value = false
@@ -292,8 +297,8 @@ async function loadAim() {
     if (req !== aimReq) return
     aim.value = snap
     aimLoading.value = false
-    if (snap) setAimCache(field, snap)
-  })
+    if (snap) setAimCache(field, snap, month)
+  }, month)
 }
 const status = computed(() => fieldStatus[state.currentFieldId] || null)
 const trend = computed(() => fieldTrends[state.currentFieldId] || null)
@@ -821,7 +826,7 @@ watch(() => state.chartData, (data) => {
 watch(() => state.benchmarkValue, () => {
   if (state.chartData && state.infoPanelVisible) render(state.chartData)
 })
-watch(() => state.mainMonth, () => updateMarker())
+watch(() => state.mainMonth, () => { updateMarker(); loadAim() })
 watch(() => state.currentFieldId, () => { aiExplanation.value = ''; aiTruncated.value = false; photos.value = []; state.photosLightboxIndex = null; loadPhotos(); aim.value = null; aimDetailsOpen.value = false; loadAim() })
 watch(() => currentField.value && currentField.value.id, () => { loadWeather(); loadAim() })
 watch(() => state.infoPanelVisible, async (open) => {

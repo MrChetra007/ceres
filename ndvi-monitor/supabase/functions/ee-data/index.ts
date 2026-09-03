@@ -886,9 +886,26 @@ async function computeIndexOverWindow(
   geom: any,
   index: string,
   days: number,
+  month?: { year: number; month: number },
 ): Promise<number | null> {
+  if (month) {
+    // Calendar-month window — mirrors the exact scene window the map tile and
+    // hero NDVI use for the scrubbed month, so the score and badge agree.
+    const start = ee.Date.fromYMD(month.year, month.month, 1);
+    return reduceIndexMean(geom, index, start, start.advance(1, "month"));
+  }
   const end = ee.Date(Date.now());
-  const start = end.advance(-days, "day");
+  return reduceIndexMean(geom, index, end.advance(-days, "day"), end);
+}
+
+// Shared window→value reduce for index scoring: clean S2 median within [start,
+// end), then mean over the geometry. Returns null when no clean scene exists.
+async function reduceIndexMean(
+  geom: any,
+  index: string,
+  start: any,
+  end: any,
+): Promise<number | null> {
   const collection = s2Collection(geom, start, end);
   const count = await evaluate(collection.size());
   if (!count) return null;
@@ -967,24 +984,45 @@ async function actionGetFieldHealthScore(payload: any) {
   const geom = toEeGeometry(payload.geometry);
   const plantingDate = payload.plantingDate || null;
 
+  // Score is scoped to the SAME month the map tile / hero NDVI badge show for
+  // the scrubbed slider position (payload {year, month}, matching getIndexTile/
+  // getFieldBundle). If the caller omits it (legacy), fall back to the current
+  // calendar month so the call still answers "current health".
+  const now = new Date();
+  const year = payload.year != null ? payload.year : now.getUTCFullYear();
+  const month = payload.month != null ? payload.month : now.getUTCMonth() + 1;
+
   let dayCount: number | null = null;
   if (plantingDate) {
-    const days = Math.floor(
-      (Date.now() - new Date(plantingDate).getTime()) / 86400000,
-    );
+    // Growth stage is as-of the SCRUBBED MONTH (month end), not "today" — so
+    // the stage/per-verdict stays consistent with the month the indices are
+    // read from, exactly like the hero badge. Date.UTC(year, month, 1) is the
+    // start of the NEXT month; subtract one ms for month-end.
+    const monthEndMs = Date.UTC(year, month, 1) - 1;
+    const days = Math.floor((monthEndMs - new Date(plantingDate).getTime()) / 86400000);
     if (days >= 0) dayCount = days;
   }
   const stage = stageNameForDayCount(dayCount);
   const primaryIndex = primaryIndexForStage(stage);
-  const weights = healthScoreWeights(stage);
+  const baseWeights = healthScoreWeights(stage);
+
+  // The trailing lookback used when the exact month has no clean scene. It ends
+  // at the MONTH END (not "now") so scrubbing to an older month never leaks in
+  // scenes from later months — the score always reflects the era the slider is
+  // on, exactly like the map tile's 90-day fallback.
+  const monthStart = ee.Date.fromYMD(year, month, 1);
+  const monthEnd = monthStart.advance(1, "month");
 
   const raw: Record<string, number> = {};
-  const normalized: Record<string, number> = {};
+  const normalized: Record<string, number | null> = {};
   let confidence: "high" | "low" = "high";
-  for (const index of Object.keys(weights)) {
-    let value = await computeIndexOverWindow(geom, index, 14);
+  for (const index of Object.keys(baseWeights)) {
+    // Tier 1: the exact scrubbed month (matches the hero NDVI + tile window).
+    let value = await computeIndexOverWindow(geom, index, 0, { year, month });
     if (value === null) {
-      value = await computeIndexOverWindow(geom, index, 90);
+      // Tier 2: no clean scene that month — widen to a 90-day lookback ending
+      // at month-end (low confidence, same spirit as the map's fallback).
+      value = await reduceIndexMean(geom, index, monthEnd.advance(-90, "day"), monthEnd);
       confidence = "low";
     }
     if (value === null) {
@@ -1003,6 +1041,22 @@ async function actionGetFieldHealthScore(payload: any) {
     normalized[index] = normalizeToUnitRange(index, value);
   }
 
+  // Defensive weight renormalization: the score blend must ALWAYS sum to 1.0.
+  // Drop any index that ended up without a usable normalized value (e.g. a
+  // VIS range gap) and redistribute its weight proportionally across the
+  // indices that DO have one, so the returned `weights` (and the combined
+  // score) never silently under-count or vanish a missing component.
+  const present = Object.keys(normalized).filter((i) => normalized[i] != null);
+  const weights: Record<string, number> = {};
+  if (present.length) {
+    const presentWeight = present.reduce(
+      (sum, i) => sum + (baseWeights[i] ?? 0),
+      0,
+    );
+    const scale = presentWeight > 0 ? 1 / presentWeight : 1;
+    for (const i of present) weights[i] = (baseWeights[i] ?? 0) * scale;
+  }
+
   const score = Math.round(
     Object.entries(weights).reduce(
       (sum, [i, w]) => sum + (normalized[i] ?? 0) * w,
@@ -1010,7 +1064,11 @@ async function actionGetFieldHealthScore(payload: any) {
     ) * 100,
   );
   const band = translateIndexValue("composite", score);
-  const discrepancy = detectDiscrepancy(raw);
+  const discrepancy = detectDiscrepancy(raw, {
+    score,
+    primaryIndex,
+    stage,
+  });
   return {
     score,
     noData: false,

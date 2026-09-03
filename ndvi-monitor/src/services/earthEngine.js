@@ -247,8 +247,17 @@ export function getFieldBundle(geometry, year, month, months, currentIndex, cb) 
 // appropriate indices into a plain-language verdict (see ee-data
 // actionGetFieldHealthScore). cb(snapshot|null): the resolved payload, or null
 // on any error (server unreachable / EE failure).
-export function getFieldHealthScore(geometry, plantingDate, cb) {
-  callEE('getFieldHealthScore', { geometry, plantingDate: plantingDate || null })
+//
+// `month` ({year, month}) scopes the score to the SAME calendar month as the
+// map tile / hero NDVI badge for the scrubbed slider position. When omitted
+// the server falls back to the current month.
+export function getFieldHealthScore(geometry, plantingDate, cb, month) {
+  callEE('getFieldHealthScore', {
+    geometry,
+    plantingDate: plantingDate || null,
+    year: month && month.year != null ? month.year : null,
+    month: month && month.month != null ? month.month : null,
+  })
     .then((body) => cb({
       score: body.score == null ? null : body.score,
       noData: !!body.noData,
