@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div id="field-detail" class="panel detail-panel">
     <div class="detail-header">
       <div class="detail-heading">
@@ -70,7 +70,11 @@
           <span class="status-badge" :class="statusTone">{{ statusText }}</span>
         </div>
         <div class="hero-sub mono">{{ stageText }}</div>
-        <p v-if="showHeroStaleNote" class="hero-stale-note">{{ t('field.last_clear_reading', { date: heroLastClearDate }) }}</p>
+        <p v-if="obsFallbackNote" class="hero-stale-note obs-fallback-note">
+          <i class="ti ti-info-circle"></i>
+          <span>{{ obsFallbackNote }}</span>
+        </p>
+        <p v-else-if="showHeroStaleNote" class="hero-stale-note">{{ t('field.last_clear_reading', { date: heroLastClearDate }) }}</p>
         <div class="hero-bench">
           <span class="bench-dot"></span> {{ t('field.aoi_benchmark') }}
           <b class="mono">{{ benchmarkText }}</b>
@@ -217,7 +221,7 @@ import { getRecentIndexValue, getRainfallMm, getFieldHealthScore, polygonGeometr
 import { getWeatherContext } from '../services/weatherService'
 import { getAimCache, setAimCache } from '../services/aimScoreCache'
 import { centroid as turfCentroid } from '@turf/turf'
-import { formatMonthYear, stageName as stageNameKm, daySinceLabel } from '../services/format'
+import { formatMonthYear, stageName as stageNameKm, daySinceLabel, formatDate, isSameMonth as isSameMonthDates, toKhmerDigits, confReason } from '../services/format'
 import { useI18n } from '../i18n'
 
 const chartCanvas = ref(null)
@@ -304,6 +308,22 @@ const status = computed(() => fieldStatus[state.currentFieldId] || null)
 const trend = computed(() => fieldTrends[state.currentFieldId] || null)
 const conf = computed(() => {
   if (!currentField.value) return null
+  if (isObsFallback.value) {
+    return {
+      tier: 'low',
+      reason: isSameMonthObsFallback.value
+        ? confReason(state.preferredLanguage, 'cloudBlocked')
+        : confReason(state.preferredLanguage, 'noRecentCapture'),
+    }
+  }
+  if (state.cloudBlock.main) {
+    return state.cloudBlock.main.sameMonth
+      ? { tier: 'low', reason: confReason(state.preferredLanguage, 'cloudBlocked') }
+      : { tier: 'low', reason: confReason(state.preferredLanguage, 'noRecentCapture') }
+  }
+  if (state.radarFallback.main) {
+    return { tier: 'medium', reason: confReason(state.preferredLanguage, 'radarBlocked') }
+  }
   return fieldConfidence(currentField.value)
 })
 const noSceneData = computed(() => !state.loading && state.sceneCount.main === 0)
@@ -328,44 +348,8 @@ const selectedMonthWindow = computed(() => {
   return { start, end }
 })
 
-function pickLowestCloud(rows) {
-  if (!rows.length) return null
-  return rows.reduce((best, r) => {
-    if (r.value == null) return best
-    if (best == null) return r
-    const bestCloud = best.cloudPct == null ? Infinity : best.cloudPct
-    const rCloud = r.cloudPct == null ? Infinity : r.cloudPct
-    if (rCloud < bestCloud) return r
-    // Equal or unknown cloud — later date wins, matching the pre-fix "last".
-    if (rCloud === bestCloud && r.date >= best.date) return r
-    return best
-  }, null)
-}
-
-// A scene row the user explicitly clicked in the Observations strip wins over
-// the month's lowest-cloud pick. The clicked scene is pinned to the card so the
-// reading and Day count follow what the user pointed at; a brand-new slider
-// scrub (state.selectedObservationDate == null) falls back to lowest-cloud.
-function pickScene(within) {
-  const sel = state.selectedObservationDate
-  if (sel) {
-    const s = within.find((x) => x.date === sel)
-    if (s && s.value != null) return s
-  }
-  return pickLowestCloud(within)
-}
-
 const activeObservation = computed(() => {
-  const data = state.chartData
-  if (!Array.isArray(data) || !data.length) return null
-  const w = selectedMonthWindow.value
-  if (!w) return null
-  const within = data.filter((d) => {
-    const ts = new Date(d.date).getTime()
-    return ts >= w.start && ts < w.end
-  })
-  if (!within.length) return null
-  const obs = pickScene(within)
+  const obs = store.resolveActiveObservation(state.chartData, state.mainMonth, state.selectedObservationDate)
   return obs ? { value: obs.value, date: obs.date } : null
 })
 
@@ -381,16 +365,7 @@ const activeObservation = computed(() => {
 // Mirror of activeObservation, but read from the NDVI-anchored series so it
 // resolves to the same scene date no matter which band tab is active.
 const ndviActiveObservation = computed(() => {
-  const data = state.ndviChartData
-  if (!Array.isArray(data) || !data.length) return null
-  const w = selectedMonthWindow.value
-  if (!w) return null
-  const within = data.filter((d) => {
-    const ts = new Date(d.date).getTime()
-    return ts >= w.start && ts < w.end
-  })
-  if (!within.length) return null
-  const obs = pickScene(within)
+  const obs = store.resolveActiveObservation(state.ndviChartData, state.mainMonth, state.selectedObservationDate)
   return obs ? { value: obs.value, date: obs.date } : null
 })
 
@@ -546,6 +521,52 @@ const showHeroStaleNote = computed(() => {
   // own (cloud-blocked / radar fallback), so "Last clear reading" unambiguously
   // reads as a fixed reference point, never as the hero value.
   return stale && !!heroLastClearDate.value && !monthStatus.value
+})
+
+const displayedSceneDate = computed(() => {
+  if (state.currentIndex === 'truecolor') return state.trueColorDate || null
+  if (activeObservation.value && activeObservation.value.date) return activeObservation.value.date
+  if (heroLastClearDate.value) return heroLastClearDate.value
+  return null
+})
+
+watch(displayedSceneDate, (val) => {
+  state.displayedObservationDate = val
+}, { immediate: true })
+
+const isObsFallback = computed(() => {
+  if (!state.selectedObservationDate || state.currentIndex === 'truecolor') return false
+  const displayed = displayedSceneDate.value
+  return !!displayed && displayed !== state.selectedObservationDate
+})
+
+const isSameMonthObsFallback = computed(() => {
+  if (!isObsFallback.value) return false
+  return isSameMonthDates(state.selectedObservationDate, displayedSceneDate.value)
+})
+
+const selectedObsRow = computed(() => {
+  if (!state.selectedObservationDate || !Array.isArray(state.observations)) return null
+  return state.observations.find((o) => o.date === state.selectedObservationDate) || null
+})
+
+const obsFallbackNote = computed(() => {
+  if (!isObsFallback.value) return ''
+  const selDate = state.selectedObservationDate
+  const displayed = displayedSceneDate.value
+  const obs = selectedObsRow.value
+  const cloudStr = obs && obs.cloudCover != null
+    ? (state.preferredLanguage === 'km' ? 'ពពក ' + toKhmerDigits(Math.round(obs.cloudCover)) + '%' : Math.round(obs.cloudCover) + '% cloud')
+    : (state.preferredLanguage === 'km' ? 'បាំងដោយពពក' : 'cloud-covered')
+  const selFmt = formatDate(selDate, state.preferredLanguage)
+  const actualFmt = displayed ? formatDate(displayed, state.preferredLanguage) : ''
+
+  if (!displayed) {
+    return t('field.obs_fallback_no_data', { selectedDate: selFmt, cloud: cloudStr })
+  }
+  return isSameMonthObsFallback.value
+    ? t('field.obs_fallback_same_month', { selectedDate: selFmt, cloud: cloudStr, actualDate: actualFmt })
+    : t('field.obs_fallback_diff_month', { selectedDate: selFmt, cloud: cloudStr, actualDate: actualFmt })
 })
 
 // Growth stage is a property of the crop's age (planting date), NOT of the

@@ -26,8 +26,16 @@
           v-for="o in state.observations"
           :key="o.date"
           class="obs-day"
-          :class="[o.status, { active: rowActive(o.date), pinned: isPinned(o.date) }]"
-          :title="t('obs.jump_tip', { date: fmtDate(o.date) })"
+          :class="[
+            o.status,
+            {
+              active: rowActive(o.date),
+              pinned: isPinned(o.date),
+              'fallback-source': isFallbackSource(o.date),
+              'fallback-target': isFallbackTarget(o.date),
+            }
+          ]"
+          :title="tileTitle(o)"
           @click="jump(o.date)"
         >
           <span class="obs-day-date mono">{{ fmtDate(o.date) }}</span>
@@ -80,6 +88,33 @@ function rowActive(date) {
 // the green "month active" highlight.
 function isPinned(date) {
   return state.selectedObservationDate === date
+}
+
+function isFallbackSource(date) {
+  return (
+    state.selectedObservationDate === date &&
+    !!state.displayedObservationDate &&
+    state.displayedObservationDate !== date
+  )
+}
+
+function isFallbackTarget(date) {
+  return (
+    state.displayedObservationDate === date &&
+    !!state.selectedObservationDate &&
+    state.selectedObservationDate !== date
+  )
+}
+
+function tileTitle(o) {
+  if (isFallbackSource(o.date)) {
+    const actual = state.displayedObservationDate ? fmtDate(state.displayedObservationDate) : ''
+    return t('obs.fallback_source_tip', { selected: fmtDate(o.date), cloud: cloudText(o), actual })
+  }
+  if (isFallbackTarget(o.date)) {
+    return t('obs.fallback_target_tip', { selected: fmtDate(state.selectedObservationDate) })
+  }
+  return t('obs.jump_tip', { date: fmtDate(o.date) })
 }
 
 function cloudText(o) {

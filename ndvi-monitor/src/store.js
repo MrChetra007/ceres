@@ -71,6 +71,9 @@ export const state = reactive({
   // month's lowest-cloud scene; cleared when the user scrubs the slider or loads
   // a different field.
   selectedObservationDate: null,
+  // The actual observation date currently rendered in the sidebar reading/growth stage.
+  // When a cloud-blocked or no-data scene is selected, this points to the fallback scene.
+  displayedObservationDate: null,
   trueColorScenes: [],
   trueColorScenesRight: [],
   latestView: null,
@@ -945,6 +948,15 @@ export function loadIndexForMonth(idx, geometry, silent) {
   }
   // Pass the pinned observation date (if any) so the NDVI/index tile renders
   // that exact scene rather than the month's clearest-date composite.
+  // For optical index views, if the selected scene is >= 40% cloud (blocked),
+  // pass null so Earth Engine falls through to the clean composite / cloud fallback.
+  let sceneDate = state.selectedObservationDate
+  if (sceneDate && state.currentIndex !== 'truecolor') {
+    const obs = Array.isArray(state.observations) ? state.observations.find((o) => o.date === sceneDate) : null
+    if (obs && (obs.status === 'blocked' || (obs.cloudCover != null && obs.cloudCover >= 40))) {
+      sceneDate = null
+    }
+  }
   ee.loadIndexTile(m, state.currentIndex, geom, (res) => {
     state.sceneCount.main = res.count
     if (res.mode === 'error') {
@@ -1014,7 +1026,7 @@ export function loadIndexForMonth(idx, geometry, silent) {
     mapReg.ndviLayer = applyTileLayer(mapReg.map, mapReg.ndviLayer, res.url)
     endLoading()
     setStatus('ready', cfg.name + ' layer loaded \u2014 ' + m.label)
-  }, state.selectedObservationDate)
+  }, sceneDate)
 }
 
 export function loadIndexForMonthRight(idx, silent) {
@@ -1344,6 +1356,43 @@ export function fetchObservations() {
     observationsFieldId = field.id
     observationsRangeKey = rangeKey
   })
+}
+
+export function pickLowestCloud(rows) {
+  if (!rows || !rows.length) return null
+  return rows.reduce((best, r) => {
+    if (r.value == null) return best
+    if (best == null) return r
+    const bestCloud = best.cloudPct == null ? Infinity : best.cloudPct
+    const rCloud = r.cloudPct == null ? Infinity : r.cloudPct
+    if (rCloud < bestCloud) return r
+    if (rCloud === bestCloud && r.date >= best.date) return r
+    return best
+  }, null)
+}
+
+export function resolveActiveObservation(chartData, monthIdx, selectedObservationDate) {
+  if (!Array.isArray(chartData) || !chartData.length) return null
+  const m = MONTHS[monthIdx]
+  if (!m) return null
+  const start = Date.UTC(m.year, m.month - 1, 1)
+  const end = Date.UTC(m.year, m.month, 1)
+  const within = chartData.filter((d) => {
+    const ts = new Date(d.date).getTime()
+    return ts >= start && ts < end
+  })
+  if (!within.length) return null
+  if (selectedObservationDate) {
+    const s = within.find((x) => x.date === selectedObservationDate)
+    if (s && s.value != null) return { value: s.value, date: s.date, isFallback: false }
+  }
+  const lowest = pickLowestCloud(within)
+  if (!lowest) return null
+  return {
+    value: lowest.value,
+    date: lowest.date,
+    isFallback: !!selectedObservationDate && lowest.date !== selectedObservationDate,
+  }
 }
 
 export function resetObservations() {
@@ -2014,6 +2063,7 @@ export function loadField(field) {
   state.currentFieldName = field.name
   state.currentFieldId = field.id
   state.selectedObservationDate = null
+  state.displayedObservationDate = null
   state.ndviChartData = null // new subject — the old field's anchor no longer applies
   mapReg.drawnItems.clearLayers()
   const geo = window.L.geoJSON(field.geojson)
@@ -2210,6 +2260,7 @@ export function clearFieldSelection() {
   state.rainfallMm = null
   state.infoPanelVisible = false
   state.selectedObservationDate = null
+  state.displayedObservationDate = null
   state.trueColorDate = null
   mapReg.drawnItems.clearLayers()
   updateDrawEditVisibility()
@@ -2412,6 +2463,19 @@ export function viewConfidence(side) {
   if (side === 'main' && state.currentFieldId) {
     const field = state.fields.find((f) => f.id === state.currentFieldId)
     if (field) {
+      // An observation-level fallback on the main map forces low confidence.
+      if (
+        state.selectedObservationDate &&
+        state.displayedObservationDate &&
+        state.selectedObservationDate !== state.displayedObservationDate
+      ) {
+        const d1 = new Date(state.selectedObservationDate)
+        const d2 = new Date(state.displayedObservationDate)
+        const sameMonth = d1.getFullYear() === d2.getFullYear() && d1.getMonth() === d2.getMonth()
+        return sameMonth
+          ? { tier: 'low', reason: confReason(lang, 'cloudBlocked') }
+          : { tier: 'low', reason: confReason(lang, 'noRecentCapture') }
+      }
       // A radar-fallback or cloud-blocked current view always dominates the
       // field's own signals.
       if (state.radarFallback.main) {

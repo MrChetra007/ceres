@@ -218,6 +218,31 @@
   box-shadow: 0 0 0 1px rgba(231, 76, 60, 0.4);
 }
 
+.obs-day.pinned.fallback-source {
+  border-style: dashed;
+  border-color: rgba(231, 76, 60, 0.85);
+  box-shadow: 0 0 0 1px rgba(231, 76, 60, 0.3);
+}
+
+.obs-day.fallback-target {
+  background: rgba(34, 201, 142, 0.12);
+  border-color: rgba(34, 201, 142, 0.75);
+  box-shadow: 0 0 0 1px rgba(34, 201, 142, 0.5);
+  position: relative;
+}
+
+.obs-day.fallback-target::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 4px var(--accent);
+}
+
 .obs-day-date { font-size: 11px; white-space: nowrap; }
 
 /* Cloud icon carries the status tint; opacity ramps with cloud cover

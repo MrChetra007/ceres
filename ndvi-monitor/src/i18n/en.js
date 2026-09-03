@@ -55,6 +55,8 @@ export default {
   'obs.low': 'Low conf.',
   'obs.blocked': 'Cloud-blocked',
   'obs.jump_tip': 'Load {date} into the map',
+  'obs.fallback_source_tip': 'No valid scene for {selected} ({cloud}) \u2014 showing reading from {actual}',
+  'obs.fallback_target_tip': 'Showing as reading for {selected}',
 
   // Map legend
   'legend.soil_water': 'Soil/Water',
@@ -177,6 +179,9 @@ export default {
   'field.pre_planting': 'Pre-planting',
   'field.no_active_crop': 'No active crop \u2014 planting date is {date}',
   'field.last_clear_reading': 'Last clear reading (fixed reference): {date}',
+  'field.obs_fallback_same_month': 'No valid scene for {selectedDate} ({cloud}) \u2014 showing reading from {actualDate}',
+  'field.obs_fallback_diff_month': 'No valid scene for {selectedDate} ({cloud}) \u2014 showing nearest reading from {actualDate}',
+  'field.obs_fallback_no_data': 'No valid scene for {selectedDate} ({cloud}) \u2014 no cloud-free imagery available',
   'field.save_edits': 'Save the reshaped field boundary',
   'field.cancel_edits': 'Discard changes and stop editing',
   'field.radar_map_note': 'Map showing satellite radar signal (RVI) — a different measurement from the NDVI value above, not directly comparable.',

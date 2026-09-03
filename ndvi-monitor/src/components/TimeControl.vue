@@ -408,6 +408,7 @@ function eventLabel(i) {
 function onMainSlider(e) {
   state.mainMonth = parseInt(e.target.value);
   state.selectedObservationDate = null; // manual scrub → revert to month's lowest-cloud scene
+  state.displayedObservationDate = null;
   clearTimeout(debounceTimer);
   debounceTimer = setTimeout(
     () => store.loadIndexForMonth(state.mainMonth, store.currentGeometry.value),
@@ -441,6 +442,7 @@ function startPlay() {
     const next = state.mainMonth >= b.max ? b.min : state.mainMonth + 1;
     state.mainMonth = next;
     state.selectedObservationDate = null; // animation scrubs all months
+    state.displayedObservationDate = null;
     store.loadIndexForMonth(next, store.currentGeometry.value, true);
     if (state.compareMode) {
       state.rightMonth = next;
@@ -461,6 +463,7 @@ function goLatest() {
   const latest = rangeActive.value ? b.max : Math.max(0, MONTHS.length - 2);
   state.mainMonth = latest;
   state.selectedObservationDate = null; // "latest" is a manual jump, not a scene click
+  state.displayedObservationDate = null;
   store.loadIndexForMonth(latest, store.currentGeometry.value);
   if (state.compareMode) {
     state.rightMonth = latest;

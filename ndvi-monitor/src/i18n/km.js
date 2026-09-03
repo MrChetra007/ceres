@@ -55,6 +55,8 @@ export default {
   'obs.low': 'ទំនុកចិត្តទាប',
   'obs.blocked': 'ពពកបាំង',
   'obs.jump_tip': 'ផ្ទុក {date} ចូលផែនទី',
+  'obs.fallback_source_tip': 'គ្មានរូបភាពត្រឹមត្រូវសម្រាប់ {selected} ({cloud}) — បង្ហាញការអានពី {actual}',
+  'obs.fallback_target_tip': 'បង្ហាញជាការអានសម្រាប់ {selected}',
 
   // Map legend
   'legend.soil_water': 'ដី/ទឹក',
@@ -178,6 +180,9 @@ export default {
   'field.no_active_crop': 'គ្មានដំណាំសកម្ម — កាលបរិច្ឆេទដាំគឺ {date}',
   'field.trend': 'និន្នាការ',
   'field.last_clear_reading': 'ការអានច្បាស់ចុងក្រោយ (ឯកសារយោងថេរ)៖ {date}',
+  'field.obs_fallback_same_month': 'គ្មានរូបភាពត្រឹមត្រូវសម្រាប់ {selectedDate} ({cloud}) — បង្ហាញការអានពី {actualDate}',
+  'field.obs_fallback_diff_month': 'គ្មានរូបភាពត្រឹមត្រូវសម្រាប់ {selectedDate} ({cloud}) — បង្ហាញការអានជិតបំផុតពី {actualDate}',
+  'field.obs_fallback_no_data': 'គ្មានរូបភាពត្រឹមត្រូវសម្រាប់ {selectedDate} ({cloud}) — គ្មានរូបភាពគ្មានពពកក្នុងរយៈពេលនេះ',
   'field.save_edits': 'រក្សាទុកព្រំដែនវាលដែលបានកែរាង',
   'field.cancel_edits': 'បោះបង់ការផ្លាស់ប្តូរ និងបញ្ឈប់ការកែ',
   'field.radar_map_note': 'ផែនទីកំពុងបង្ហាញសញ្ញេរ៉ាដាពីផ្កាយរណប (RVI) — ជាការវាស់វែងខុសពីរតម្លៃ NDVI ដែលបង្ហាញខាងលើ មិនអាចប្រៀបធៀបដោយផ្ទាល់បានទេ។',

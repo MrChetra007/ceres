@@ -133,3 +133,22 @@ export function confReason(lang, key, vars) {
   }
   return text
 }
+
+export function formatDate(dateStr, lang, withYear = false) {
+  if (!dateStr) return ''
+  const d = new Date(dateStr)
+  if (isNaN(d.getTime())) return dateStr
+  if (lang === 'km') {
+    return toKhmerDigits(d.getDate()) + ' ' + khmerMonthName(d.getMonth() + 1) + (withYear ? ' ' + toKhmerDigits(d.getFullYear()) : '')
+  }
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', ...(withYear ? { year: 'numeric' } : {}) })
+}
+
+export function isSameMonth(d1, d2) {
+  if (!d1 || !d2) return false
+  const a = new Date(d1)
+  const b = new Date(d2)
+  if (isNaN(a.getTime()) || isNaN(b.getTime())) return false
+  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth()
+}
+
