@@ -69,15 +69,8 @@ function dedupeLowestCloud(points) {
 }
 
 export function loadIndexTile(month, index, geometry, cb) {
-  const cfg = INDICES[index] || INDICES.ndvi
   callEE('getIndexTile', { index, year: month.year, month: month.month, geometry })
     .then((body) => {
-      if (body.mode === 'index') {
-        // Each index uses its OWN band combination server-side (NDVI = B8/B4,
-        // NDWI = B3/B8, LSWI = B8/B11), so the computed image genuinely
-        // differs per tab. Log the expression for per-tab verification.
-        console.log(`[loadIndexTile] ${cfg.name} → normalizedDifference(${cfg.bands.join(', ')}) via ee-data`)
-      }
       cb(body)
     })
     .catch((err) => {
@@ -95,9 +88,6 @@ export function loadIndexTile(month, index, geometry, cb) {
 export function loadTrueColor(month, geometry, sceneDate, cb) {
   callEE('getTrueColorScene', { year: month.year, month: month.month, geometry, sceneDate: sceneDate || null })
     .then((body) => {
-      if (body.mode === 'photo') {
-        console.log(`[loadTrueColor] chosen=${body.chosen && body.chosen.date} → url=${String(body.url).slice(0, 90)}…`)
-      }
       cb(body)
     })
     .catch((err) => {

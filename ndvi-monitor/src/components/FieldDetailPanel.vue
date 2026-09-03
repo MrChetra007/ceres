@@ -470,17 +470,7 @@ const prePlanting = computed(() => {
   if (!f || !f.plantingDate) return false
   const asOf = new Date(asOfDate.value).getTime()
   const planting = new Date(f.plantingDate).getTime()
-  const result = asOf < planting
-  if (result) {
-    console.log(
-      '[prePlanting]', f.name,
-      '| asOfDate(raw)=' + asOfDate.value,
-      '| plantingDate=', f.plantingDate,
-      '| isPrePlanting=', result,
-      '(asOfDate comes from: ' + (activeObservation.value && activeObservation.value.date ? 'per-scene observation signed in chartData' : 'month END fallback') + ')',
-    )
-  }
-  return result
+  return asOf < planting
 })
 
 const title = computed(() => (isField.value ? currentField.value.name : INDICES[state.chartIndex].name + ' ' + t('index.trend')))
@@ -553,21 +543,6 @@ const growthStageDays = computed(() => {
   const asOf = new Date(growthAsOfDate.value).getTime()
   const planting = new Date(f.plantingDate).getTime()
   const d = Math.floor((asOf - planting) / 86400000)
-  console.log(
-    '[daysSincePlanting]', f.name,
-    '| plantingDate=' + f.plantingDate,
-    '| asOfDate=' + growthAsOfDate.value,
-      '| days=' + d,
-    '| source=' + (state.currentIndex === 'truecolor' && state.trueColorDate
-      ? 'truecolor scene ' + state.trueColorDate
-      : ndviActiveObservation.value && ndviActiveObservation.value.date
-        ? 'NDVI-anchored observation ' + ndviActiveObservation.value.date
-        : state.currentIndex !== 'rvi' && activeObservation.value && activeObservation.value.date
-          ? 'per-scene observation ' + activeObservation.value.date
-          : state.cloudBlock.main && state.cloudBlock.main.lastValidDate
-            ? 'last clear reading ' + state.cloudBlock.main.lastValidDate
-            : 'month-END fallback'),
-  )
   return d
 })
 const stageName = computed(() => {

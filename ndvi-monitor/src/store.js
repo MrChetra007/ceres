@@ -863,25 +863,35 @@ export function updateSceneCount(count, isRight) {
 }
 
 function applyTileLayer(map, layer, url, opacity) {
-  if (layer) map.removeLayer(layer)
+  const opts = { opacity: opacity || 0.8, zIndex: 950 }
+  // Reuse the existing overlay layer where possible: swapping the URL with
+  // setUrl() avoids Leaflet tearing down and re-creating the whole tile pane on
+  // every slider/month change (which re-downloads tiles and causes flicker).
+  if (layer && layer.setUrl) {
+    layer.setUrl(url)
+    layer.setOpacity(opts.opacity)
+    layer.setZIndex(opts.zIndex)
+    return layer
+  }
   return window.L.tileLayer(url, {
     attribution: 'Sentinel-2 / Google Earth Engine',
-    opacity: opacity || 0.8,
-    // Keep the index overlay above the basemap regardless of which layer was
-    // added last (Leaflet paints same-pane tile layers by DOM order). A slider
-    // change re-adds this layer, so a fixed lookup makes the index win.
-    zIndex: 950,
+    ...opts,
   }).addTo(map)
 }
 
 // True Color photo layers are fully-opaque (a real photograph, not a
 // semi-transparent index overlay) and must stay above the basemap.
 function applyTrueColorLayer(map, layer, url) {
-  if (layer) map.removeLayer(layer)
+  const opts = { opacity: 1, zIndex: 951 }
+  if (layer && layer.setUrl) {
+    layer.setUrl(url)
+    layer.setOpacity(opts.opacity)
+    layer.setZIndex(opts.zIndex)
+    return layer
+  }
   const l = window.L.tileLayer(url, {
     attribution: 'Sentinel-2 / Google Earth Engine',
-    opacity: 1,
-    zIndex: 951,
+    ...opts,
   }).addTo(map)
   return l
 }
@@ -924,7 +934,6 @@ export function loadIndexForMonth(idx, geometry, silent) {
         state.cloudBlock.main = { month: m.label, cloudPct: res.chosen.cloudPct, lastValidDate: res.chosen.date }
       }
       mapReg.ndviLayer = applyTrueColorLayer(mapReg.map, mapReg.ndviLayer, res.url)
-      console.log(`[TrueColor @store] applied url=${String(res.url).slice(0, 90)}… (previous layer removed, new tile layer added)`)
       setStatus('ready', TRUE_COLOR.name + ' photo \u2014 ' + m.label + (state.trueColorDate ? ' \u00b7 ' + state.trueColorDate : ''))
     })
     return
@@ -1294,6 +1303,12 @@ export function applyRangeFromUrl() {
 
 let observationsFieldId = null
 let observationsRangeKey = ''
+// Dedup keys for the heavy all-fields batch queries. refreshAllFieldStatuses
+// only depends on index+fields (not range); refreshAllFieldTrends only depends
+// on the active month window + fields. Storing the last-run signature lets us
+// skip an expensive Earth Engine batch that would return identical data.
+let allStatusSig = null
+let allTrendsSig = null
 
 export function fetchObservations() {
   const field = state.fields.find((f) => f.id === state.currentFieldId)
@@ -1321,14 +1336,6 @@ export function fetchObservations() {
     state.observations = rows
     observationsFieldId = field.id
     observationsRangeKey = rangeKey
-    // Console dump for inspection — every satellite pass found for this field.
-    console.log(`[observations] ${rows.length} pass(es) for field "${field.name}" (${field.id}):`)
-    console.table(rows.map((r) => ({
-      date: r.date, source: r.source,
-      cloudPct: r.cloudCover != null ? Number(r.cloudCover).toFixed(1) : '—',
-      status: r.status,
-      ndvi: r.ndvi != null ? Number(r.ndvi).toFixed(3) : '—',
-    })))
   })
 }
 
@@ -1834,6 +1841,11 @@ export async function loadFieldsFromSupabase() {
   if (!state.supabaseUser) { state.fields = []; return }
   try {
     state.fields = await supabase.loadFields()
+    // A fresh field pull is an explicit refresh — always re-run the all-fields
+    // batches even if the same set of fields/window was already fetched this
+    // session (geometry may have changed). Reset the dedup keys they guard on.
+    allStatusSig = null
+    allTrendsSig = null
     refreshAllFieldStatuses()
     refreshAllFieldTrends()
   } catch (err) {
@@ -2473,6 +2485,13 @@ export function refreshAllFieldStatuses() {
   if (!state.eeReady) return
   const payload = validGeometryFields()
   if (!payload.length) return
+  // Field statuses depend ONLY on the current index + current month — NOT on
+  // the date range. Re-running this on every range change (see applyDateRange/
+  // clearDateRange) fires a heavy all-fields Earth Engine query for data that
+  // didn't move. Skip unless the index changed or new fields arrived.
+  const sig = state.currentIndex + '|' + payload.map((f) => f.id).join(',')
+  if (allStatusSig !== null && allStatusSig === sig) return
+  allStatusSig = sig
   ee.getAllFieldStatuses(payload, state.currentIndex, (statuses) => {
     statuses.forEach(({ id, value, count, date, cloudBlocked }) => {
       const field = state.fields.find((f) => f.id === id)
@@ -2497,7 +2516,16 @@ export function refreshAllFieldTrends() {
   if (!state.eeReady) return
   const payload = validGeometryFields()
   if (!payload.length) return
-  ee.getAllFieldTrends(payload, 'ndvi', MONTHS, (trends) => {
+  // Scope the batch to the active month window (the range subset when one is
+  // set) instead of the full 14-months, and skip when neither the window nor
+  // the field set changed — re-applying the same range otherwise fires a heavy
+  // all-fields × months Earth Engine batch for identical data.
+  const months = activeMonths()
+  const winKey = months.map((m) => m.year + '/' + m.month).join(',')
+  const sig = winKey + '|' + payload.map((f) => f.id).join(',')
+  if (allTrendsSig !== null && allTrendsSig === sig) return
+  allTrendsSig = sig
+  ee.getAllFieldTrends(payload, 'ndvi', months, (trends) => {
     trends.forEach(({ id, points }) => {
       if (!state.fields.some((f) => f.id === id)) return
       fieldTrends[id] = points
