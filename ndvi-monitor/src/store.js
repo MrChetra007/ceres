@@ -1025,7 +1025,10 @@ export function loadIndexForMonth(idx, geometry, silent) {
     }
     mapReg.ndviLayer = applyTileLayer(mapReg.map, mapReg.ndviLayer, res.url)
     endLoading()
-    setStatus('ready', cfg.name + ' layer loaded \u2014 ' + m.label)
+    const sceneLabel = sceneDate
+      ? new Date(sceneDate + 'T00:00:00').toLocaleDateString(state.preferredLanguage === 'km' ? 'km-KH' : 'en', { month: 'short', day: 'numeric', year: 'numeric' })
+      : m.label
+    setStatus('ready', cfg.name + ' layer loaded \u2014 ' + sceneLabel)
   }, sceneDate)
 }
 
@@ -2022,6 +2025,10 @@ export async function deleteField(id) {
 // for the toast-on-first-cloud-block behavior; loadIndexForMonthRight keeps
 // its own duplicate for the right/compare panel).
 function applyTileResult(res, m) {
+  // If the user has since pinned a specific observation date, don't let the
+  // bundled field-load tile overwrite the per-scene render from
+  // loadIndexForMonth (which fires after loadField and passes sceneDate).
+  if (state.selectedObservationDate && res.mode !== 'error') return
   state.sceneCount.main = res.count
   if (res.mode === 'error') {
     if (mapReg.ndviLayer) { mapReg.map.removeLayer(mapReg.ndviLayer); mapReg.ndviLayer = null }

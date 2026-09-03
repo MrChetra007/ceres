@@ -324,6 +324,20 @@ const conf = computed(() => {
   if (state.radarFallback.main) {
     return { tier: 'medium', reason: confReason(state.preferredLanguage, 'radarBlocked') }
   }
+  // When a specific observation is pinned, anchor the confidence badge to
+  // that scene's cloud status instead of the field's most-recent-available
+  // reading (actionGetRecentIndexValue always looks at "now", not the
+  // clicked date, so it can report cloud-blocked even when the user picked
+  // a clean scene).
+  if (state.selectedObservationDate && Array.isArray(state.observations)) {
+    const selObs = state.observations.find((o) => o.date === state.selectedObservationDate)
+    if (selObs) {
+      if (selObs.status === 'blocked' || (selObs.cloudCover != null && selObs.cloudCover >= 40)) {
+        return { tier: 'low', reason: confReason(state.preferredLanguage, 'cloudBlocked') }
+      }
+      return { tier: 'high', reason: '' }
+    }
+  }
   return fieldConfidence(currentField.value)
 })
 const noSceneData = computed(() => !state.loading && state.sceneCount.main === 0)
