@@ -17,12 +17,16 @@
 .aoi-editor-overlay {
   position: fixed; inset: 0; z-index: 2000;
   display: flex; align-items: center; justify-content: center;
-  background: rgba(0,0,0,0.4);
+  background: rgba(0,0,0,0.15);
+  /* The sheet is a small panel pinned to the bottom; the rest of the overlay
+     must NOT swallow clicks/drag on the map underneath. */
+  pointer-events: none;
 }
 .aoi-editor-modal {
   background: #fff; border-radius: 12px; padding: 1.5rem;
   width: 90%; max-width: 420px;
   box-shadow: 0 8px 32px rgba(0,0,0,0.25);
+  pointer-events: auto;
 }
 .aoi-editor-modal h3 { margin-bottom: 0.25rem; font-size: 1.1rem; }
 .aoi-editor-desc { font-size: 0.8rem; color: #666; margin-bottom: 1rem; }
@@ -155,3 +159,32 @@
   color: #888;
   font-size: 0.72rem;
 }
+
+/* ===== AOI polygon point-edit markers (rendered on the Leaflet map) ===== */
+.ae-vertex {
+  background: #1a56db;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.45);
+  cursor: grab;
+}
+.ae-vertex:hover { background: #1648c0; }
+.ae-vertex.selected { background: #b3261e; font-size: 12px; line-height: 18px; cursor: pointer; }
+.ae-add-point {
+  background: #fff;
+  border: 1.5px solid #1a56db;
+  border-radius: 50%;
+  color: #1a56db;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 14px;
+  text-align: center;
+  cursor: pointer;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+}
+.ae-add-point:hover { background: #e8effc; }

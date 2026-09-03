@@ -72,7 +72,10 @@
                 @click="pick(a)"
               >
                 <span class="areas-item-name">{{ displayAoiName(a) }}</span>
-                <i class="ti ti-trash" :title="t('band.delete_area')" @click.stop="remove(a)"></i>
+                <span class="areas-item-actions">
+                  <i class="ti ti-pencil" :title="t('band.edit_area')" @click.stop="store.openAoiEditorEdit(a.id)"></i>
+                  <i class="ti ti-trash" :title="t('band.delete_area')" @click.stop="remove(a)"></i>
+                </span>
               </button>
               <div class="areas-empty" v-if="state.aois.length === 0">{{ t('band.no_areas') }}</div>
               <button v-if="!atAreaCap" class="areas-new" @click="openNewArea">

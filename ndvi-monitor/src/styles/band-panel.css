@@ -231,8 +231,10 @@
   max-width: 160px;
 }
 
-.areas-item .ti-trash { color: var(--text-faint); font-size: 14px; flex-shrink: 0; }
-.areas-item .ti-trash:hover { color: var(--red); }
+.areas-item-actions { display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
+.areas-item-actions .ti { color: var(--text-faint); font-size: 14px; cursor: pointer; }
+.areas-item-actions .ti-pencil:hover { color: var(--accent); }
+.areas-item-actions .ti-trash:hover { color: var(--red); }
 
 .areas-empty {
   padding: 8px 10px;

@@ -107,6 +107,8 @@ export const state = reactive({
   isDrawing: false,
   isAoiDraw: false,
   aoiDraftCoords: null,
+  aoiPolygonDraft: null,
+  aoiEditMode: false,
   aoiEditorCloseForDraw: false,
   aoiEditorEditId: null,
   editingFieldId: null,
@@ -191,7 +193,11 @@ let cloudToastShown = false
 // Helpers
 // ---------------------------------------------------------------------------
 function getGeometry() {
-  return currentGeometry.value || rectGeometry(state.aoiCoords)
+  if (currentGeometry.value) return currentGeometry.value
+  if (state.aoiPolygon && state.aoiPolygon.length >= 3) {
+    return polygonGeometry([[...state.aoiPolygon, state.aoiPolygon[0]]])
+  }
+  return rectGeometry(state.aoiCoords)
 }
 
 export function setStatus(s, text) {
@@ -287,12 +293,40 @@ export function escapeHtml(str) {
 export function getAois() { return state.aois }
 
 export function updateAoiRectangle() {
-  if (!mapReg.map || !state.aoiCoords) return
+  if (!mapReg.map) return
   if (mapReg.aoiRectangle) mapReg.map.removeLayer(mapReg.aoiRectangle)
+  mapReg.aoiRectangle = null
+  if (state.aoiPolygon && state.aoiPolygon.length >= 3) {
+    const ring = [...state.aoiPolygon, state.aoiPolygon[0]].map((p) => [p[1], p[0]])
+    mapReg.aoiRectangle = window.L.polygon(ring, { color: '#ff4444', weight: 2, fill: false, dashArray: '4 4' }).addTo(mapReg.map)
+    return
+  }
+  if (!state.aoiCoords) return
   mapReg.aoiRectangle = window.L.rectangle(
     [[state.aoiCoords[1], state.aoiCoords[0]], [state.aoiCoords[3], state.aoiCoords[2]]],
     { color: '#ff4444', weight: 2, fill: false, dashArray: '4 4' }
   ).addTo(mapReg.map)
+}
+
+function updateAoiViewport() {
+  if (!mapReg.map) return
+  if (state.aoiPolygon && state.aoiPolygon.length >= 3) {
+    let minLat = Infinity, maxLat = -Infinity, minLng = Infinity, maxLng = -Infinity
+    for (const p of state.aoiPolygon) {
+      if (p[1] < minLat) minLat = p[1]
+      if (p[1] > maxLat) maxLat = p[1]
+      if (p[0] < minLng) minLng = p[0]
+      if (p[0] > maxLng) maxLng = p[0]
+    }
+    if (minLat !== Infinity) mapReg.map.fitBounds([[minLat, minLng], [maxLat, maxLng]], { padding: [40, 40] })
+    return
+  }
+  mapReg.map.setView([(state.aoiCoords[1] + state.aoiCoords[3]) / 2, (state.aoiCoords[0] + state.aoiCoords[2]) / 2], 14)
+}
+
+export function clearAoiPolygon() {
+  state.aoiPolygon = null
+  updateAoiRectangle()
 }
 
 // A selected field clips rendering to its own polygon — the broad AOI
@@ -304,12 +338,35 @@ function hideAoiRectangle() {
   }
 }
 
-function applyAoiBounds(coords, label) {
-  state.aoiCoords = coords && coords.length === 4 ? coords.slice() : DEFAULT_AOI.slice()
-  updateAoiRectangle()
-  if (mapReg.map) {
-    mapReg.map.setView([(state.aoiCoords[1] + state.aoiCoords[3]) / 2, (state.aoiCoords[0] + state.aoiCoords[2]) / 2], 14)
+export function normalizeAoiBounds(bounds) {
+  if (Array.isArray(bounds) && bounds.length === 4) return { rect: bounds.slice() }
+  if (bounds && typeof bounds === 'object' && Array.isArray(bounds.polygon) && bounds.polygon.length >= 3) {
+    return { polygon: bounds.polygon.map((p) => [p[0] * 1, p[1] * 1]) }
   }
+  return { rect: DEFAULT_AOI.slice() }
+}
+
+export function applyAoiPolygon(points, label) {
+  state.aoiPolygon = points && points.length >= 3 ? points.map((p) => [p[0] * 1, p[1] * 1]) : null
+  state.aoiCoords = DEFAULT_AOI.slice()
+  updateAoiRectangle()
+  updateAoiViewport()
+  setStatus('computing', 'Reloading NDVI for ' + (label || 'area') + '...')
+  fetchDryMonths()
+  loadIndexForMonth(state.mainMonth, null)
+  if (state.compareMode) loadIndexForMonthRight(state.rightMonth)
+}
+
+function applyAoiBounds(bounds, label) {
+  const norm = normalizeAoiBounds(bounds)
+  if (norm.polygon) {
+    applyAoiPolygon(norm.polygon, label)
+    return
+  }
+  state.aoiCoords = norm.rect
+  state.aoiPolygon = null
+  updateAoiRectangle()
+  updateAoiViewport()
   setStatus('computing', 'Reloading NDVI for ' + (label || 'area') + '...')
   fetchDryMonths()
   loadIndexForMonth(state.mainMonth, null)
@@ -430,10 +487,12 @@ export function startAoiDraw() {
     return
   }
   state.aoiEditorCloseForDraw = true
+  state.aoiEditMode = true
   state.aoiEditorVisible = false
+  state.aoiPolygonDraft = null
   state.aoiDraftCoords = null
   try {
-    const draw = new window.L.Draw.Rectangle(mapReg.map, {
+    const draw = new window.L.Draw.Polygon(mapReg.map, {
       shapeOptions: { color: '#ff4444', weight: 2 },
       showArea: true,
       metric: ['ha'],
@@ -441,7 +500,7 @@ export function startAoiDraw() {
     mapReg.activeDraw = draw
     state.isAoiDraw = true
     draw.enable()
-    showToast('Drag a rectangle on the map to define the area \u2014 Esc to cancel')
+    showToast('Click points on the map to draw the area \u2014 double-click to finish \u2014 Esc to cancel')
   } catch (e) {
     showToast('Drawing unavailable')
   }
@@ -453,22 +512,76 @@ export function cancelAoiDraw() {
     mapReg.activeDraw = null
   }
   state.isAoiDraw = false
+  state.aoiEditMode = false
+}
+
+function layerGeomToPolygon(layer) {
+  let ll = null
+  try { ll = layer.getLatLngs() } catch (e) {}
+  if (!ll) {
+    try { ll = [layer.getLatLng()] } catch (e) {}
+  }
+  if (!ll) return null
+  // leaflet-draw polygon: getLatLngs() returns a ring of LatLng (no holes).
+  let ring = Array.isArray(ll) && Array.isArray(ll[0]) ? ll[0] : ll
+  if (!Array.isArray(ring)) return null
+  if (Array.isArray(ring[0]) && typeof ring[0][0] === 'number') ring = ring[0]
+  return ring.map((p) => [p.lng, p.lat])
 }
 
 export function onAoiRectangleCreated(layer) {
   cancelAoiDraw()
-  let coords = null
-  try {
-    const b = layer.getBounds()
-    coords = [b.getWest().toFixed(6) * 1, b.getSouth().toFixed(6) * 1, b.getEast().toFixed(6) * 1, b.getNorth().toFixed(6) * 1]
-  } catch (e) {
-    showToast('Could not read the drawn rectangle')
+  const pts = layerGeomToPolygon(layer)
+  if (!pts || pts.length < 3) {
+    showToast('Could not read the drawn area')
     return
   }
-  state.aoiDraftCoords = coords
-  // Reopen the editor with the drawn bounds pre-filled for naming.
+  // dedupe closing point
+  const p0 = pts[0], pLast = pts[pts.length - 1]
+  const ring = (Math.abs(p0[0] - pLast[0]) < 1e-9 && Math.abs(p0[1] - pLast[1]) < 1e-9) ? pts.slice(0, -1) : pts
+  state.aoiPolygonDraft = ring
   state.aoiEditorVisible = true
-  showToast('Drawn area bounds captured \u2014 name it below to save')
+  showToast('Drawn area captured \u2014 name it below to save')
+}
+
+// ---------------------------------------------------------------------------
+// AOI polygon point editing — the AoiEditor lets the user drag vertices on the
+// map (add / remove / move) instead of typing coordinate numbers. The working
+// copy lives in `state.aoiPolygonDraft`, the on-map preview outline is drawn
+// by the editor, NDVI re-fetches only when the user saves (Apply).
+// ---------------------------------------------------------------------------
+export function getAoiWorkingPolygon(id) {
+  const editAoi = id ? state.aois.find((a) => a.id === id) : null
+  if (state.aoiPolygonDraft && state.aoiPolygonDraft.length >= 3) return state.aoiPolygonDraft
+  if (state.isAoiDraw) return null
+  if (editAoi && editAoi.bounds) {
+    const norm = normalizeAoiBounds(editAoi.bounds)
+    if (norm.polygon) return norm.polygon
+    const [w, s, e, n] = norm.rect
+    return [[w, s], [e, s], [e, n], [w, n]]
+  }
+  return null
+}
+
+export function setAoiPolygonDraft(points) {
+  state.aoiPolygonDraft = points && points.length >= 3 ? points.map((p) => [p[0] * 1, p[1] * 1]) : null
+}
+
+export function clearAoiPolygonDraft() {
+  state.aoiPolygonDraft = null
+}
+
+export async function saveAoiPolygon(id, name, points) {
+  if (!points || points.length < 3) { showToast('Area needs at least 3 points'); return false }
+  const bounds = { polygon: points.map((p) => [p[0] * 1, p[1] * 1]) }
+  if (id) {
+    const ok = await updateAoi(id, { name: name || 'Untitled area', bounds })
+    if (ok) state.aoiPolygonDraft = null
+    return ok
+  }
+  const aoi = await createAoi(name || 'Untitled area', bounds)
+  if (aoi) state.aoiPolygonDraft = null
+  return !!aoi
 }
 
 // ---------------------------------------------------------------------------
@@ -770,7 +883,7 @@ export function loadIndexForMonth(idx, geometry, silent) {
   state.cloudBlock.main = null
   state.radarFallback.main = null
   beginLoading()
-  const geom = geometry || rectGeometry(state.aoiCoords)
+  const geom = geometry || getGeometry()
   if (state.currentIndex === 'truecolor') {
     loadTrueColor(m, geom, state.trueColorDate, (res) => {
       endLoading()
@@ -1238,7 +1351,7 @@ export function jumpToObservationDate(dateStr) {
 // ---------------------------------------------------------------------------
 export function fetchDryMonths() {
   if (!state.eeReady) return
-  const geom = rectGeometry(state.aoiCoords)
+  const geom = getGeometry()
   ee.getDryMonths(MONTHS, geom, (drySet) => {
     state.dryMonthSet = drySet
   })
@@ -1253,7 +1366,7 @@ export function fetchDryMonths() {
 // ---------------------------------------------------------------------------
 export function fetchHealthZone(force) {
   if (!state.eeReady) return
-  const geom = currentGeometry.value || rectGeometry(state.aoiCoords)
+  const geom = getGeometry()
   if (!geom) return
   const m = MONTHS[state.mainMonth]
   if (!m) return
@@ -1448,6 +1561,7 @@ export function setTrueColorDate(date, side = 'main') {
 }
 
 export function onMapClick(lat, lng) {
+  if (state.aoiEditMode) return
   state.currentFieldName = null
   state.currentFieldId = null
   state.ndviChartData = null // new subject (point) — drop the previous anchor
@@ -2061,7 +2175,7 @@ export function loadRainfall(geometry) {
 
 export function loadBenchmark(geometry) {
   if (!state.eeReady) { state.benchmarkValue = null; return }
-  const geom = geometry || rectGeometry(state.aoiCoords)
+  const geom = geometry || getGeometry()
   ee.getRecentIndexValue(geom, 'ndvi', ({ count, value }) => {
     state.benchmarkValue = value
   })
