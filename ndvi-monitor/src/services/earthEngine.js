@@ -68,8 +68,8 @@ function dedupeLowestCloud(points) {
   return Array.from(byDate.values()).sort((a, b) => a.date.localeCompare(b.date))
 }
 
-export function loadIndexTile(month, index, geometry, cb) {
-  callEE('getIndexTile', { index, year: month.year, month: month.month, geometry })
+export function loadIndexTile(month, index, geometry, cb, sceneDate) {
+  callEE('getIndexTile', { index, year: month.year, month: month.month, geometry, sceneDate: sceneDate || null })
     .then((body) => {
       cb(body)
     })

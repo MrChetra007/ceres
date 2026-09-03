@@ -373,6 +373,36 @@ async function actionGetIndexTile(payload: any) {
     return result;
   }
 
+  // 0. Per-scene index: the user clicked a specific observation date in the
+  //    strip. Render that exact scene's index (least-cloudy same-day orbit),
+  //    NOT the month's median composite — so the map tile follows the selected
+  //    date instead of staying locked on the month's clearest date. The tile
+  //    cache is bypassed: its rows are keyed to (index, month, area) with no
+  //    date column, so a per-scene tile must never be served from the
+  //    month-composite cache.
+  if (index !== "rvi" && payload.sceneDate) {
+    const day = ee.Date(payload.sceneDate);
+    const dayRaw = ee
+      .ImageCollection("COPERNICUS/S2_SR_HARMONIZED")
+      .filterBounds(geom)
+      .filterDate(day, day.advance(1, "day"))
+      .sort("CLOUDY_PIXEL_PERCENTAGE");
+    const dayCount = await evaluate(dayRaw.size());
+    if (dayCount > 0) {
+      const scene = dayRaw.first();
+      const img = applyIndex(scene.clip(geom), index, index.toUpperCase());
+      const url = await getMapUrl(img, vis);
+      return {
+        mode: "index",
+        count: dayCount,
+        url,
+        sceneDate: payload.sceneDate,
+      };
+    }
+    // No capture on that exact date (stale selection) — fall through to the
+    // normal month composite rather than erroring.
+  }
+
   // 1. Exact requested month, clean optical scenes — the ideal case.
   const rawCollection = ee
     .ImageCollection("COPERNICUS/S2_SR_HARMONIZED")

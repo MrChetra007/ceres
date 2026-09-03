@@ -943,6 +943,8 @@ export function loadIndexForMonth(idx, geometry, silent) {
     })
     return
   }
+  // Pass the pinned observation date (if any) so the NDVI/index tile renders
+  // that exact scene rather than the month's clearest-date composite.
   ee.loadIndexTile(m, state.currentIndex, geom, (res) => {
     state.sceneCount.main = res.count
     if (res.mode === 'error') {
@@ -1012,7 +1014,7 @@ export function loadIndexForMonth(idx, geometry, silent) {
     mapReg.ndviLayer = applyTileLayer(mapReg.map, mapReg.ndviLayer, res.url)
     endLoading()
     setStatus('ready', cfg.name + ' layer loaded \u2014 ' + m.label)
-  })
+  }, state.selectedObservationDate)
 }
 
 export function loadIndexForMonthRight(idx, silent) {
@@ -1102,7 +1104,7 @@ export function loadIndexForMonthRight(idx, silent) {
     }
     mapReg.ndviLayerRight = applyTileLayer(mapReg.mapRight, mapReg.ndviLayerRight, res.url)
     endLoading()
-  })
+  }, state.selectedObservationDate)
 }
 
 // "Today" quick-jump — snap the slider to the current real calendar date and
