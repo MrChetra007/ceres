@@ -201,14 +201,18 @@ function openNewArea() {
     store.showPaywall('aoi')
     return
   }
-  store.openAoiEditorEdit(null)
+  // Start drawing the new AOI polygon directly on the map. `startAoiDraw`
+  // closes the editor if open, arms leaflet-draw, and reopens the editor to
+  // name/save once the polygon is finished.
+  if (state.isAoiDraw) store.cancelAoiDraw()
+  store.startAoiDraw()
 }
 
 function editArea() {
   areasOpen.value = false
   // Edit the currently active area (or fall back to creating if none yet).
   if (state.selectedAoiId) store.openAoiEditorEdit(state.selectedAoiId)
-  else store.openAoiEditorEdit(null)
+  else openNewArea()
 }
 
 function onDocClick(e) {

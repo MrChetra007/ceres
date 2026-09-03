@@ -181,7 +181,7 @@ async function doCancel() {
 watch(() => state.settingsVisible, (open) => {
   if (open) {
     cancelOpen.value = false
-    store.loadSubscription()
+    store.refreshPlanState()
     loadHistory()
   }
 })

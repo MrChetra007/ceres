@@ -161,25 +161,19 @@ async function startPayment() {
 async function watchPayment() {
   const token = ++pollToken
   const status = await waitForPayment(tranId, { intervalMs: 3000, timeoutMs: 120000 })
-  if (token !== pollToken || phase.value !== 'paying') return
+  // Refresh the plan state even if the modal was closed mid-payment — the tier
+  // flip still landed on the server, so the limits must update regardless.
   if (status === 'approved') {
-    phase.value = 'approved'
-    // A plan switch updates profiles on the server but does NOT fire any
-    // supabase auth event (no SIGNED_IN/OUT, no TOKEN_REFRESHED). Re-fetch
-    // everything the plan governs — fields, AOIs and subscription — right
-    // here, so the upgraded limits (area cap, AI unlock) apply immediately
-    // instead of only after a manual page refresh.
-    await store.loadSubscription()
-    if (state.supabaseUser) {
-      store.loadFieldsFromSupabase()
-      store.loadAoisFromSupabase()
-    }
+    await store.refreshPlanState()
+    if (token === pollToken && phase.value === 'paying') phase.value = 'approved'
     store.showToast(t('subs.checkout_success', { plan: t(planKey.value) }))
   } else if (status === 'failed') {
-    phase.value = 'failed'
+    if (token === pollToken && phase.value === 'paying') phase.value = 'failed'
   } else {
-    phase.value = 'expired'
-    store.showToast(t('subs.pay_expired'))
+    if (token === pollToken && phase.value === 'paying') {
+      phase.value = 'expired'
+      store.showToast(t('subs.pay_expired'))
+    }
   }
 }
 

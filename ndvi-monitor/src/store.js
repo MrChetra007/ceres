@@ -650,6 +650,21 @@ export async function loadSubscription() {
   }
 }
 
+// Re-read everything a plan switch governs so upgraded/downgraded limits apply
+// immediately — no manual page refresh needed. A plan switch updates profiles
+// on the server without firing a supabase auth event, so the UI has to poll it
+// back. This is the single helper both the checkout approval, the cancel flow
+// and the app-regains-focus handler call.
+export async function refreshPlanState() {
+  await loadSubscription()
+  if (state.supabaseUser) {
+    await Promise.all([
+      loadFieldsFromSupabase(),
+      loadAoisFromSupabase(),
+    ])
+  }
+}
+
 // Total area of all saved fields in hectares — displayed as usage against
 // max_hectares. UI-only for now: the backend does NOT enforce the hectare cap
 // (see migrations/012_subscription_tiers.sql "NOT covered"). TODO(backend): enforce
@@ -684,7 +699,6 @@ export function openPlanBillingModal() {
   state.settingsVisible = true
   loadSubscription()
 }
-
 export function closePlanBillingModal() {
   state.settingsVisible = false
 }
@@ -704,7 +718,7 @@ export function closeCheckout() {
 
 export async function cancelMySubscription() {
   await supabase.cancelSubscription()
-  await loadSubscription()
+  await refreshPlanState()
 }
 
 function goToPricing() {
@@ -1784,6 +1798,32 @@ sb.auth.onAuthStateChange((event, session) => {
     })
   }
 })
+
+// When the user returns to the tab, a payment may have completed on the server
+// (ABA webhook / simulate-payment / support grant) while the app was in the
+// background — no supabase auth event fires, so without this the new plan only
+// shows after a manual refresh. Lightweight: first re-read only the plan, and
+// only re-fetch fields/AOIs (which re-runs the NDVI computation) if the plan
+// actually changed.
+let lastFocalTier = null
+if (typeof document !== 'undefined') {
+  const syncPlanOnFocus = async () => {
+    if (document.hidden) return
+    if (!state.supabaseUser) return
+    const prev = lastFocalTier
+    await loadSubscription()
+    const cur = state.subscription.tier
+    if (prev !== null && prev !== cur) {
+      // Tier flipped while away — pull fields/AOIs so the new limits line up.
+      if (state.supabaseUser) {
+        await Promise.all([loadFieldsFromSupabase(), loadAoisFromSupabase()])
+      }
+    }
+    lastFocalTier = cur
+  }
+  document.addEventListener('visibilitychange', syncPlanOnFocus)
+  document.addEventListener('focus', syncPlanOnFocus)
+}
 
 // ---------------------------------------------------------------------------
 // Fields (Supabase-backed)

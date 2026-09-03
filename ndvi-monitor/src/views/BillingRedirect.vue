@@ -15,7 +15,7 @@ const { t } = useI18n()
 
 onMounted(async () => {
   const status = String(route.query.status || '')
-  await store.loadSubscription()
+  await store.refreshPlanState()
 
   const tierName = state.subscription?.tier || ''
 
