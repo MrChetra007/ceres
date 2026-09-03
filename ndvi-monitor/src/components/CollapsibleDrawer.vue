@@ -1,5 +1,5 @@
 <template>
-  <div class="collapsible-drawer" :class="[position, { open: isOpen }]" ref="drawerEl">
+  <div class="collapsible-drawer" :class="[position, { open: isOpen }]">
     <!-- Collapsed tab (edge trigger) -->
     <button
       class="drawer-tab"
@@ -52,7 +52,6 @@ const props = defineProps({
 const emit = defineEmits(['update:modelValue'])
 
 const isOpen = ref(props.modelValue)
-const drawerEl = ref(null)
 
 const tabIcon = computed(() => {
   if (props.position === 'left') return isOpen.value ? 'ti-chevron-left' : 'ti-chevron-right'
@@ -75,20 +74,13 @@ function onKeydown(e) {
   if (e.key === 'Escape') close()
 }
 
-function onClickOutside(e) {
-  if (!isOpen.value || !drawerEl.value) return
-  if (!drawerEl.value.contains(e.target)) close()
-}
-
 watch(() => props.modelValue, (v) => { isOpen.value = v })
 
 onMounted(() => {
   window.addEventListener('keydown', onKeydown)
-  document.addEventListener('click', onClickOutside, true)
 })
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', onKeydown)
-  document.removeEventListener('click', onClickOutside, true)
 })
 
 defineExpose({ open: isOpen, close, toggle })
