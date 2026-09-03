@@ -38,6 +38,7 @@ export default {
   'topbar.my_fields': 'My fields',
   'topbar.go_to_ai': 'Consult AI',
   'topbar.settings': 'Settings',
+  'topbar.locate': 'Go to my current location',
 
   // Browse observations
   'obs.title': 'Browse Observations',

@@ -2503,8 +2503,23 @@ export function onFieldEdited() {
 }
 
 // ---------------------------------------------------------------------------
-// Search
+// Locate / Search
 // ---------------------------------------------------------------------------
+export function locate() {
+  if (!mapReg.map) { showToast('Map not ready'); return }
+  if (!('geolocation' in navigator)) { showToast('Location not supported'); return }
+  setStatus('computing', 'Finding your location...')
+  navigator.geolocation.getCurrentPosition(
+    (pos) => {
+      const lat = pos.coords.latitude
+      const lng = pos.coords.longitude
+      mapReg.map.setView([lat, lng], 16)
+      setStatus('ready', 'Flew to your location')
+    },
+    () => showToast('Could not get your location \u2014 please allow access')
+  )
+}
+
 export function searchPlace(query) {
   if (!query || !query.trim()) return
   const q = encodeURIComponent(query.trim())

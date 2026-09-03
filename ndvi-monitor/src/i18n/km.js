@@ -38,6 +38,7 @@ export default {
   'topbar.my_fields': 'វាលរបស់ខ្ញុំ',
   'topbar.go_to_ai': 'ពិគ្រោះ AI',
   'topbar.settings': 'ការកំណត់',
+  'topbar.locate': 'ទៅកាន់ទីតាំងបច្ចុប្បន្នរបស់ខ្ញុំ',
 
   // Browse observations
   'obs.title': 'រុករករូបភាពផ្កាយរណប',

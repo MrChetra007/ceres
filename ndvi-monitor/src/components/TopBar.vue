@@ -17,6 +17,9 @@
           @keydown.enter="doSearch"
         />
       </div>
+      <button class="glass-pill locate-btn" :title="t('topbar.locate')" @click="store.locate()">
+        <i class="ti ti-crosshair"></i>
+      </button>
     </div>
 
     <div class="topbar-center">

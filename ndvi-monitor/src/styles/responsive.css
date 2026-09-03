@@ -19,8 +19,7 @@
   .brand-text { display: flex; }
   .brand-loc { display: block; }
   .place-search { width: 120px; }
-  .glass-pill span.pill-text { display: none; }
-  /* NOTE: only the user chip collapses here (icon + dropdown). The desktop
+  .glass-pill span.pill-text { display: none; }  /* NOTE: only the user chip collapses here (icon + dropdown). The desktop
      controls (My Fields, Export, Telegram, Help, Language) and Compare stay
      visible so the header isn't gutted on zoomed/narrow desktop windows. */
   .time-panel { width: calc(100vw - 24px); }
