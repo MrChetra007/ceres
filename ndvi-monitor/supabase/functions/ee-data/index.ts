@@ -208,6 +208,79 @@ function tsToISO(ts: any): string | null {
   return ts == null ? null : new Date(ts).toISOString().slice(0, 10);
 }
 
+// ── Tile cache helpers (§1 of the ee-cost-control directive) ───────────────
+// actionGetIndexTile mints signed Earth Engine MAP URLs that are time-limited,
+// so the cache stores the URL + the facts the map renders, keyed on a stable
+// hash of the input geometry, and refreshes it on a TTL — it can never hold a
+// closed month permanently (the token would expire), unlike ee_trend_cache.
+function geometryHash(geojson: any): string {
+  const s = JSON.stringify(geojson && geojson.type === "Feature" ? geojson.geometry : geojson);
+  // FNV-1a 32-bit — deterministic, stable across restarts, not crypto.
+  let h = 0x811c9dc5;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return (h >>> 0).toString(16).padStart(8, "0");
+}
+
+function tileIsClosed(year: number, month: number): boolean {
+  // Month has fully elapsed once the first day of the *next* month has passed.
+  // Date.UTC is 0-indexed, so Date.UTC(year, month, 1) is the next real month.
+  return Date.UTC(year, month, 1) <= Date.now();
+}
+
+// Closed-month tiles are deterministic and can be served long (the composite
+// never changes) — but the signed URL still lapses, so cap at 12h. Open-month
+// tiles get a short window so newly-arrived scenes surface quickly.
+function tileCacheTtlMs(closed: boolean): number {
+  return closed ? 12 * 60 * 60 * 1000 : 20 * 60 * 1000;
+}
+
+async function readTileCache(
+  index: string,
+  year: number,
+  month: number,
+  geomHash: string,
+  closed: boolean,
+): Promise<any | null> {
+  try {
+    const before = Date.now() - tileCacheTtlMs(closed);
+    const { data } = await supabase
+      .from("ee_tile_cache")
+      .select("mode, url, count, index_used, cloud_pct, last_valid_date, computed_at")
+      .eq("index", index)
+      .eq("year", year)
+      .eq("month", month)
+      .eq("geometry_hash", geomHash)
+      .gt("computed_at", new Date(before).toISOString())
+      .maybeSingle();
+    if (!data) return null;
+    return {
+      mode: data.mode,
+      url: data.url,
+      count: data.count ?? 0,
+      indexUsed: data.index_used || undefined,
+      cloudPct: data.cloud_pct != null ? data.cloud_pct : undefined,
+      lastValidDate: data.last_valid_date || undefined,
+    };
+  } catch (e) {
+    console.error("[ee-data] ee_tile_cache read failed:", e);
+    return null;
+  }
+}
+
+async function writeTileCache(row: any) {
+  try {
+    const { error } = await supabase
+      .from("ee_tile_cache")
+      .upsert(row, { onConflict: "index,year,month,geometry_hash" });
+    if (error) console.error("[ee-data] ee_tile_cache upsert failed:", error);
+  } catch (e) {
+    console.error("[ee-data] ee_tile_cache upsert failed:", e);
+  }
+}
+
 // ── getRadarVegetationIndex ────────────────────────────────────────────────
 // Sentinel-1 radar RVI composite over a date window — the radar fallback
 // and the direct RVI band tab.
@@ -257,6 +330,19 @@ async function actionGetIndexTile(payload: any) {
   const start = ee.Date.fromYMD(payload.year, payload.month, 1);
   const end = start.advance(1, "month");
 
+  // ── Tile cache hit (§1 of the ee-cost-control directive) ────────────────
+  // A repeat visit to an already-computed (index, month, area) returns the
+  // cached mode/URL plus the facts the map renders, skipping Earth Engine
+  // entirely. TTL differs for closed vs open months (see tileCacheTtlMs) —
+  // closed months are deterministic but the signed URL still lapses, so both
+  // are TTL'd, never permanent.
+  const geomHash = geometryHash(payload.geometry);
+  const closed = tileIsClosed(payload.year, payload.month);
+  const cached = await readTileCache(index, payload.year, payload.month, geomHash, closed);
+  if (cached) return cached;
+
+  let result: any;
+
   if (index === "rvi") {
     const radar = await getRadarVegetationIndex(
       geom,
@@ -264,14 +350,27 @@ async function actionGetIndexTile(payload: any) {
       end.advance(15, "day"),
     );
     if (radar.count > 0 && radar.url) {
-      return {
+      result = {
         mode: "radar_index",
         count: radar.count,
         url: radar.url,
         indexUsed: "RVI",
       };
+    } else {
+      result = { mode: "no_data", count: 0, url: null };
     }
-    return { mode: "no_data", count: 0, url: null };
+    await writeTileCache({
+      index,
+      year: payload.year,
+      month: payload.month,
+      geometry_hash: geomHash,
+      mode: result.mode,
+      url: result.url,
+      count: result.count ?? 0,
+      index_used: result.indexUsed || null,
+      is_closed_period: closed,
+    });
+    return result;
   }
 
   // 1. Exact requested month, clean optical scenes — the ideal case.
@@ -291,7 +390,19 @@ async function actionGetIndexTile(payload: any) {
       index.toUpperCase(),
     );
     const url = await getMapUrl(composite, vis);
-    return { mode: "index", count, url };
+    result = { mode: "index", count, url };
+    await writeTileCache({
+      index,
+      year: payload.year,
+      month: payload.month,
+      geometry_hash: geomHash,
+      mode: result.mode,
+      url: result.url,
+      count: result.count ?? 0,
+      index_used: null,
+      is_closed_period: closed,
+    });
+    return result;
   }
 
   // 2. No clean scene THIS month (either none captured yet, or all too
@@ -304,12 +415,24 @@ async function actionGetIndexTile(payload: any) {
       end.advance(15, "day"),
     );
     if (radar.count > 0 && radar.url) {
-      return {
+      result = {
         mode: "radar_fallback",
         count: radar.count,
         url: radar.url,
         indexUsed: "RVI",
       };
+      await writeTileCache({
+        index,
+        year: payload.year,
+        month: payload.month,
+        geometry_hash: geomHash,
+        mode: result.mode,
+        url: result.url,
+        count: result.count ?? 0,
+        index_used: result.indexUsed || null,
+        is_closed_period: closed,
+      });
+      return result;
     }
   } catch (e) {
     console.error("radar fallback failed:", e);
@@ -326,23 +449,39 @@ async function actionGetIndexTile(payload: any) {
     .filterBounds(geom)
     .filterDate(lookbackStart, end);
   const widenedCount = await evaluate(widenedRaw.size());
-  if (widenedCount === 0) return { mode: "no_data", count: 0, url: null };
-
-  const bestScene = widenedRaw.sort("CLOUDY_PIXEL_PERCENTAGE").first();
-  const cloudPct = await evaluate(bestScene.get("CLOUDY_PIXEL_PERCENTAGE"));
-  const lastValidDate = tsToISO(
-    await evaluate(bestScene.get("system:time_start")),
-  );
-  let url: string | null = null;
-  try {
-    url = await getMapUrl(bestScene.clip(geom), {
-      bands: TRUE_COLOR_BANDS,
-      ...TRUE_COLOR_VIS,
-    });
-  } catch (e) {
-    console.error("cloud-blocked true-color getMap failed:", e);
+  if (widenedCount === 0) {
+    result = { mode: "no_data", count: 0, url: null };
+  } else {
+    const bestScene = widenedRaw.sort("CLOUDY_PIXEL_PERCENTAGE").first();
+    const cloudPct = await evaluate(bestScene.get("CLOUDY_PIXEL_PERCENTAGE"));
+    const lastValidDate = tsToISO(
+      await evaluate(bestScene.get("system:time_start")),
+    );
+    let url: string | null = null;
+    try {
+      url = await getMapUrl(bestScene.clip(geom), {
+        bands: TRUE_COLOR_BANDS,
+        ...TRUE_COLOR_VIS,
+      });
+    } catch (e) {
+      console.error("cloud-blocked true-color getMap failed:", e);
+    }
+    result = { mode: "cloud_blocked", count: 0, url, cloudPct, lastValidDate };
   }
-  return { mode: "cloud_blocked", count: 0, url, cloudPct, lastValidDate };
+  await writeTileCache({
+    index,
+    year: payload.year,
+    month: payload.month,
+    geometry_hash: geomHash,
+    mode: result.mode,
+    url: result.url,
+    count: result.count ?? 0,
+    index_used: result.indexUsed || null,
+    cloud_pct: result.cloudPct != null ? result.cloudPct : null,
+    last_valid_date: result.lastValidDate || null,
+    is_closed_period: closed,
+  });
+  return result;
 }
 
 // ── getTrueColorScene ──────────────────────────────────────────────────────
