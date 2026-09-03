@@ -110,6 +110,9 @@
           <button class="settings-item" @click="openFields">
             <i class="ti ti-list-details"></i>{{ t('sidebar.monitored_fields') }}
           </button>
+          <button class="settings-item" :title="t('topbar.locate')" @click="goCurrentLocation">
+            <i class="ti ti-crosshair"></i>{{ t('topbar.locate') }}
+          </button>
           <div class="hamburger-divider"></div>
           <div class="settings-item hamburger-account">
             <i class="ti ti-user"></i>
@@ -263,6 +266,11 @@ function toggleHamburgerMenu() {
 function openFields() {
   hamburgerOpen.value = false
   $emit('menu')
+}
+
+function goCurrentLocation() {
+  hamburgerOpen.value = false
+  store.locate()
 }
 
 function toggleCompare() {

@@ -89,9 +89,12 @@ defineExpose({ open: isOpen, close, toggle })
 <style scoped>
 .collapsible-drawer {
   position: fixed;
+  /* Sit just above the topbar (z 1001) so the drawer's own close/toggle X can
+     never be hidden behind the header, even when the header wraps taller on
+     narrower screens and overlaps the drawer top. */
   top: var(--topbar-height, 56px);
   bottom: 0;
-  z-index: 1000;
+  z-index: 1002;
   display: flex;
   align-items: stretch;
 }
