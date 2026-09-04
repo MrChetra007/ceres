@@ -947,16 +947,14 @@ export function loadIndexForMonth(idx, geometry, silent) {
     return
   }
   // Pass the pinned observation date (if any) so the NDVI/index tile renders
-  // that exact scene rather than the month's clearest-date composite.
-  // For optical index views, if the selected scene is >= 40% cloud (blocked),
-  // pass null so Earth Engine falls through to the clean composite / cloud fallback.
-  let sceneDate = state.selectedObservationDate
-  if (sceneDate && state.currentIndex !== 'truecolor') {
-    const obs = Array.isArray(state.observations) ? state.observations.find((o) => o.date === sceneDate) : null
-    if (obs && (obs.status === 'blocked' || (obs.cloudCover != null && obs.cloudCover >= 40))) {
-      sceneDate = null
-    }
-  }
+  // that exact scene rather than the month's clearest-date composite. This is
+  // NEVER nulled out for a cloud-blocked date anymore: the backend's per-scene
+  // branch (ee-data actionGetIndexTile step 0) now handles that case itself —
+  // clean optical for that exact date, else Sentinel-1 RVI centered on that
+  // date, else an honest "no data for this scene". Nulling it here used to
+  // pre-empt that logic and silently show the month composite instead, which
+  // is the bug we're fixing.
+  const sceneDate = state.currentIndex !== 'truecolor' ? state.selectedObservationDate : null
   ee.loadIndexTile(m, state.currentIndex, geom, (res) => {
     state.sceneCount.main = res.count
     if (res.mode === 'error') {
@@ -982,6 +980,33 @@ export function loadIndexForMonth(idx, geometry, silent) {
       if (res.url) mapReg.ndviLayer = applyTileLayer(mapReg.map, mapReg.ndviLayer, res.url, 1)
       else if (mapReg.ndviLayer) { mapReg.map.removeLayer(mapReg.ndviLayer); mapReg.ndviLayer = null }
       setStatus('ready', cfg.name + ' radar layer loaded \u2014 ' + m.label)
+      return
+    }
+    // Per-scene radar fallback: the clicked date had no clean optical scene,
+    // so the backend rendered Sentinel-1 RVI centered on THAT exact date
+    // (not the month). Distinct from 'radar_fallback' (month-level auto
+    // fallback) so the UI can say "this specific date" rather than "this month".
+    if (res.mode === 'radar_scene_fallback') {
+      endLoading()
+      if (res.url) mapReg.ndviLayer = applyTileLayer(mapReg.map, mapReg.ndviLayer, res.url, 1)
+      else if (mapReg.ndviLayer) { mapReg.map.removeLayer(mapReg.ndviLayer); mapReg.ndviLayer = null }
+      const sceneLabel = res.sceneDate
+        ? new Date(res.sceneDate + 'T00:00:00').toLocaleDateString(state.preferredLanguage === 'km' ? 'km-KH' : 'en', { month: 'short', day: 'numeric', year: 'numeric' })
+        : m.label
+      state.radarFallback.main = { month: m.label, indexUsed: res.indexUsed || 'RVI', sceneDate: res.sceneDate, cloudPct: res.cloudPct }
+      const pctText = res.cloudPct != null ? Math.round(res.cloudPct) + '% cloud' : 'cloud-covered'
+      setStatus('ready', sceneLabel + ' \u2014 ' + pctText + ', showing Sentinel-1 radar (RVI)')
+      return
+    }
+    // The clicked date has neither a clean optical scene nor any Sentinel-1
+    // pass nearby — be honest instead of silently showing a different date.
+    if (res.mode === 'no_data_for_scene') {
+      endLoading()
+      if (mapReg.ndviLayer) { mapReg.map.removeLayer(mapReg.ndviLayer); mapReg.ndviLayer = null }
+      const sceneLabel = res.sceneDate
+        ? new Date(res.sceneDate + 'T00:00:00').toLocaleDateString(state.preferredLanguage === 'km' ? 'km-KH' : 'en', { month: 'short', day: 'numeric', year: 'numeric' })
+        : m.label
+      setStatus('error', 'No imagery (optical or radar) available for ' + sceneLabel)
       return
     }
     if (res.mode === 'cloud_blocked') {
@@ -1087,6 +1112,23 @@ export function loadIndexForMonthRight(idx, silent) {
       endLoading()
       if (res.url) mapReg.ndviLayerRight = applyTileLayer(mapReg.mapRight, mapReg.ndviLayerRight, res.url, 1)
       else if (mapReg.ndviLayerRight) { mapReg.mapRight.removeLayer(mapReg.ndviLayerRight); mapReg.ndviLayerRight = null }
+      return
+    }
+    // Per-scene radar fallback (compare view): the clicked date had no clean
+    // optical scene, so the backend rendered Sentinel-1 RVI centered on THAT
+    // exact date. Distinct from 'radar_fallback' (month-level auto fallback).
+    if (res.mode === 'radar_scene_fallback') {
+      endLoading()
+      if (res.url) mapReg.ndviLayerRight = applyTileLayer(mapReg.mapRight, mapReg.ndviLayerRight, res.url, 1)
+      else if (mapReg.ndviLayerRight) { mapReg.mapRight.removeLayer(mapReg.ndviLayerRight); mapReg.ndviLayerRight = null }
+      state.radarFallback.right = { month: m.label, indexUsed: res.indexUsed || 'RVI', sceneDate: res.sceneDate, cloudPct: res.cloudPct }
+      return
+    }
+    // The clicked date has neither a clean optical scene nor any Sentinel-1
+    // pass nearby — be honest instead of silently showing a different date.
+    if (res.mode === 'no_data_for_scene') {
+      endLoading()
+      if (mapReg.ndviLayerRight) { mapReg.mapRight.removeLayer(mapReg.ndviLayerRight); mapReg.ndviLayerRight = null }
       return
     }
     if (res.mode === 'cloud_blocked') {
@@ -2047,6 +2089,30 @@ function applyTileResult(res, m) {
     if (res.url) mapReg.ndviLayer = applyTileLayer(mapReg.map, mapReg.ndviLayer, res.url, 1)
     else if (mapReg.ndviLayer) { mapReg.map.removeLayer(mapReg.ndviLayer); mapReg.ndviLayer = null }
     setStatus('ready', (INDICES[state.currentIndex]?.name || 'RVI') + ' radar layer loaded \u2014 ' + m.label)
+    return
+  }
+  // Per-scene radar fallback: the clicked date had no clean optical scene, so
+  // the backend rendered Sentinel-1 RVI centered on THAT exact date (not the
+  // month). Distinct from 'radar_fallback' (month-level auto fallback).
+  if (res.mode === 'radar_scene_fallback') {
+    if (res.url) mapReg.ndviLayer = applyTileLayer(mapReg.map, mapReg.ndviLayer, res.url, 1)
+    else if (mapReg.ndviLayer) { mapReg.map.removeLayer(mapReg.ndviLayer); mapReg.ndviLayer = null }
+    state.radarFallback.main = { month: m.label, indexUsed: res.indexUsed || 'RVI', sceneDate: res.sceneDate, cloudPct: res.cloudPct }
+    const sceneLabel = res.sceneDate
+      ? new Date(res.sceneDate + 'T00:00:00').toLocaleDateString(state.preferredLanguage === 'km' ? 'km-KH' : 'en', { month: 'short', day: 'numeric', year: 'numeric' })
+      : m.label
+    const pctText = res.cloudPct != null ? Math.round(res.cloudPct) + '% cloud' : 'cloud-covered'
+    setStatus('ready', sceneLabel + ' \u2014 ' + pctText + ', showing Sentinel-1 radar (RVI)')
+    return
+  }
+  // The clicked date has neither a clean optical scene nor any Sentinel-1 pass
+  // nearby — be honest instead of silently showing a different date.
+  if (res.mode === 'no_data_for_scene') {
+    if (mapReg.ndviLayer) { mapReg.map.removeLayer(mapReg.ndviLayer); mapReg.ndviLayer = null }
+    const sceneLabel = res.sceneDate
+      ? new Date(res.sceneDate + 'T00:00:00').toLocaleDateString(state.preferredLanguage === 'km' ? 'km-KH' : 'en', { month: 'short', day: 'numeric', year: 'numeric' })
+      : m.label
+    setStatus('error', 'No imagery (optical or radar) available for ' + sceneLabel)
     return
   }
   if (res.mode === 'cloud_blocked') {

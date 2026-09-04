@@ -380,6 +380,14 @@ async function actionGetIndexTile(payload: any) {
   //    cache is bypassed: its rows are keyed to (index, month, area) with no
   //    date column, so a per-scene tile must never be served from the
   //    month-composite cache.
+  //
+  //    If that exact date has NO clean (cloud < 40%) optical scene, we do NOT
+  //    silently fall through to the month composite (that was the old bug).
+  //    Instead we honor the clicked date: try Sentinel-1 RVI centered on THAT
+  //    date (radar_scene_fallback), and if there's no radar pass nearby either,
+  //    return an honest "no data for this scene" (no_data_for_scene). This
+  //    matches the frontend store-patch that no longer nulls out sceneDate for
+  //    cloud-blocked observations.
   if (index !== "rvi" && payload.sceneDate) {
     const day = ee.Date(payload.sceneDate);
     const dayRaw = ee
@@ -388,7 +396,10 @@ async function actionGetIndexTile(payload: any) {
       .filterDate(day, day.advance(1, "day"))
       .sort("CLOUDY_PIXEL_PERCENTAGE");
     const dayCount = await evaluate(dayRaw.size());
-    if (dayCount > 0) {
+    const cleanCount = await evaluate(
+      dayRaw.filter(ee.Filter.lt("CLOUDY_PIXEL_PERCENTAGE", 40)).size(),
+    );
+    if (cleanCount > 0) {
       const scene = dayRaw.first();
       const img = applyIndex(scene.clip(geom), index, index.toUpperCase());
       const url = await getMapUrl(img, vis);
@@ -399,8 +410,48 @@ async function actionGetIndexTile(payload: any) {
         sceneDate: payload.sceneDate,
       };
     }
-    // No capture on that exact date (stale selection) — fall through to the
-    // normal month composite rather than erroring.
+
+    // No clean optical scene on that exact date (no capture, or the only
+    // same-day scenes are cloud-blocked). Try radar centered on THAT date so
+    // the clicked date stays meaningful. Capture the cloud % of the least
+    // cloudy optical scene (if any) so the UI can tell the user why optical
+    // was skipped.
+    let sceneCloudPct: number | null = null;
+    if (dayCount > 0) {
+      try {
+        sceneCloudPct = await evaluate(dayRaw.first().get("CLOUDY_PIXEL_PERCENTAGE"));
+      } catch (e) {
+        console.error("scene cloud% read failed:", e);
+      }
+    }
+    try {
+      const radar = await getRadarVegetationIndex(
+        geom,
+        day.advance(-15, "day"),
+        day.advance(15, "day"),
+      );
+      if (radar.count > 0 && radar.url) {
+        return {
+          mode: "radar_scene_fallback",
+          count: radar.count,
+          url: radar.url,
+          indexUsed: "RVI",
+          sceneDate: payload.sceneDate,
+          cloudPct: sceneCloudPct,
+        };
+      }
+    } catch (e) {
+      console.error("per-scene radar fallback failed:", e);
+    }
+
+    // No clean optical AND no radar pass near the clicked date — be honest.
+    return {
+      mode: "no_data_for_scene",
+      count: dayCount,
+      url: null,
+      sceneDate: payload.sceneDate,
+      cloudPct: sceneCloudPct,
+    };
   }
 
   // 1. Exact requested month, clean optical scenes — the ideal case.
