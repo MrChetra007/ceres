@@ -78,6 +78,29 @@
 .pill.cloud-blocked { background: rgba(125, 180, 255, 0.14); color: #8ab6ff; }
 .pill.radar-fallback { background: rgba(165, 100, 255, 0.16); color: #c39aff; }
 
+/* Cloud-resilience: "View Sentinel-1 RVI" escape hatch shown when optical is
+   blocked/no-data. Distinct from the passive radar pill — it's an action. */
+.rvi-offer-btn {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10.5px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 0.5px solid rgba(165, 100, 255, 0.5);
+  background: rgba(165, 100, 255, 0.12);
+  color: #cba0ff;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.rvi-offer-btn:hover {
+  background: rgba(165, 100, 255, 0.22);
+  border-color: rgba(165, 100, 255, 0.75);
+  color: #e0c6ff;
+}
+
 /* Info affordance inside a pill — the ⓘ that opens the radar explanation
    tooltip. Rendered inline so it reads as part of the pill. */
 .radar-info {

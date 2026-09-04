@@ -24,6 +24,7 @@ import { getCorsHeaders } from "../_shared/cors.ts";
 import { translateIndexValue } from "../_shared/indexTranslations.ts";
 import { healthScoreWeights, primaryIndexForStage, primaryIndexReasonKey, stageNameForDayCount, } from "../_shared/primaryIndex.ts";
 import { detectDiscrepancy } from "../_shared/discrepancy.ts";
+import { addCloudProbability, validPixelMask, validPixelFraction, } from "../_shared/cloudMask.ts";
 const EE_KEY = JSON.parse(Deno.env.get("EE_SERVICE_ACCOUNT_KEY") || "{}");
 // Service-role Supabase client for the closed-period caches (§0 of the
 // ee-cost-control directive). This function is already a trusted server
@@ -100,6 +101,43 @@ function applyIndex(img, index, name) {
     }
     return img.normalizedDifference(BANDS[index]).rename(name);
 }
+// ── Pixel-level optical composite builder (cloud-resilience core) ──────────
+// Turn a set of S2 scenes over a date window into ONE pixel-masked index
+// composite, with field-level validity stats and the ACTUAL window used.
+//
+// Each scene is cloud/shadow-masked at the pixel level (s2cloudless +
+// SCL + cloud-edge buffer, see _shared/cloudMask.ts) so cloudy pixels are NaN
+// and never colored. The robust median is then taken over VALID pixels only —
+// cloud pixels in one scene don't poison a clear pixel in another. Finally the
+// fraction of valid pixels over the geometry is measured for honest confidence.
+//
+// Returns null when no scene survives (no optical data at all for the window).
+function buildMaskedComposite(geom, start, end, index) {
+    const name = index.toUpperCase();
+    const raw = ee
+        .ImageCollection("COPERNICUS/S2_SR_HARMONIZED")
+        .filterBounds(geom)
+        .filterDate(start, end);
+    const withProb = addCloudProbability(raw, ee);
+    // Per scene: compute the index over the (unmasked) band, then updateMask to
+    // the valid-pixel mask so cloud/shadow/border pixels become NoData.
+    const maskedIndices = withProb.map((scene) => {
+        const idx = applyIndex(scene, index, name);
+        return idx.updateMask(validPixelMask(scene, ee));
+    });
+    const count = await evaluate(maskedIndices.size());
+    if (!count || count === 0) {
+        return Promise.resolve({ img: null, clearSceneCount: 0, validFraction: null, compositeStart: "", compositeEnd: "" });
+    }
+    const composite = maskedIndices.median().rename(name);
+    // Field-level valid fraction over the geometry (fraction of pixels carrying a
+    // non-NaN index value = pixel survived cloud/shadow mask AND has data).
+    const validFraction = await validPixelFraction(composite, name, geom, 10, ee, evaluate);
+    const iso = (d) => new Date(d.millis()).toISOString().slice(0, 10);
+    const compositeStart = iso(start);
+    const compositeEnd = iso(end);
+    return Promise.resolve({ img: composite, clearSceneCount: count, validFraction, compositeStart, compositeEnd });
+}
 function jsonResponse(body, status = 200, corsHeaders) {
     return new Response(JSON.stringify(body), {
         status,
@@ -155,11 +193,19 @@ function toEeGeometry(geojson) {
     return ee.Geometry(geometry);
 }
 function s2Collection(geom, start, end) {
-    return ee
+    // Scene-level cloud filter is a cheap pre-drop for almost-certain clouds; the
+    // real decision is per-pixel (s2cloudless + SCL + cloud-edge buffer) so a
+    // field that's clear under a nominally-cloudy scene still resolves. Each scene
+    // is index-agnostically masked only where it's safe to compute — the caller
+    // computes the index from the masked scene, and collection.median() combines
+    // ONLY the valid (non-masked) pixels.
+    const raw = ee
         .ImageCollection("COPERNICUS/S2_SR_HARMONIZED")
         .filterBounds(geom)
         .filterDate(start, end)
         .filter(ee.Filter.lt("CLOUDY_PIXEL_PERCENTAGE", 40));
+    const withProb = addCloudProbability(raw, ee);
+    return withProb.map((scene) => scene.updateMask(validPixelMask(scene, ee)));
 }
 function tsToISO(ts) {
     return ts == null ? null : new Date(ts).toISOString().slice(0, 10);
@@ -190,16 +236,17 @@ function tileIsClosed(year, month) {
 function tileCacheTtlMs(closed) {
     return closed ? 12 * 60 * 60 * 1000 : 20 * 60 * 1000;
 }
-async function readTileCache(index, year, month, geomHash, closed) {
+async function readTileCache(index, year, month, geomHash, mode, closed) {
     try {
         const before = Date.now() - tileCacheTtlMs(closed);
         const { data } = await supabase
             .from("ee_tile_cache")
-            .select("mode, url, count, index_used, cloud_pct, last_valid_date, computed_at")
+            .select("mode, url, count, index_used, cloud_pct, last_valid_date, clear_scene_count, valid_fraction, composite_start, composite_end, days_since_observation, computed_at")
             .eq("index", index)
             .eq("year", year)
             .eq("month", month)
             .eq("geometry_hash", geomHash)
+            .eq("mode", mode)
             .gt("computed_at", new Date(before).toISOString())
             .maybeSingle();
         if (!data)
@@ -211,6 +258,11 @@ async function readTileCache(index, year, month, geomHash, closed) {
             indexUsed: data.index_used || undefined,
             cloudPct: data.cloud_pct != null ? data.cloud_pct : undefined,
             lastValidDate: data.last_valid_date || undefined,
+            clearSceneCount: data.clear_scene_count != null ? data.clear_scene_count : undefined,
+            validFraction: data.valid_fraction != null ? data.valid_fraction : undefined,
+            compositeStart: data.composite_start || undefined,
+            compositeEnd: data.composite_end || undefined,
+            daysSinceObservation: data.days_since_observation != null ? data.days_since_observation : undefined,
         };
     }
     catch (e) {
@@ -222,7 +274,7 @@ async function writeTileCache(row) {
     try {
         const { error } = await supabase
             .from("ee_tile_cache")
-            .upsert(row, { onConflict: "index,year,month,geometry_hash" });
+            .upsert(row, { onConflict: "index,year,month,geometry_hash,mode" });
         if (error)
             console.error("[ee-data] ee_tile_cache upsert failed:", error);
     }
@@ -314,7 +366,11 @@ async function actionGetIndexTile(payload) {
     // are TTL'd, never permanent.
     const geomHash = geometryHash(payload.geometry);
     const closed = tileIsClosed(payload.year, payload.month);
-    const cached = await readTileCache(index, payload.year, payload.month, geomHash, closed);
+    // Mode-aware cache: the optical row is a distinct cache unit from any radar
+    // fallback row for the same index+month (cloud conditions change which source
+    // is valid). We look up the `optical` unit — an optical request must never be
+    // served a radar fallback's cached tile, and vice versa.
+    const cached = await readTileCache(index, payload.year, payload.month, geomHash, "optical", closed);
     if (cached)
         return cached;
     let result;
@@ -388,16 +444,23 @@ async function actionGetIndexTile(payload) {
             .filterDate(day, day.advance(1, "day"))
             .sort("CLOUDY_PIXEL_PERCENTAGE");
         const dayCount = await evaluate(dayRaw.size());
-        const cleanCount = await evaluate(dayRaw.filter(ee.Filter.lt("CLOUDY_PIXEL_PERCENTAGE", 40)).size());
-        if (cleanCount > 0) {
-            const scene = dayRaw.first();
-            const img = applyIndex(scene.clip(geom), index, index.toUpperCase());
+        // Scene-level pre-filter is non-binding: even a scene with high overall
+        // cloud may have clear pixels over THIS field, so the pixel-level mask
+        // decides. Use the masked single-day composite; only use it if it actually
+        // has valid pixels over the geometry.
+        const masked = await buildMaskedComposite(geom, day, day.advance(1, "day"), index);
+        if (masked.clearSceneCount > 0 && masked.img) {
+            const img = masked.img.clip(geom);
             const url = await getMapUrl(img, vis);
             return {
-                mode: "index",
+                mode: "optical",
                 count: dayCount,
                 url,
                 sceneDate: payload.sceneDate,
+                clearSceneCount: masked.clearSceneCount,
+                validFraction: masked.validFraction,
+                compositeStart: masked.compositeStart,
+                compositeEnd: masked.compositeEnd,
             };
         }
         // No clean optical scene on that exact date (no capture, or the only
@@ -439,17 +502,26 @@ async function actionGetIndexTile(payload) {
             cloudPct: sceneCloudPct,
         };
     }
-    // 1. Exact requested month, clean optical scenes — the ideal case.
-    const rawCollection = ee
-        .ImageCollection("COPERNICUS/S2_SR_HARMONIZED")
-        .filterBounds(geom)
-        .filterDate(start, end);
-    const cleanCollection = rawCollection.filter(ee.Filter.lt("CLOUDY_PIXEL_PERCENTAGE", 40));
-    const count = await evaluate(cleanCollection.size());
-    if (count > 0) {
-        const composite = applyIndex(cleanCollection.median().clip(geom), index, index.toUpperCase());
+    // 1. Exact requested month, pixel-masked clean optical scenes — the ideal
+    //    case. Each scene is cloud/shadow-masked per-pixel (s2cloudless + SCL +
+    //    cloud-edge buffer, see _shared/cloudMask.ts), so only valid surface
+    //    pixels compose the median and no cloud pixel is ever colored. The
+    //    metadata (clearSceneCount, validFraction, actual window) is returned so
+    //    the UI can label confidence honestly.
+    const masked = await buildMaskedComposite(geom, start, end, index);
+    const clearSceneCount = masked.clearSceneCount;
+    if (clearSceneCount > 0 && masked.img) {
+        const composite = masked.img.clip(geom);
         const url = await getMapUrl(composite, vis);
-        result = { mode: "index", count, url };
+        result = {
+            mode: "optical",
+            count: clearSceneCount,
+            url,
+            clearSceneCount,
+            validFraction: masked.validFraction,
+            compositeStart: masked.compositeStart,
+            compositeEnd: masked.compositeEnd,
+        };
         await writeTileCache({
             index,
             year: payload.year,
@@ -458,6 +530,10 @@ async function actionGetIndexTile(payload) {
             mode: result.mode,
             url: result.url,
             count: result.count ?? 0,
+            clear_scene_count: clearSceneCount,
+            valid_fraction: masked.validFraction,
+            composite_start: masked.compositeStart,
+            composite_end: masked.compositeEnd,
             index_used: null,
             is_closed_period: closed,
         });
@@ -970,24 +1046,20 @@ async function actionGetFieldStatus(payload) {
         // when a clean optical scene exists.
         const forceRadar = !!payload.forceRadar;
         if (!forceRadar) {
-            const dayRaw = ee
-                .ImageCollection("COPERNICUS/S2_SR_HARMONIZED")
-                .filterBounds(geom)
-                .filterDate(day, day.advance(1, "day"))
-                .sort("CLOUDY_PIXEL_PERCENTAGE");
-            const clean = dayRaw.filter(ee.Filter.lt("CLOUDY_PIXEL_PERCENTAGE", 40));
-            const cleanCount = await evaluate(clean.size());
-            if (cleanCount > 0) {
-                const scene = clean.first();
-                const ndvi = scene.normalizedDifference(["B8", "B4"]).rename("ndvi");
-                const result = await evaluate(ndvi.reduceRegion({
+            // Pixel-level mask decides optically valid coverage over THIS field; the
+            // single-day composite is used only if it has valid pixels over the geom.
+            const masked = await buildMaskedComposite(geom, day, day.advance(1, "day"), "ndvi");
+            if (masked.clearSceneCount > 0 && masked.img) {
+                const result = await evaluate(masked.img.reduceRegion({
                     reducer: ee.Reducer.mean(),
                     geometry: geom,
                     scale: 10,
                     maxPixels: 1e9,
                 }));
-                const value = result && result.ndvi != null ? result.ndvi : null;
+                const name = "ndvi".toUpperCase();
+                const value = result && result[name] != null ? result[name] : null;
                 if (value != null) {
+                    const daysSince = Math.round((Date.now() - new Date(sceneDate).getTime()) / 86400000);
                     return {
                         mode: "optical",
                         ndviValue: value,
@@ -996,6 +1068,12 @@ async function actionGetFieldStatus(payload) {
                         stage: stageNameAsOf(sceneDate, payload.plantingDate ?? null),
                         confidence: "high",
                         windowDays: 0,
+                        clearSceneCount: masked.clearSceneCount,
+                        validFraction: masked.validFraction,
+                        compositeStart: masked.compositeStart,
+                        compositeEnd: masked.compositeEnd,
+                        observationDate: sceneDate,
+                        daysSinceObservation: daysSince,
                     };
                 }
             }
