@@ -26,7 +26,7 @@ export const LSWI_VIS = { min: -0.3, max: 0.6, palette: ['tan', 'lightblue', 'da
 export const SAVI_VIS = { min: 0, max: 1, palette: ['brown', 'yellow', 'green'] }
 export const EVI_VIS = { min: 0, max: 1, palette: ['red', 'orange', 'green'] }
 export const GNDVI_VIS = { min: -0.2, max: 0.8, palette: ['red', 'purple', 'green'] }
-export const RVI_VIS = { min: 0, max: 1, palette: ['blue', 'white', 'green'] }
+export const RVI_VIS = { min: 0, max: 2, palette: ['blue', 'white', 'green'] }
 
 // True Color photo mode — real Sentinel-2 RGB (B4·B3·B2), not an index.
 // Deliberately NOT in INDICES: the trend functions normalizeDifference() over
@@ -106,8 +106,10 @@ export const INDICES = {
 
 // Health Zone Breakdown — 10 pixel buckets per band family. NDVI spans -1..1
 // (first bucket covers everything from -1 to 0.1); RVI (Sentinel-1 radar
-// fallback) is a 0..1 ratio, so its buckets start at 0. Both arrays share the
-// { lo, hi } shape consumed by getZoneBreakdown() in earthEngine.js.
+// fallback) spans 0..2 (its formula is 4*VH/(VV+VH), realistically valued up to
+// ~2), so its 10 buckets are 0.2 wide. Both arrays share the { lo, hi } shape
+// consumed by getZoneBreakdown() in earthEngine.js and must stay in sync with
+// ee-data's zoneBuckets().
 export const NDVI_ZONE_BUCKETS = (() => {
   const arr = [{ lo: -1.0, hi: 0.1 }]
   for (let i = 1; i < 10; i++) arr.push({ lo: i * 0.1, hi: (i + 1) * 0.1 })
@@ -115,8 +117,10 @@ export const NDVI_ZONE_BUCKETS = (() => {
 })()
 
 export const RVI_ZONE_BUCKETS = (() => {
+  const max = RVI_VIS.max
+  const step = max / 10
   const arr = []
-  for (let i = 0; i < 10; i++) arr.push({ lo: i * 0.1, hi: (i + 1) * 0.1 })
+  for (let i = 0; i < 10; i++) arr.push({ lo: i * step, hi: (i + 1) * step })
   return arr
 })()
 

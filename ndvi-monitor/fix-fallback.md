@@ -1,126 +1,114 @@
-Found it. This confirms my suspicion exactly — and it's a third, independent fallback path, completely disconnected from both fixes we've made so far.
+Task: Make the RVI tab scene-aware — clicking a specific Browse Observations date while on RVI should show that exact date's radar reading (±15-day window centered on it), not always the same month-level composite. Also fix the hero value to compute a real RVI number instead of silently reusing the optical NDVI reading.
 
-Root cause: activeObservation (and therefore heroValue, stageText, displayedSceneDate, isObsFallback, obsFallbackNote) is built entirely from store.resolveActiveObservation(state.chartData, ...). And state.chartData is populated by ee.getIndexTimeSeries/getFieldBundle's chartTrend — which is an optical-only series, server-side filtered to CLOUDY_PIXEL_PERCENTAGE < 40. A 97%-cloud date like Aug 17 was never capable of appearing in that series at all. So:
+Root cause confirmed: In ee-data's actionGetIndexTile, the per-scene branch explicitly excludes RVI:
 
-js
-if (selectedObservationDate) {
-const s = within.find((x) => x.date === selectedObservationDate) // Aug 17 never in here
-if (s && s.value != null) return {...}
+ts
+if (index !== "rvi" && payload.sceneDate) { ... }
+
+and the index === "rvi" branch always computes over the scrubbed month window and writes to the month-keyed tile cache — so every date clicked within the same month returns the identical cached tile. Separately, the sidebar hero value for the RVI tab is still being sourced from the optical activeObservation/chartData pipeline (built for NDVI), which is why it shows a number matching the NDVI reading for that date rather than an actual RVI value.
+
+Backend: supabase/functions/ee-data/index.ts
+
+1. Add a per-scene RVI branch to actionGetIndexTile. Move the RVI cache-serving block to after a new scene-date check, mirroring the existing optical per-scene branch's structure but always using radar (no "try optical first" — RVI tab means radar is the explicit ask):
+
+ts
+// Per-scene RVI: user clicked a specific date while on the RVI tab. Center a
+// ±15-day radar window on THAT exact date instead of the scrubbed month, and
+// bypass the month-level tile cache entirely (same reasoning as the optical
+// per-scene branch — a per-scene request must never resolve to month-cached
+// data for a different date).
+if (index === "rvi" && payload.sceneDate) {
+const day = ee.Date(payload.sceneDate);
+const radar = await getRadarVegetationIndex(
+geom,
+day.advance(-SCENE_RADAR_WINDOW_DAYS, "day"),
+day.advance(SCENE_RADAR_WINDOW_DAYS, "day"),
+);
+if (radar.count > 0 && radar.url) {
+return {
+mode: "radar_index",
+count: radar.count,
+url: radar.url,
+indexUsed: "RVI",
+sceneDate: payload.sceneDate,
+};
 }
-const lowest = pickLowestCloud(within) // <- falls back to Aug 12 within the same month
-
-This code has zero awareness of RVI or the backend's per-scene radar fallback. It doesn't matter that ee-data now correctly returns Sentinel-1 radar for Aug 17 and the map tile renders it — the sidebar hero card, growth-stage box, and confidence badge are all sourced from a completely different, optical-only pipeline that was never touched by either fix so far. That's exactly the message you're seeing: "No valid scene for Aug 17 (97% cloud) — showing reading from Aug 12" is obsFallbackNote, built from isObsFallback, built from displayedSceneDate = Aug 12 (from resolveActiveObservation's within-month optical fallback).
-
-To fix this properly, the sidebar needs its own scene-anchored data source — the actionGetFieldStatus (with sceneDate) we already added server-side, which tries clean optical → RVI → honest no-data, exactly like the tile does. Right now nothing on the frontend calls it.
-
-Here's the plan, concretely:
-
-1. Add a wrapper in earthEngine.js:
-
-js
-export function getFieldStatus(geometry, plantingDate, sceneDate, cb) {
-callEE('getFieldStatus', { geometry, plantingDate: plantingDate || null, sceneDate: sceneDate || null })
-.then((body) => cb(body))
-.catch((err) => { fail(err); cb(null) })
-}
-
-2. In store.js, add reactive state + a fetch that fires whenever a cloud-blocked observation is selected (i.e. when resolveActiveObservation would otherwise fall back):
-
-js
-// new state field
-selectedSceneStatus: null, // { mode, ndviValue, rviValue, status, stage } for the pinned sceneDate, or null
-
-export function fetchSelectedSceneStatus() {
-const field = state.fields.find((f) => f.id === state.currentFieldId)
-const sceneDate = state.selectedObservationDate
-if (!field || !sceneDate || !state.eeReady) { state.selectedSceneStatus = null; return }
-const geom = field.geojson && (field.geojson.geometry || field.geojson)
-if (!geom || !geom.coordinates) return
-ee.getFieldStatus(polygonGeometry(geom.coordinates), field.plantingDate, sceneDate, (res) => {
-state.selectedSceneStatus = res
-})
+return { mode: "no_data", count: 0, url: null, sceneDate: payload.sceneDate };
 }
 
-Call this from jumpToObservationDate (right alongside setting state.selectedObservationDate = dateStr).
+Place this before the existing if (index === "rvi") { ... } month-level block, so a scene-dated request never falls through to it or touches readTileCache/writeTileCache.
 
-3. In FieldDetailPanel.vue, activeObservation needs to check state.selectedSceneStatus first, before falling back to resolveActiveObservation:
+2. Add a scalar RVI hero-value fetch, forced (not fallback-only). The existing computeSceneStatus (used by getFieldStatus) only computes RVI as a fallback when optical is unavailable for that date — it won't fire when a clean optical scene exists, which is wrong for the RVI tab (we want RVI regardless of whether optical would have worked). Add a forceMode param:
 
-js
-const activeObservation = computed(() => {
-const s = state.selectedSceneStatus
-if (s && state.selectedObservationDate) {
-if (s.mode === 'optical') return { value: s.ndviValue, date: state.selectedObservationDate }
-if (s.mode === 'radar') return { value: s.rviValue, date: state.selectedObservationDate, isRadar: true }
-if (s.mode === 'no_data') return null // let the no-data UI show, not a silently substituted date
+ts
+// Same as computeSceneStatus, but when forceMode === 'radar', skips the
+// optical-clean-scene check entirely and always computes RVI for the exact
+// date — used by the direct RVI tab, where radar is the explicit ask, not a
+// fallback for missing optical data.
+async function computeSceneStatus(
+geom: any,
+sceneDateISO: string,
+forceMode?: "radar",
+): Promise<{ mode: "optical" | "radar" | "no_data"; ndviValue: number | null; rviValue: number | null }> {
+const day = ee.Date(sceneDateISO);
+
+if (forceMode !== "radar") {
+const cleanDay = s2Collection(geom, day, day.advance(1, "day"));
+const cleanCount = await evaluate(cleanDay.size());
+if (cleanCount > 0) {
+const img = cleanDay.median().normalizedDifference(["B8", "B4"]);
+const result = await evaluate(
+img.reduceRegion({ reducer: ee.Reducer.mean(), geometry: geom, scale: 10, maxPixels: 1e9 }),
+);
+return { mode: "optical", ndviValue: result?.nd ?? null, rviValue: null };
 }
-const obs = store.resolveActiveObservation(state.chartData, state.mainMonth, state.selectedObservationDate)
-return obs ? { value: obs.value, date: obs.date } : null
-})
+}
 
-This is a bigger change than the previous two — it needs a new hero-display treatment for isRadar: true (RVI values aren't on NDVI's 0–1 healthy/stressed scale, so statusTone/statusText/buildStatusObject shouldn't try to grade it as NDVI), and obsFallbackNote should stop firing once a real radar reading exists for that date.
+const radar = await reduceRviMean(
+geom,
+day.advance(-SCENE_RADAR_WINDOW_DAYS, "day"),
+day.advance(SCENE_RADAR_WINDOW_DAYS, "day"),
+);
+if (radar.count > 0 && radar.value != null) {
+return { mode: "radar", ndviValue: null, rviValue: radar.value };
+}
+return { mode: "no_data", ndviValue: null, rviValue: null };
+}
 
-Given the size of this, do you want me to write out the complete patch for all three files (earthEngine.js, store.js, FieldDetailPanel.vue) in one pass, or tackle it one file at a time so you can test incrementally?
+3. Thread forceMode through actionGetFieldStatus. Add an optional payload.forceRadar that maps to "radar":
 
-how about you give me a clear prompt where to fix what code to replace... get it?
+ts
+if (payload.sceneDate) {
+const scene = await computeSceneStatus(geom, payload.sceneDate, payload.forceRadar ? "radar" : undefined);
+...
+}
+Frontend: src/services/earthEngine.js
 
-Here's a copy-paste-ready prompt for your AI, with exact locations and before/after code for all three files.
-
-Task: Wire the sidebar (hero NDVI, growth stage, confidence badge) to the scene-anchored getFieldStatus backend action, so a cloud-blocked observation date shows its real Sentinel-1 RVI reading instead of silently falling back to a different date's optical reading.
-
-Context: The map tile already correctly renders RVI for a cloud-blocked clicked date (via sceneDate threading into ee-data's getIndexTile). The sidebar does NOT — it derives activeObservation purely from state.chartData, an optical-only series that never contains cloud-blocked dates, so resolveActiveObservation() silently substitutes the nearest clear date within the same month. The backend action getFieldStatus already supports a sceneDate param that tries clean optical → Sentinel-1 RVI → honest no-data for that exact date — nothing on the frontend calls it yet.
-
-File 1: src/services/earthEngine.js
-
-Add this new export (anywhere near the other getX wrappers, e.g. after getRecentIndexValue):
+Update getFieldStatus to accept and forward a forceRadar flag:
 
 js
-// Scene-anchored field status — tries a clean optical scene on the exact
-// sceneDate, then Sentinel-1 RVI centered on that date, then an honest
-// no-data result. Used by FieldDetailPanel to make the sidebar (hero value,
-// growth stage, confidence) follow the exact clicked observation date instead
-// of silently falling back to a different date's optical reading.
-export function getFieldStatus(geometry, plantingDate, sceneDate, cb) {
+export function getFieldStatus(geometry, plantingDate, sceneDate, cb, forceRadar) {
 callEE('getFieldStatus', {
 geometry,
 plantingDate: plantingDate || null,
 sceneDate: sceneDate || null,
+forceRadar: !!forceRadar,
 })
 .then((body) => cb(body))
-.catch((err) => {
-fail(err)
-cb(null)
-})
+.catch((err) => { fail(err); cb(null) })
 }
-File 2: src/store.js
+Frontend: src/store.js
 
-2a. Add new state field. Find this block:
-
-js
-selectedObservationDate: null,
-// The actual observation date currently rendered in the sidebar reading/growth stage.
-// When a cloud-blocked or no-data scene is selected, this points to the fallback scene.
-displayedObservationDate: null,
-
-Replace with:
+1. Stop excluding RVI from sceneDate. Find (in loadIndexForMonth):
 
 js
-selectedObservationDate: null,
-// The actual observation date currently rendered in the sidebar reading/growth stage.
-// When a cloud-blocked or no-data scene is selected, this points to the fallback scene.
-displayedObservationDate: null,
-// Scene-anchored status for the currently pinned selectedObservationDate,
-// from ee-data getFieldStatus (mode: 'optical' | 'radar' | 'no_data' | null).
-// Populated by fetchSelectedSceneStatus(); null when no observation is pinned.
-selectedSceneStatus: null,
+const sceneDate = state.currentIndex !== 'truecolor' ? state.selectedObservationDate : null
 
-2b. Add the fetch function. Place it right after jumpToObservationDate (find that function, add this immediately below its closing }):
+This already works for RVI too (only truecolor is excluded) — confirm ee.loadIndexTile(m, state.currentIndex, geom, cb, sceneDate) is passing it through unconditionally. If there's any earlier RVI-specific guard stripping sceneDate, remove it.
+
+2. Update fetchSelectedSceneStatus to force radar mode on the RVI tab:
 
 js
-// Fetches the scene-anchored status (optical clean scene / Sentinel-1 RVI /
-// honest no-data) for state.selectedObservationDate, via ee-data getFieldStatus.
-// This is what lets the sidebar show a real RVI reading for a cloud-blocked
-// clicked date instead of silently substituting a different date's optical
-// value (which is all state.chartData / resolveActiveObservation can do).
 export function fetchSelectedSceneStatus() {
 const sceneDate = state.selectedObservationDate
 if (!sceneDate || !state.eeReady || state.currentIndex === 'truecolor') {
@@ -133,164 +121,24 @@ const geom = field.geojson && (field.geojson.geometry || field.geojson)
 if (!geom || !geom.coordinates) { state.selectedSceneStatus = null; return }
 const geometry = polygonGeometry(geom.coordinates)
 const req = ++selectedSceneStatusReq
+const forceRadar = state.currentIndex === 'rvi'
 ee.getFieldStatus(geometry, field.plantingDate || null, sceneDate, (res) => {
-if (req !== selectedSceneStatusReq) return // stale response — a newer click superseded this one
+if (req !== selectedSceneStatusReq) return
 state.selectedSceneStatus = res
-})
+}, forceRadar)
 }
 
-Add the request-guard counter near the other module-level let counters (e.g. next to let cloudToastShown = false):
+3. Re-fetch on tab switch too, not just date change. Currently fetchSelectedSceneStatus is only called from jumpToObservationDate. Add a watch/call in setIndex(index) so switching from NDVI→RVI while a date is already pinned refreshes the hero value:
 
 js
-let selectedSceneStatusReq = 0
+export function setIndex(index) {
+const wasRvi = state.currentIndex === 'rvi'
+state.currentIndex = index
+loadIndexForMonth(state.mainMonth, currentGeometry.value)
+if (state.compareMode) loadIndexForMonthRight(state.rightMonth)
+if (state.selectedObservationDate) fetchSelectedSceneStatus() // <-- add this
+if (index === 'truecolor') return
+...
+Frontend: src/components/FieldDetailPanel.vue
 
-2c. Call it whenever the pinned date changes. Find jumpToObservationDate:
-
-js
-export function jumpToObservationDate(dateStr) {
-const d = new Date(dateStr)
-if (isNaN(d.getTime())) return
-const target = MONTHS.findIndex((m) => m.year === d.getFullYear() && m.month === d.getMonth() + 1)
-if (target < 0) return
-state.mainMonth = target
-state.selectedObservationDate = dateStr
-if (state.currentIndex === 'truecolor') state.trueColorDate = dateStr
-loadIndexForMonth(target, currentGeometry.value)
-}
-
-Replace with:
-
-js
-export function jumpToObservationDate(dateStr) {
-const d = new Date(dateStr)
-if (isNaN(d.getTime())) return
-const target = MONTHS.findIndex((m) => m.year === d.getFullYear() && m.month === d.getMonth() + 1)
-if (target < 0) return
-state.mainMonth = target
-state.selectedObservationDate = dateStr
-if (state.currentIndex === 'truecolor') state.trueColorDate = dateStr
-loadIndexForMonth(target, currentGeometry.value)
-fetchSelectedSceneStatus()
-}
-
-2d. Clear it when selection is cleared. Find loadField(field) — right after this line:
-
-js
-state.selectedObservationDate = null
-state.displayedObservationDate = null
-
-add:
-
-js
-state.selectedSceneStatus = null
-
-Also find clearFieldSelection() — right after:
-
-js
-state.selectedObservationDate = null
-state.displayedObservationDate = null
-
-add the same line:
-
-js
-state.selectedSceneStatus = null
-File 3: src/components/FieldDetailPanel.vue
-
-3a. Make activeObservation check selectedSceneStatus first. Find:
-
-js
-const activeObservation = computed(() => {
-const obs = store.resolveActiveObservation(state.chartData, state.mainMonth, state.selectedObservationDate)
-return obs ? { value: obs.value, date: obs.date } : null
-})
-
-Replace with:
-
-js
-const activeObservation = computed(() => {
-// Scene-anchored status takes priority when a specific date is pinned: it
-// tried clean optical → Sentinel-1 RVI → honest no-data for THAT exact
-// date, unlike resolveActiveObservation which can only read the optical
-// trend series and silently substitutes a different (clear) date when the
-// pinned one is cloud-blocked.
-const s = state.selectedSceneStatus
-if (s && state.selectedObservationDate) {
-if (s.mode === 'optical' && s.ndviValue != null) {
-return { value: s.ndviValue, date: state.selectedObservationDate, isRadar: false }
-}
-if (s.mode === 'radar' && s.rviValue != null) {
-return { value: s.rviValue, date: state.selectedObservationDate, isRadar: true }
-}
-if (s.mode === 'no_data') {
-return null // honest no-data — do NOT fall through to a different date
-}
-}
-const obs = store.resolveActiveObservation(state.chartData, state.mainMonth, state.selectedObservationDate)
-return obs ? { value: obs.value, date: obs.date, isRadar: false } : null
-})
-
-3b. Stop the stale "fallback to a different date" note from firing when a real radar reading exists. Find:
-
-js
-const isObsFallback = computed(() => {
-if (!state.selectedObservationDate || state.currentIndex === 'truecolor') return false
-const displayed = displayedSceneDate.value
-return !!displayed && displayed !== state.selectedObservationDate
-})
-
-Replace with:
-
-js
-const isObsFallback = computed(() => {
-if (!state.selectedObservationDate || state.currentIndex === 'truecolor') return false
-// A resolved radar (or optical) reading for the exact pinned date is not a
-// fallback — only resolveActiveObservation's cross-date substitution is.
-const s = state.selectedSceneStatus
-if (s && (s.mode === 'radar' || s.mode === 'optical')) return false
-const displayed = displayedSceneDate.value
-return !!displayed && displayed !== state.selectedObservationDate
-})
-
-3c. Add a "showing radar" note for the radar case (distinct from the existing obsFallbackNote, since this isn't a fallback to a different date — it's a legitimate reading of the exact date via a different sensor). Add this computed near obsFallbackNote:
-
-js
-const radarSceneNote = computed(() => {
-const s = state.selectedSceneStatus
-if (!s || s.mode !== 'radar' || !state.selectedObservationDate) return ''
-const obs = selectedObsRow.value
-const cloudStr = obs && obs.cloudCover != null
-? (state.preferredLanguage === 'km' ? 'ពពក ' + toKhmerDigits(Math.round(obs.cloudCover)) + '%' : Math.round(obs.cloudCover) + '% cloud')
-: (state.preferredLanguage === 'km' ? 'បាំងដោយពពក' : 'cloud-covered')
-const selFmt = formatDate(state.selectedObservationDate, state.preferredLanguage)
-// Reuses field.obs_fallback_same_month's shape but swaps the meaning —
-// add a dedicated i18n key (field.obs_radar_scene) if you want distinct
-// wording; falling back to English here is safe in the meantime.
-return selFmt + ' — ' + cloudStr + ', showing Sentinel-1 radar (RVI)'
-})
-
-3d. Render it in the template. Find:
-
-html
-<p v-if="obsFallbackNote" class="hero-stale-note obs-fallback-note">
-<i class="ti ti-info-circle"></i>
-<span>{{ obsFallbackNote }}</span>
-</p>
-<p v-else-if="showHeroStaleNote" class="hero-stale-note">{{ t('field.last_clear_reading', { date: heroLastClearDate }) }}</p>
-
-Replace with:
-
-html
-<p v-if="radarSceneNote" class="hero-stale-note radar-scene-note">
-<i class="ti ti-satellite"></i>
-<span>{{ radarSceneNote }}</span>
-</p>
-<p v-else-if="obsFallbackNote" class="hero-stale-note obs-fallback-note">
-<i class="ti ti-info-circle"></i>
-<span>{{ obsFallbackNote }}</span>
-</p>
-<p v-else-if="showHeroStaleNote" class="hero-stale-note">{{ t('field.last_clear_reading', { date: heroLastClearDate }) }}</p>
-
-3e. Watch selectedObservationDate so switching fields/re-clicking refreshes it. Add near the other watch(...) calls at the bottom:
-
-js
-watch(() => state.selectedObservationDate, () => { if (isField.value) store.fetchSelectedSceneStatus() }
+The existing activeObservation logic from the previous fix should already handle this correctly once selectedSceneStatus.mode === 'radar' is populated for the RVI tab too — verify no additional gating is needed, since that computed already branches on s.mode === 'radar' regardless of which tab triggered it.

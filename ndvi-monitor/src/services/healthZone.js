@@ -1,8 +1,15 @@
-import { ZONE_SCALE, FLAT_THRESHOLDS, STAGE_DEFICIT_BAD, MONTHS } from '../config'
+import { ZONE_SCALE, FLAT_THRESHOLDS, STAGE_DEFICIT_BAD, MONTHS, RVI_VIS } from '../config'
 import { getGrowthStage } from '../store'
 
 export function clamp01(v) {
   return Math.max(0, Math.min(1, v))
+}
+
+// Max of the band family's value scale (RAW values range 0..1 for optical, but
+// RVI is 0..2 — its formula 4*VH/(VV+VH) is bounded 0..4 and reads ~2 at dense
+// canopy). Color ramps and swatches must normalize by this before lookup.
+export function viewMax(view) {
+  return view === 'rvi' ? RVI_VIS.max : 1
 }
 
 // 0.0, 0.1, ... 1.0 — the tick positions drawn under the Analysis-Scale bar.
@@ -40,6 +47,8 @@ function rgbStr(c) { return 'rgb(' + c[0] + ',' + c[1] + ',' + c[2] + ')' }
 
 export function rampColor(view, value) {
   const stops = view === 'rvi' ? RVI_STOPS : NDVI_STOPS
+  // `value` is a normalized 0..1 FRACTION on the ramp (callers that hold RAW
+  // values — see bucketSwatchColor — normalize by viewMax before calling).
   const v = clamp01(value)
   if (v <= stops[0].pos) return rgbStr(stops[0].rgb)
   for (let i = 1; i < stops.length; i++) {
@@ -53,7 +62,10 @@ export function rampColor(view, value) {
 }
 
 export function bucketSwatchColor(bucket, view) {
-  return rampColor(view, (bucket.lo + bucket.hi) / 2)
+  // Bucket lo/hi are RAW values; RVI raw values (bounded 0..2, not 0..1) must
+  // be normalized onto the ramp's 0..1 fraction or every bucket above RVI 1.0
+  // would clamp to solid green. viewMax is 1 for optical (no-op).
+  return rampColor(view, (bucket.lo + bucket.hi) / 2 / viewMax(view))
 }
 
 // Good/Medium/Bad boundaries for the current view. NDVI with a planting date

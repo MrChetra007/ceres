@@ -114,7 +114,11 @@ bands:
 - **`INDICES`** — the 8 modes: `ndvi/ndwi/lswi/savi/evi/gndvi/rvi` (+ separate
   truecolor). Each has `name, bands, vis, label, color, full/fullKhm, explain/explainKhm`.
 - **Zone buckets** — `NDVI_ZONE_BUCKETS` and `RVI_ZONE_BUCKETS` (10 pixel ranges),
-  `ZONE_SCALE`, `FLAT_THRESHOLDS`, `STAGE_DEFICIT_BAD`.
+  `ZONE_SCALE`, `FLAT_THRESHOLDS`, `STAGE_DEFICIT_BAD`. **RVI buckets span 0–2**
+  (not 0–1): `RVI = 4·VH/(VV+VH)` is bounded [0, 4] and reads ~2 at dense canopy,
+  so `RVI_VIS = {min:0, max:2}` and `RVI_ZONE_BUCKETS` divide 0–2 into ten 0.2-wide
+  buckets. `RVI_VIS` must stay in sync with `ee-data`'s `VIS.rvi` (legend/marker,
+  chart y-axis, and the server tile all derive from these).
 - **`MONTHS` / `buildMonths()`** — rolling 14-month window (current month back 13).
 - **`RICE_GROWTH_STAGES`** — the 6-stage rice phenology table (maxDay → stage + min/max NDVI).
 - **`EVENTS` / `EVENT_COLORS`** — hand-placed flood/drought markers.
@@ -153,6 +157,10 @@ bands:
 - `latestView` + `latestViewLoading`
 - `trueColorDate` / `trueColorDateRight`, `trueColorScenes` / `...Right`
 - `selectedObservationDate`, `displayedObservationDate`
+- `selectedSceneStatus` — server answer for the **exact** pinned observation date
+  (`{mode: 'optical'|'radar'|'no_data', ndviValue?, rviValue?, stage?, confidence?}`),
+  populated by `fetchSelectedSceneStatus()`; `null` when no scene is pinned or the
+  fetch hasn't resolved.
 
 **AOI / fields / presets**
 - `aoiCoords`, `aoiPolygon`, `aois[]`, `selectedAoiId`
@@ -221,6 +229,13 @@ bands:
 **Observations**
 - `fetchObservations()`, `resetObservations()`, `jumpToObservationDate(dateStr)`,
   `pickLowestCloud()`, `resolveActiveObservation()`
+- `fetchSelectedSceneStatus()` — Scene-anchored sidebar fix. `jumpToObservationDate`
+  calls it so the sidebar grades **that exact date** (clean optical → Sentinel-1
+  RVI → honest `no_data`) instead of `resolveActiveObservation`, which reads only
+  the optical `chartData` and silently re-anchors a cloud-blocked scene to a
+  different clear date. Guarded by a `selectedSceneStatusReq` counter so a newer
+  click clobbers a slow earlier response; cleared in `loadField`/`clearFieldSelection`.
+
 
 **Dry months / health zone**
 - `fetchDryMonths()`, `fetchHealthZone(force)`
@@ -312,6 +327,7 @@ EE actions (each maps to an `ee-data` server handler):
 | `getRecentIndexValue` | `getRecentIndexValue` | One-shot recent reading + cloudBlocked flag. |
 | `getFieldBundle` | `getFieldBundle` | ONE request combining tile + NDVI trend + chart trend + rainfall + benchmark. |
 | `getFieldHealthScore` | `getFieldHealthScore` | AIM composite 0-100 score. |
+| `getFieldStatus` | `getFieldStatus` | Scene-anchored status for the **exact** pinned date: `mode 'optical'` (clean scene + `ndviValue`) / `'radar'` (Sentinel-1 RVI within ±15d + `rviValue`) / `'no_data'`. Signature `getFieldStatus(geometry, plantingDate, sceneDate, cb)`. |
 | `getAllFieldStatuses` | `getAllFieldStatuses` | Recent status for ALL fields (1 batch). |
 | `getAllFieldTrends` | `getAllFieldTrends` | NDVI trend for ALL fields (1 batch). |
 | `getRainfallMm` | `getRainfall` | 21-day CHIRPS rainfall mm. |
@@ -414,6 +430,13 @@ functions (the app has no per-component state management layer beyond local
   AIM score card, hero card (value + status + confidence), growth-stage card,
   stress alert, Consult AI, trend chart, rainfall, weather forecast, metadata,
   photos. Drives most of the chart rendering and Consult AI calls.
+  - `activeObservation` checks `state.selectedSceneStatus` **first** for a pinned
+    date (optical → radar → honest no-data) before falling back to
+    `resolveActiveObservation(state.chartData, ...)`. Radar readings are never
+    graded as NDVI (`monthStatus` returns null on an optical tab) and always
+    labeled "RVI". A `radarSceneNote` ("showing Sentinel-1 radar (RVI) for this
+    exact date") replaces the cross-date fallback note when the server resolves a
+    radar mode, so `isObsFallback` stops firing for a real same-date radar read.
 - `ObservationsPanel.vue` — Day-strip of per-scene satellite passes (cloud icons,
   NDVI, status) that jumps the map to a date (`jumpToObservationDate`).
 
@@ -448,7 +471,7 @@ functions (the app has no per-component state management layer beyond local
   based on `state.preferredLanguage`, with `{var}` substitution; `useI18n()`
   returns `{ t, lang }` (a `t` function + computed `lang`).
 - `i18n/en.js` / `i18n/km.js` — dictionaries keyed by dotted strings
-  (e.g. `'field.rainfall'`, `'band.tip_ndvi'`). Both are 631 lines and must stay
+  (e.g. `'field.rainfall'`, `'band.tip_ndvi'`). Both are 632 lines and must stay
   key-aligned.
 - Language changes flow through `store.setLanguage()` → writes
   `profiles.preferred_language` in Supabase and updates `state.preferredLanguage`.
@@ -536,6 +559,15 @@ to `mapReg.ndviLayer`, updates `sceneCount`/`cloudBlock`/`radarFallback`, sets
 status text. The FieldDetailPanel's `activeObservation` computed re-reads
 `state.chartData` so the hero value/growth stage follow the new month.
 
+**Click a specific observation (fix-fallback):**
+`ObservationsPanel` → `store.jumpToObservationDate(dateStr)` → sets
+`mainMonth`/`selectedObservationDate` → calls `fetchSelectedSceneStatus()` (posts
+`getFieldStatus` with a `sceneDate` to `ee-data`) **and** `loadIndexForMonth`. The
+server answers `{mode}` for that exact date; `FieldDetailPanel.activeObservation`
+takes that over the optical `chartData`, so a 97%-cloud date now shows its real
+Sentinel-1 RVI reading (with a `radarSceneNote`) instead of silently falling back
+to a different clear date's optical value.
+
 **Select a field:**
 `Sidebar.onCardClick` → `store.loadFieldById` → `loadField(field)` → draws the
 GeoJSON on the map, sets `currentGeometry`, calls `ee.getFieldBundle` (one
@@ -567,6 +599,11 @@ POST to `CONSULT_AI_URL` with JWT → show explanation.
   them distinct.
 - **RVI (radar) data is never deduped by date** and never feeds the band-independent
   growth-stage anchor.
+- **RVI is 0–2, not 0–1.** `RVI = 4·VH/(VV+VH)` is bounded [0, 4] and dense canopy
+  reads ~1–2, so every RVI display surface must use `RVI_VIS.max` (2), not a
+  hardcoded 1: `chart.js` y-axis, `IndexLegend` marker, and the health-zone
+  swatches (`healthZone.viewMax`). Never grade an RVI value through NDVI's 0–1
+  healthy/stressed thresholds.
 - **The date-range (`?start=&end=`) scoping reuses the same month-index machinery.**
   `activeMonths()`/`sliderBounds()` are the canonical filters.
 - **Pending backend deploys** (from the roadmap) don't affect the frontend build:
@@ -736,7 +773,13 @@ service account, computes, and returns tile URLs / time-series / readings.
   anonymous callers are rejected by the gateway.
 - **Index/band config** mirrors the frontend `INDICES` in `config.js`: `BANDS`
   (which S2 bands per index), `VIS` (min/max/palette per index), `TRUE_COLOR_*`
-  for RGB, and `DRY_MONTH_THRESHOLD`.
+  for RGB, and `DRY_MONTH_THRESHOLD`. **`VIS.rvi = {min:0, max:2}`** (RVI is
+  4·VH/(VV+VH), bounded [0,4], ~2 at dense canopy) — used by the radar tile
+  (`getRadarVegetationIndex`) and `zoneBuckets('rvi')`, which divides 0→2 into ten
+  0.2 buckets so dense-canopy pixels no longer fall outside every bucket while
+  still counting toward `totalAreaSqm`. Must stay in sync with the frontend
+  `RVI_VIS`. RVI is **not** in `healthScoreWeights()`, so this range affects
+  visualization only (see §14.10).
 - **`applyIndex(img, index, name)`** is the single place index math lives
   (NDVI/NDWI/LSWI/GNDVI via `normalizedDifference`, SAVI/EVI via custom
   expressions). All actions that compute an index route through it.
@@ -767,7 +810,7 @@ service account, computes, and returns tile URLs / time-series / readings.
 | `getRviTimeSeries` | Radar Vegetation Index over time from Sentinel-1 (includes orbit direction). |
 | `detectPlantingDate` | Steepest dry→flooded LSWI jump over ~90 days to estimate planting date (never a guess). |
 | `getDryMonths` | CHIRPS monthly rainfall → which requested months are "dry" (< threshold). |
-| `getFieldStatus` | NDVI status using the shared growth-stage logic (14-day window first, widened to 90-day low-confidence). |
+| `getFieldStatus` | NDVI status using the shared growth-stage logic (14-day window first, widened to 90-day low-confidence). With a `sceneDate` param it becomes **scene-anchored**: answers the exact date with `mode 'optical'` (clean scene, `ndviValue`) / `'radar'` (Sentinel-1 RVI within ±15d, `rviValue`) / `'no_data'` (honest — no silent substitution). |
 | `getFieldHealthScore` | **AIM composite (0–100)** — growth-stage-appropriate index blend, each normalized to its own range, weighted average, plus the 4-band verdict and discrepancy (F4). Month-scoped to the scrubbed slider position. |
 | `getRecentIndexValue` | Latest ≤90-day clean reading with cloud-blocked flag + plain-language band. |
 | `getAllFieldStatuses` | Batched per-field statuses for the field list on login. Uses a **far-past sentinel image** trick to keep `first()` defined even for scene-less fields. |
@@ -924,3 +967,12 @@ The functions interact with tables/RPCs managed via SQL migrations (not in
   real ABA authorization and are gated only by the sandbox check.
 - **The RVI stress threshold (0.4) is a placeholder** until radar is calibrated
   against ground-truthed NDVI; new radar logic should keep this hedge explicit.
+- **RVI never feeds the AIM composite score.** `healthScoreWeights()` returns
+  only `{savi, lswi}` (early) or `{ndvi, lswi, evi}`, so `normalizeToUnitRange`
+  is never called with `"rvi"` and `detectDiscrepancy` never reads `raw.rvi`.
+  The RVI range (0–2) therefore only affects visualization (tile, zones, charts,
+  legend) — don't add RVI to scoring without calibrating it first.
+- **`getFieldStatus` with `sceneDate` is the sidebar's scene-anchored path** (see
+  §14.3). Keep its mode logic identical to `getIndexTile`'s per-scene branch
+  (clean optical → Sentinel-1 RVI ±15d → honest no_data) so the map tile and the
+  sidebar hero never disagree about a clicked date.

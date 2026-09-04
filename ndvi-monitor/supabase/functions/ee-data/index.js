@@ -55,6 +55,12 @@ const VIS = {
     savi: { min: 0, max: 1, palette: ["brown", "yellow", "green"] },
     evi: { min: 0, max: 1, palette: ["red", "orange", "green"] },
     gndvi: { min: -0.2, max: 0.8, palette: ["red", "purple", "green"] },
+    // RVI = 4*VH/(VV+VH) is mathematically bounded [0, 4]; VV>=VH for
+    // vegetated surfaces keeps realistic dense-canopy values below ~2. Must stay
+    // in sync with src/config.js RVI_VIS (legend, chart y-axis, ramp) so the
+    // server tile and the client display never drift. Note: RVI is deliberately
+    // NOT in healthScoreWeights(), so this range only affects visualization.
+    rvi: { min: 0, max: 2, palette: ["blue", "white", "green"] },
 };
 const TRUE_COLOR_BANDS = ["B4", "B3", "B2"];
 // Wide stretch so bright cloud-free areas of a rice scene don't clamp to a
@@ -244,11 +250,7 @@ async function getRadarVegetationIndex(geom, startDate, endDate) {
     const vvLinear = ee.Image(10).pow(composite.select("VV").divide(10));
     const vhLinear = ee.Image(10).pow(composite.select("VH").divide(10));
     const rvi = vhLinear.multiply(4).divide(vvLinear.add(vhLinear)).rename("RVI");
-    const url = await getMapUrl(rvi, {
-        min: 0,
-        max: 1,
-        palette: ["blue", "white", "green"],
-    });
+    const url = await getMapUrl(rvi, VIS.rvi);
     return { count, url };
 }
 // Numeric mean RVI over a date window for a geometry (the radar twin of
@@ -595,9 +597,15 @@ async function actionGetLatestTrueColor(payload) {
 // into 10 ranges, returning AREA per bucket in ONE batched reduceRegion.
 function zoneBuckets(kind) {
     if (kind === "rvi") {
+        // RVI spans 0..VIS.rvi.max (2); divide the FULL range into 10 equal buckets
+        // so dense-canopy values above the old 1.0 ceiling no longer fall outside
+        // every bucket (they previously vanished from per-bucket areaSqm while
+        // still counting toward totalAreaSqm, under-summing the percentages).
+        const max = VIS.rvi.max;
+        const step = max / 10;
         return Array.from({ length: 10 }, (_, i) => ({
-            lo: i * 0.1,
-            hi: (i + 1) * 0.1,
+            lo: i * step,
+            hi: (i + 1) * step,
         }));
     }
     const arr = [{ lo: -1.0, hi: 0.1 }];

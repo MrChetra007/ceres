@@ -162,8 +162,11 @@ export function buildChartConfig(ctx, data, index, large, getStageLabel, benchma
           },
         },
         y: {
+          // RVI (Sentinel-1 radar, 4*VH/(VV+VH)) is bounded 0..4 and reaches
+          // ~2 at dense canopy — give it its own ceiling (from vis.max) instead
+          // of the optical-series 0..1 cap that clipped every RVI value above 1.
           min: 0,
-          max: 1,
+          max: cfg.name === 'RVI' ? (cfg.vis ? cfg.vis.max : 2) : 1,
           ticks: { stepSize: 0.2, font: { size: tickFont }, color: '#555' },
           grid: { color: '#eeeeee' },
           title: {
