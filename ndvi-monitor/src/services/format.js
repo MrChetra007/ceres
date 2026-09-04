@@ -107,6 +107,7 @@ const CONF_REASONS = {
     estimatedDate: 'Planting date estimated from satellite data',
     radarBlocked: 'Radar view (RVI) — optical blocked by cloud',
     radarReal: 'Radar view (RVI) — real data from Sentinel-1',
+    partialCloud: 'Partial cloud over the field — only part of the pixels are clear',
   },
   km: {
     cloudBlocked: 'បាំងដោយពពក',
@@ -117,6 +118,7 @@ const CONF_REASONS = {
     estimatedDate: 'កាលបរិច្ឆេទដាំប៉ាន់ស្មានពីទិន្នន័យផ្កាយរណប',
     radarBlocked: 'ទិដ្ឋភាពរ៉ាដា (RVI) — អុបទិកបាំងដោយពពក',
     radarReal: 'ទិដ្ឋភាពរ៉ាដា (RVI) — ទិន្នន័យពិតពី Sentinel-1',
+    partialCloud: 'ពពកបាំងផ្នែកលើទ្វារ',
   },
 }
 

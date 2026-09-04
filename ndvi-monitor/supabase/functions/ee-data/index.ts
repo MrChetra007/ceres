@@ -131,7 +131,7 @@ function applyIndex(img: any, index: string, name: string) {
 // fraction of valid pixels over the geometry is measured for honest confidence.
 //
 // Returns null when no scene survives (no optical data at all for the window).
-function buildMaskedComposite(
+async function buildMaskedComposite(
   geom: any,
   start: any,
   end: any,

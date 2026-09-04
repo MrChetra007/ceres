@@ -1,0 +1,118 @@
+import { createClient } from "npm:@supabase/supabase-js@2";
+import { generateExplanation, languageLine } from "../_shared/llm.ts";
+import { getCorsHeaders } from "../_shared/cors.ts";
+const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
+const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+const DAILY_CAP = 20;
+const supabase = createClient(SUPABASE_URL, SERVICE_ROLE);
+function jsonResponse(body, status = 200, corsHeaders) {
+    return new Response(JSON.stringify(body), {
+        status,
+        headers: { "Content-Type": "application/json", ...corsHeaders },
+    });
+}
+Deno.serve(async (req) => {
+    const corsHeaders = getCorsHeaders(req);
+    if (req.method === "OPTIONS") {
+        return new Response("ok", { headers: corsHeaders });
+    }
+    try {
+        const authHeader = req.headers.get("Authorization") || "";
+        const { data: { user }, } = await supabase.auth.getUser(authHeader.replace("Bearer ", ""));
+        if (!user)
+            return jsonResponse({ ok: false, error: "Not signed in" }, 401, corsHeaders);
+        const { fieldId, ndviValue, lswiValue, rainfallMm, status, growthStage, dayCount, confidenceTier, confidenceReason, lang, 
+        // Cloud-resilience metadata: which sensor/reading the value came from, so
+        // the AI never describes a radar RVI as "NDVI" and never turns a
+        // no_data/cloud-blocked state into a confident stress diagnosis.
+        source, mode, observationAgeDays, reason, } = await req.json();
+        // The farmer's own profile language wins; fall back to what the client
+        // sent (Feature 1b — Khmer localization).
+        const { data: profile } = await supabase
+            .from("profiles")
+            .select("preferred_language")
+            .eq("id", user.id)
+            .maybeSingle();
+        const langOut = profile?.preferred_language || lang || "en";
+        // There's nothing meaningful to explain without NDVI.
+        if (ndviValue == null) {
+            return jsonResponse({ ok: false, error: "missing_data" }, 400, corsHeaders);
+        }
+        // 1. Check cache — only reuse if NDVI + status haven't moved
+        const { data: cached } = await supabase
+            .from("ai_explanations")
+            .select("explanation, ndvi_value, status, truncated")
+            .eq("field_id", fieldId)
+            .maybeSingle();
+        if (cached &&
+            Math.abs(cached.ndvi_value - ndviValue) < 0.02 &&
+            cached.status === status) {
+            return jsonResponse({
+                ok: true,
+                explanation: cached.explanation,
+                // Pre-migration rows have truncated = null; treat that as untruncated
+                // so old cached answers still render cleanly. New rows always have a
+                // real boolean written at cache time.
+                truncated: cached.truncated ?? false,
+                cached: true,
+            }, 200, corsHeaders);
+        }
+        // 2. Check + increment daily usage
+        const { data: usage } = await supabase
+            .from("ai_usage")
+            .select("calls_today")
+            .eq("user_id", user.id)
+            .maybeSingle();
+        const callsToday = usage?.calls_today ?? 0;
+        if (callsToday >= DAILY_CAP) {
+            return jsonResponse({ ok: false, error: "daily_limit_reached" }, 429, corsHeaders);
+        }
+        await supabase
+            .from("ai_usage")
+            .upsert({ user_id: user.id, calls_today: callsToday + 1 });
+        // 3. Generate the explanation (Gemini -> DeepSeek -> Qwen)
+        const langLine = languageLine(langOut);
+        const confidenceLine = confidenceTier === "low"
+            ? `Data confidence is LOW (${confidenceReason || "stale or cloud-covered data"}). Be explicit that the satellite data is stale or uncertain and you cannot confirm current field health — frame everything as best-effort with low certainty.`
+            : confidenceTier === "medium"
+                ? `Data confidence is MEDIUM (${confidenceReason || "limited cloud-free imagery"}). Hedge your advice — note the uncertainty and avoid over-confident statements.`
+                : "";
+        const prompt = `You are explaining satellite crop health data to a rice farmer in Battambang, Cambodia.
+Data source: ${source || "sentinel-2"}, mode: ${mode || "optical"}, ${ndviValue != null ? `NDVI ${ndviValue.toFixed(2)}` : `(no optical value — ${reason || "cloud blocked"})`}, LSWI (moisture) ${lswiValue?.toFixed(2) ?? "n/a"}, rainfall (21d) ${rainfallMm != null ? rainfallMm.toFixed(0) : "n/a"}mm, status: ${status}, growth stage: ${growthStage ?? "unknown"}, day ${dayCount ?? "?"} since planting, observation age: ${observationAgeDays != null ? observationAgeDays + " day(s)" : "unknown"}.
+${confidenceLine}
+${langLine}
+In 2-3 short sentences: describe what the numbers suggest, and name 1-2 possible causes as possibilities to check — never state a single cause as certain. End with one practical next step. Do not use technical jargon like "NDVI" or "LSWI" in the reply itself.
+CRITICAL source rule: if the reading is from radar (source "sentinel-1" / mode "radar"), it measures vegetation structurally and is NOT the same as NDVI — never call it "NDVI", never compare it to optical thresholds, frame it as a radar signal only. If the reading is no_data / cloud-blocked, say plainly that no reliable optical observation is available right now; do NOT guess or imply a stress diagnosis.`;
+        // If the model hits its output token ceiling (finish_reason "length" /
+        // "MAX_TOKENS") and trails off mid-sentence, retry the same provider with a
+        // hard-trimmed "keep it minimal" prompt. The user gets a complete short
+        // answer instead of a truncated one, and if it STILL gets cut we flag it so
+        // the UI can tell the user rather than silently showing a dangling sentence.
+        const concisePrompt = `Be EXTREMELY concise. In 1-2 short, simple sentences only: what the field's satellite data suggests and ONE practical next step.
+${confidenceLine === "" ? "" : `Remember: ${confidenceLine}`}
+${langLine}
+Keep the whole reply under 45 words. Do not mention "NDVI", "LSWI" or any index name.`;
+        const result = await generateExplanation(prompt, concisePrompt);
+        const explanation = result?.text ||
+            "Could not generate an explanation right now — please try again.";
+        const modelUsed = result?.model || "none";
+        const truncated = result?.truncated ?? false;
+        // Attribution + truncation audit trail. finish_reason is logged by llm.ts.
+        console.log("AI explanation served by:", modelUsed, "truncated:", truncated);
+        // 4. Cache it (model_used is for our own auditing only)
+        await supabase.from("ai_explanations").upsert({
+            field_id: fieldId,
+            ndvi_value: ndviValue,
+            status,
+            explanation,
+            model_used: modelUsed,
+            truncated,
+            created_at: new Date().toISOString(),
+        });
+        return jsonResponse({ ok: true, explanation, truncated, cached: false }, 200, corsHeaders);
+    }
+    catch (e) {
+        console.error(e);
+        return jsonResponse({ ok: false, error: String(e) }, 500, corsHeaders);
+    }
+});

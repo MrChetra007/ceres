@@ -39,6 +39,13 @@ Deno.serve(async (req) => {
       confidenceTier,
       confidenceReason,
       lang,
+      // Cloud-resilience metadata: which sensor/reading the value came from, so
+      // the AI never describes a radar RVI as "NDVI" and never turns a
+      // no_data/cloud-blocked state into a confident stress diagnosis.
+      source,
+      mode,
+      observationAgeDays,
+      reason,
     } = await req.json();
 
     // The farmer's own profile language wins; fall back to what the client
@@ -103,10 +110,11 @@ Deno.serve(async (req) => {
           : "";
 
     const prompt = `You are explaining satellite crop health data to a rice farmer in Battambang, Cambodia.
-Data: NDVI ${ndviValue.toFixed(2)}, LSWI (moisture) ${lswiValue?.toFixed(2) ?? "n/a"}, rainfall (21d) ${rainfallMm != null ? rainfallMm.toFixed(0) : "n/a"}mm, status: ${status}, growth stage: ${growthStage ?? "unknown"}, day ${dayCount ?? "?"} since planting.
+Data source: ${source || "sentinel-2"}, mode: ${mode || "optical"}, ${ndviValue != null ? `NDVI ${ndviValue.toFixed(2)}` : `(no optical value — ${reason || "cloud blocked"})`}, LSWI (moisture) ${lswiValue?.toFixed(2) ?? "n/a"}, rainfall (21d) ${rainfallMm != null ? rainfallMm.toFixed(0) : "n/a"}mm, status: ${status}, growth stage: ${growthStage ?? "unknown"}, day ${dayCount ?? "?"} since planting, observation age: ${observationAgeDays != null ? observationAgeDays + " day(s)" : "unknown"}.
 ${confidenceLine}
 ${langLine}
-In 2-3 short sentences: describe what the numbers suggest, and name 1-2 possible causes as possibilities to check — never state a single cause as certain. End with one practical next step. Do not use technical jargon like "NDVI" or "LSWI" in the reply itself.`;
+In 2-3 short sentences: describe what the numbers suggest, and name 1-2 possible causes as possibilities to check — never state a single cause as certain. End with one practical next step. Do not use technical jargon like "NDVI" or "LSWI" in the reply itself.
+CRITICAL source rule: if the reading is from radar (source "sentinel-1" / mode "radar"), it measures vegetation structurally and is NOT the same as NDVI — never call it "NDVI", never compare it to optical thresholds, frame it as a radar signal only. If the reading is no_data / cloud-blocked, say plainly that no reliable optical observation is available right now; do NOT guess or imply a stress diagnosis.`;
 
     // If the model hits its output token ceiling (finish_reason "length" /
     // "MAX_TOKENS") and trails off mid-sentence, retry the same provider with a
