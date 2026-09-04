@@ -87,6 +87,12 @@ export const state = reactive({
   // resolution that must stay band-independent (growth stage / day-since-
   // planting) keeps reading the SAME scene dates no matter which tab is active.
   ndviChartData: null,
+  // Server answer for the EXACT clicked observation date (sidebar fix-fallback):
+  //   null               -> no scene queried yet (cleared on field change/no pick)
+  //   { mode: 'optical', ndviValue, ... }   clean scene that date
+  //   { mode: 'radar',   rviValue, ... }    no clean optical, radar within ±15d
+  //   { mode: 'no_data' }                  neither (honest, no re-anchor)
+  selectedSceneStatus: null,
   chartIndex: 'ndvi',
   chartSubtitle: '\u2014',
   infoPanelVisible: false,
@@ -1465,8 +1471,39 @@ export function jumpToObservationDate(dateStr) {
   // one. True Color additionally uses it as the exact scene to render.
   state.selectedObservationDate = dateStr
   if (state.currentIndex === 'truecolor') state.trueColorDate = dateStr
+  // Ask the server to grade THIS EXACT date (optical / radar / no_data) so the
+  // sidebar stops silently re-anchoring a cloud-blocked scene to another date.
+  fetchSelectedSceneStatus(dateStr)
   // Mirror the time slider: render over the selected field, not the AOI rect.
   loadIndexForMonth(target, currentGeometry.value)
+}
+
+// Scene-anchored sidebar status for the exact clicked observation date (sidebar
+// fix-fallback). Dispatches only when a field is selected AND we have its
+// geometry (jumpToObservationDate also fires for AOI-point probes, which have
+// no planting date / hero card — skipping avoids a wasted request). A numeric
+// guard drops stale responses: only the latest request may write state, so a
+// fast earlier reply can't clobber a slower-but-newer one.
+let selectedSceneStatusReq = 0
+export function fetchSelectedSceneStatus(dateStr) {
+  const sceneDate = dateStr || state.selectedObservationDate
+  // True Color renders the exact capture; scene-status grade (optical/radar/
+  // no_data) doesn't apply to its RGBCI-style preview, so clear and stop.
+  if (!sceneDate || !state.eeReady || state.currentIndex === 'truecolor') {
+    state.selectedSceneStatus = null
+    return
+  }
+  state.selectedSceneStatus = null
+  const field = state.fields.find((f) => f.id === state.currentFieldId) || null
+  if (!field) { state.selectedSceneStatus = null; return }
+  const geom = field.geojson && (field.geojson.geometry || field.geojson)
+  if (!geom || !geom.coordinates) { state.selectedSceneStatus = null; return }
+  const geometry = polygonGeometry(geom.coordinates)
+  const req = ++selectedSceneStatusReq
+  ee.getFieldStatus(geometry, field.plantingDate || null, sceneDate, (snap) => {
+    if (req !== selectedSceneStatusReq) return
+    state.selectedSceneStatus = snap
+  })
 }
 
 // ---------------------------------------------------------------------------
@@ -2138,6 +2175,7 @@ export function loadField(field) {
   state.selectedObservationDate = null
   state.displayedObservationDate = null
   state.ndviChartData = null // new subject — the old field's anchor no longer applies
+  state.selectedSceneStatus = null // stale per-scene answer for the old field
   mapReg.drawnItems.clearLayers()
   const geo = window.L.geoJSON(field.geojson)
   geo.eachLayer((l) => {
@@ -2335,6 +2373,7 @@ export function clearFieldSelection() {
   state.selectedObservationDate = null
   state.displayedObservationDate = null
   state.trueColorDate = null
+  state.selectedSceneStatus = null
   mapReg.drawnItems.clearLayers()
   updateDrawEditVisibility()
   setBaseLayer(state.currentBase)

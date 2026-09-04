@@ -182,6 +182,7 @@ export default {
   'field.obs_fallback_same_month': 'No valid scene for {selectedDate} ({cloud}) \u2014 showing reading from {actualDate}',
   'field.obs_fallback_diff_month': 'No valid scene for {selectedDate} ({cloud}) \u2014 showing nearest reading from {actualDate}',
   'field.obs_fallback_no_data': 'No valid scene for {selectedDate} ({cloud}) \u2014 no cloud-free imagery available',
+  'field.obs_radar_scene': '{selectedDate} ({cloud}) \u2014 showing Sentinel-1 radar (RVI) reading for this exact date',
   'field.save_edits': 'Save the reshaped field boundary',
   'field.cancel_edits': 'Discard changes and stop editing',
   'field.radar_map_note': 'Map showing satellite radar signal (RVI) — a different measurement from the NDVI value above, not directly comparable.',

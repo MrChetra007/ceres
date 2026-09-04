@@ -70,7 +70,11 @@
           <span class="status-badge" :class="statusTone">{{ statusText }}</span>
         </div>
         <div class="hero-sub mono">{{ stageText }}</div>
-        <p v-if="obsFallbackNote" class="hero-stale-note obs-fallback-note">
+        <p v-if="radarSceneNote" class="hero-stale-note radar-scene-note">
+          <i class="ti ti-satellite"></i>
+          <span>{{ radarSceneNote }}</span>
+        </p>
+        <p v-else-if="obsFallbackNote" class="hero-stale-note obs-fallback-note">
           <i class="ti ti-info-circle"></i>
           <span>{{ obsFallbackNote }}</span>
         </p>
@@ -363,8 +367,26 @@ const selectedMonthWindow = computed(() => {
 })
 
 const activeObservation = computed(() => {
+  // Scene-anchored status takes priority when a specific date is pinned: it
+  // tried clean optical → Sentinel-1 RVI → honest no-data for THAT exact
+  // date, unlike resolveActiveObservation which can only read the optical
+  // trend series and silently substitutes a different (clear) date when the
+  // pinned one is cloud-blocked.
+  const s = state.selectedSceneStatus
+  if (s && state.selectedObservationDate) {
+    if (s.mode === 'optical' && s.ndviValue != null) {
+      return { value: s.ndviValue, date: state.selectedObservationDate, isRadar: false, isNoData: false }
+    }
+    if (s.mode === 'radar' && s.rviValue != null) {
+      return { value: s.rviValue, date: state.selectedObservationDate, isRadar: true, isNoData: false }
+    }
+    if (s.mode === 'no_data') {
+      // Honest no-data — do NOT fall through to a silently substituted date.
+      return null
+    }
+  }
   const obs = store.resolveActiveObservation(state.chartData, state.mainMonth, state.selectedObservationDate)
-  return obs ? { value: obs.value, date: obs.date } : null
+  return obs ? { value: obs.value, date: obs.date, isRadar: false, isNoData: false } : null
 })
 
 // ---- Band-INDEPENDENT date resolution for the growth-stage / day-count
@@ -464,6 +486,11 @@ const monthStatus = computed(() => {
   const f = currentField.value
   const obs = activeObservation.value
   if (!f || !obs || obs.value == null) return null
+  // A radar reading (Sentinel-1 RVI) is NOT on the NDVI/NDWI/LSWI 0-1 health
+  // scale, so never grade it through buildStatusObject's per-index thresholds
+  // unless the user is actually viewing the RVI tab (whose buildStatusObject
+  // returns an intentionally-empty badge — RVI is shown, not graded).
+  if (obs.isRadar && state.currentIndex !== 'rvi') return null
   return store.buildStatusObject(f, obs.value, state.currentIndex, growthAsOfDate.value)
 })
 
@@ -504,7 +531,12 @@ const stageText = computed(() => {
   const obs = activeObservation.value
   if (f && f.plantingDate && days != null && !stagePrePlanting.value) {
     const stage = store.getGrowthStage(days).stage
-    const bandName = (INDICES[state.currentIndex] && INDICES[state.currentIndex].name) || 'NDVI'
+    // A radar reading is always labeled RVI (it's Sentinel-1, regardless of the
+    // band tab the user has open) so it can never be mistaken for the active
+    // optical band's value.
+    const bandName = obs && obs.isRadar
+      ? 'RVI'
+      : (INDICES[state.currentIndex] && INDICES[state.currentIndex].name) || 'NDVI'
     const val = obs && obs.value != null ? ' \u00b7 ' + bandName + ' ' + obs.value.toFixed(2) : ''
     return stageNameKm(state.preferredLanguage, stage) + ' \u00b7 ' + daySinceLabel(state.preferredLanguage, days) + val
   }
@@ -550,6 +582,10 @@ watch(displayedSceneDate, (val) => {
 
 const isObsFallback = computed(() => {
   if (!state.selectedObservationDate || state.currentIndex === 'truecolor') return false
+  // A resolved radar (or optical) reading for the exact pinned date is not a
+  // fallback — only resolveActiveObservation's cross-date substitution is.
+  const s = state.selectedSceneStatus
+  if (s && (s.mode === 'radar' || s.mode === 'optical')) return false
   const displayed = displayedSceneDate.value
   return !!displayed && displayed !== state.selectedObservationDate
 })
@@ -581,6 +617,21 @@ const obsFallbackNote = computed(() => {
   return isSameMonthObsFallback.value
     ? t('field.obs_fallback_same_month', { selectedDate: selFmt, cloud: cloudStr, actualDate: actualFmt })
     : t('field.obs_fallback_diff_month', { selectedDate: selFmt, cloud: cloudStr, actualDate: actualFmt })
+})
+
+// "Showing radar for this exact date" note — distinctly different from
+// obsFallbackNote (a cross-date substitution): this IS the exact date, just via
+// the Sentinel-1 sensor because optical was cloud-obscured. Surfaced only when
+// the server resolved a radar mode for the pinned scene.
+const radarSceneNote = computed(() => {
+  const s = state.selectedSceneStatus
+  if (!s || s.mode !== 'radar' || !state.selectedObservationDate) return ''
+  const obs = selectedObsRow.value
+  const cloudStr = obs && obs.cloudCover != null
+    ? (state.preferredLanguage === 'km' ? 'ពពក ' + toKhmerDigits(Math.round(obs.cloudCover)) + '%' : Math.round(obs.cloudCover) + '% cloud')
+    : (state.preferredLanguage === 'km' ? 'បាំងដោយពពក' : 'cloud-covered')
+  const selFmt = formatDate(state.selectedObservationDate, state.preferredLanguage)
+  return t('field.obs_radar_scene', { selectedDate: selFmt, cloud: cloudStr })
 })
 
 // Growth stage is a property of the crop's age (planting date), NOT of the
@@ -890,6 +941,10 @@ watch(() => state.infoPanelVisible, async (open) => {
 // The card is skipped while EE isn't ready; load it the moment it becomes
 // available (e.g. field opened during slow login auth/init).
 watch(() => state.eeReady, (ready) => { if (ready) loadAim() })
+// Re-resolve the scene-anchored status whenever the pinned observation date
+// changes for the current field (re-clicking the same strip row, or a field
+// switch that re-pins a date) so the sidebar always reflects the exact scene.
+watch(() => state.selectedObservationDate, () => { if (isField.value) store.fetchSelectedSceneStatus() })
 
 onBeforeUnmount(() => {
   if (chartResizeObs) { chartResizeObs.disconnect(); chartResizeObs = null }

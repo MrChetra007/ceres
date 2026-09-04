@@ -183,6 +183,7 @@ export default {
   'field.obs_fallback_same_month': 'គ្មានរូបភាពត្រឹមត្រូវសម្រាប់ {selectedDate} ({cloud}) — បង្ហាញការអានពី {actualDate}',
   'field.obs_fallback_diff_month': 'គ្មានរូបភាពត្រឹមត្រូវសម្រាប់ {selectedDate} ({cloud}) — បង្ហាញការអានជិតបំផុតពី {actualDate}',
   'field.obs_fallback_no_data': 'គ្មានរូបភាពត្រឹមត្រូវសម្រាប់ {selectedDate} ({cloud}) — គ្មានរូបភាពគ្មានពពកក្នុងរយៈពេលនេះ',
+  'field.obs_radar_scene': '{selectedDate} ({cloud}) — បង្ហាញការអានរ៉ាដាពី Sentinel-1 (RVI) សម្រាប់កាលបរិច្ឆេទនេះ',
   'field.save_edits': 'រក្សាទុកព្រំដែនវាលដែលបានកែរាង',
   'field.cancel_edits': 'បោះបង់ការផ្លាស់ប្តូរ និងបញ្ឈប់ការកែ',
   'field.radar_map_note': 'ផែនទីកំពុងបង្ហាញសញ្ញេរ៉ាដាពីផ្កាយរណប (RVI) — ជាការវាស់វែងខុសពីរតម្លៃ NDVI ដែលបង្ហាញខាងលើ មិនអាចប្រៀបធៀបដោយផ្ទាល់បានទេ។',

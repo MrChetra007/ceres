@@ -216,6 +216,36 @@ export function getRecentIndexValue(geometry, index, cb) {
     })
 }
 
+// Scene-anchored field status (sidebar fix-fallback). Asks ee-data to grade the
+// EXACT clicked observation date (including a cloud-blocked one) rather than the
+// most-recent-available reading. The server answers:
+//   mode 'optical' -> a clean scene that date, gradeable by its ndviValue;
+//   mode 'radar'   -> no clean optical that day, but a Sentinel-1 RVI pass within
+//                     ±15 days; value lives in rviValue (Sentinel-1 scale);
+//   mode 'no_data' -> neither (honest — the sidebar must not silently re-anchor
+//                     to a different date).
+// cb(snapshot|null): resolved payload, or null on any error (meaning "no radar /
+// optical certainty", which is exactly the no_data truth we want to surface).
+export function getFieldStatus(geometry, plantingDate, sceneDate, cb) {
+  callEE('getFieldStatus', {
+    geometry,
+    plantingDate: plantingDate || null,
+    sceneDate: sceneDate || null,
+  })
+    .then((body) => cb({
+      mode: body.mode || 'no_data',
+      ndviValue: body.ndviValue == null ? null : body.ndviValue,
+      rviValue: body.rviValue == null ? null : body.rviValue,
+      status: body.status || 'no_data',
+      stage: body.stage || null,
+      confidence: body.confidence || 'low',
+    }))
+    .catch((err) => {
+      fail(err)
+      cb(null)
+    })
+}
+
 // Bundled per-field load — combines tile + trends + rainfall + benchmark
 // into ONE ee-data request instead of 5 separate ones (see
 // field-bundle-fix-guide.md for why this matters: cold-isolate auth cost

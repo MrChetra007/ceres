@@ -312,6 +312,47 @@ async function getRadarVegetationIndex(
   return { count, url };
 }
 
+// Numeric mean RVI over a date window for a geometry (the radar twin of
+// getRadarVegetationIndex, which returns a tile URL — here we return the mean
+// VALUE the sidebar can grade). Same dB→linear-power conversion required (S1_GRD
+// backscatter arrives in dB; RVI on raw dB saturates flat). Returns null when
+// there's no usable pass in the window.
+async function getRadarRviValue(geom: any, startDate: any, endDate: any): Promise<number | null> {
+  const s1 = ee
+    .ImageCollection("COPERNICUS/S1_GRD")
+    .filterBounds(geom)
+    .filterDate(startDate, endDate)
+    .filter(ee.Filter.eq("instrumentMode", "IW"))
+    .filter(ee.Filter.listContains("transmitterReceiverPolarisation", "VV"))
+    .filter(ee.Filter.listContains("transmitterReceiverPolarisation", "VH"));
+  const count = await evaluate(s1.size());
+  if (!count) return null;
+  const composite = s1.median().clip(geom);
+  const vvLinear = ee.Image(10).pow(composite.select("VV").divide(10));
+  const vhLinear = ee.Image(10).pow(composite.select("VH").divide(10));
+  const rvi = vhLinear.multiply(4).divide(vvLinear.add(vhLinear)).rename("RVI");
+  const result = await evaluate(
+    rvi.reduceRegion({
+      reducer: ee.Reducer.mean(),
+      geometry: geom,
+      scale: 10,
+      maxPixels: 1e9,
+    }),
+  );
+  return result && result.RVI != null ? result.RVI : null;
+}
+
+// Growth-stage name as-of a specific SCENE date (not "now"), so the sidebar's
+// stage for a clicked observation matches the era of that scene. Returns null
+// when there's no valid planting date.
+function stageNameAsOf(sceneDate: string, plantingDate: string | null): string | null {
+  if (!plantingDate) return null;
+  const days = Math.floor(
+    (new Date(sceneDate + "T00:00:00Z").getTime() - new Date(plantingDate).getTime()) / 86400000,
+  );
+  return stageNameForDayCount(days >= 0 ? days : null);
+}
+
 async function actionGetIndexTile(payload: any) {
   // RVI is deliberately resolved BEFORE the BANDS gate: it has no optical band
   // pair, and selecting it means "show me the radar view", not "fall back to
@@ -1020,6 +1061,81 @@ function normalizeToUnitRange(
 
 async function actionGetFieldStatus(payload: any) {
   const geom = toEeGeometry(payload.geometry);
+
+  // ── Scene-anchored status (sidebar fix-fallback) ─────────────────────────
+  // When the caller pins a specific observation date (a clicked observation in
+  // the strip, including a cloud-blocked one), answer for THAT exact date:
+  //   mode 'optical' -> a clean (cloud < 40%) Sentinel-2 scene that day,
+  //                     with ndviValue
+  //   mode 'radar'   -> no clean optical that day, but a Sentinel-1 RVI pass
+  //                     within ±15 days (radar fallback), with rviValue
+  //   mode 'no_data' -> neither (honest, no silent substitution to another date)
+  // This is what lets the sidebar (hero value / growth stage / confidence)
+  // follow the exact clicked date, exactly like the map tile's per-scene branch.
+  const sceneDate = payload.sceneDate || null;
+  if (sceneDate) {
+    const day = ee.Date(sceneDate);
+    const dayRaw = ee
+      .ImageCollection("COPERNICUS/S2_SR_HARMONIZED")
+      .filterBounds(geom)
+      .filterDate(day, day.advance(1, "day"))
+      .sort("CLOUDY_PIXEL_PERCENTAGE");
+    const clean = dayRaw.filter(ee.Filter.lt("CLOUDY_PIXEL_PERCENTAGE", 40));
+    const cleanCount = await evaluate(clean.size());
+    if (cleanCount > 0) {
+      const scene = clean.first();
+      const ndvi = scene.normalizedDifference(["B8", "B4"]).rename("ndvi");
+      const result = await evaluate(
+        ndvi.reduceRegion({
+          reducer: ee.Reducer.mean(),
+          geometry: geom,
+          scale: 10,
+          maxPixels: 1e9,
+        }),
+      );
+      const value = result && result.ndvi != null ? result.ndvi : null;
+      if (value != null) {
+        return {
+          mode: "optical",
+          ndviValue: value,
+          rviValue: null,
+          status: "optical",
+          stage: stageNameAsOf(sceneDate, payload.plantingDate ?? null),
+          confidence: "high",
+          windowDays: 0,
+        };
+      }
+    }
+
+    // No clean optical scene that exact date — try radar centered on it.
+    try {
+      const radar = await getRadarRviValue(geom, day.advance(-15, "day"), day.advance(15, "day"));
+      if (radar != null) {
+        return {
+          mode: "radar",
+          ndviValue: null,
+          rviValue: radar,
+          status: "radar",
+          stage: stageNameAsOf(sceneDate, payload.plantingDate ?? null),
+          confidence: "medium",
+          windowDays: 30,
+        };
+      }
+    } catch (e) {
+      console.error("per-scene radar status failed:", e);
+    }
+
+    return {
+      mode: "no_data",
+      ndviValue: null,
+      rviValue: null,
+      status: "no_data",
+      stage: null,
+      confidence: "low",
+      windowDays: 0,
+    };
+  }
+
   let ndvi = await computeNdviOverWindow(geom, 14);
   let confidence: "high" | "low" = "high";
   if (ndvi === null) {
@@ -1028,7 +1144,9 @@ async function actionGetFieldStatus(payload: any) {
   }
   if (ndvi === null) {
     return {
+      mode: "no_data",
       ndviValue: null,
+      rviValue: null,
       status: "no_data",
       stage: null,
       confidence,
@@ -1042,7 +1160,9 @@ async function actionGetFieldStatus(payload: any) {
   const band = translateIndexValue("ndvi", ndvi);
   const primaryIndex = primaryIndexForStage(stage);
   return {
+    mode: "optical",
     ndviValue: ndvi,
+    rviValue: null,
     status,
     stage,
     confidence,
