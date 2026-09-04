@@ -327,7 +327,7 @@ EE actions (each maps to an `ee-data` server handler):
 | `getRecentIndexValue` | `getRecentIndexValue` | One-shot recent reading + cloudBlocked flag. |
 | `getFieldBundle` | `getFieldBundle` | ONE request combining tile + NDVI trend + chart trend + rainfall + benchmark. |
 | `getFieldHealthScore` | `getFieldHealthScore` | AIM composite 0-100 score. |
-| `getFieldStatus` | `getFieldStatus` | Scene-anchored status for the **exact** pinned date: `mode 'optical'` (clean scene + `ndviValue`) / `'radar'` (Sentinel-1 RVI within ±15d + `rviValue`) / `'no_data'`. Signature `getFieldStatus(geometry, plantingDate, sceneDate, cb)`. |
+| `getFieldStatus` | `getFieldStatus` | Scene-anchored status for the **exact** pinned date: `mode 'optical'` (clean scene + `ndviValue`) / `'radar'` (Sentinel-1 RVI within ±15d + `rviValue`) / `'no_data'`. Signature `getFieldStatus(geometry, plantingDate, sceneDate, cb, forceRadar)` — `forceRadar` (sent on the RVI tab) makes radar the explicit ask, skipping the optical check. |
 | `getAllFieldStatuses` | `getAllFieldStatuses` | Recent status for ALL fields (1 batch). |
 | `getAllFieldTrends` | `getAllFieldTrends` | NDVI trend for ALL fields (1 batch). |
 | `getRainfallMm` | `getRainfall` | 21-day CHIRPS rainfall mm. |
@@ -566,7 +566,11 @@ status text. The FieldDetailPanel's `activeObservation` computed re-reads
 server answers `{mode}` for that exact date; `FieldDetailPanel.activeObservation`
 takes that over the optical `chartData`, so a 97%-cloud date now shows its real
 Sentinel-1 RVI reading (with a `radarSceneNote`) instead of silently falling back
-to a different clear date's optical value.
+to a different clear date's optical value. On the **RVI tab** `fetchSelectedSceneStatus`
+sends `forceRadar`, so the hero shows an actual radar RVI number for that date even
+when a clean optical scene exists; the map tile likewise gets a per-scene
+`radar_index` (see §14.3). Switching tabs with a date already pinned re-runs this
+via `setIndex`.
 
 **Select a field:**
 `Sidebar.onCardClick` → `store.loadFieldById` → `loadField(field)` → draws the
@@ -802,7 +806,7 @@ service account, computes, and returns tile URLs / time-series / readings.
 ### Supported actions (the `HANDLERS` router)
 | Action | Purpose |
 |---|---|
-| `getIndexTile` | Monthly index composite tile, with the full cloud policy: clean optical → Sentinel-1 RVI radar fallback → 90-day widened true-color fallback. Supports a per-scene date. |
+| `getIndexTile` | Monthly index composite tile, with the full cloud policy: clean optical → Sentinel-1 RVI radar fallback → 90-day widened true-color fallback. Supports a per-scene date. On the **RVI tab**, `sceneDate` returns a per-scene `radar_index` (Sentinel-1 window centered on that exact date, month cache bypassed) instead of the month's RVI composite. |
 | `getTrueColorScene` | Single-scene RGB photo + full scene list for the date picker (clouds un-masked by design). |
 | `getLatestTrueColor` | Most recent S2 pass within a lookback window as true color. |
 | `getZoneBreakdown` | Buckets every pixel of the month's NDVI (or RVI) image into 10 ranges → area per bucket in one batched `reduceRegion`. |
@@ -810,7 +814,7 @@ service account, computes, and returns tile URLs / time-series / readings.
 | `getRviTimeSeries` | Radar Vegetation Index over time from Sentinel-1 (includes orbit direction). |
 | `detectPlantingDate` | Steepest dry→flooded LSWI jump over ~90 days to estimate planting date (never a guess). |
 | `getDryMonths` | CHIRPS monthly rainfall → which requested months are "dry" (< threshold). |
-| `getFieldStatus` | NDVI status using the shared growth-stage logic (14-day window first, widened to 90-day low-confidence). With a `sceneDate` param it becomes **scene-anchored**: answers the exact date with `mode 'optical'` (clean scene, `ndviValue`) / `'radar'` (Sentinel-1 RVI within ±15d, `rviValue`) / `'no_data'` (honest — no silent substitution). |
+| `getFieldStatus` | NDVI status using the shared growth-stage logic (14-day window first, widened to 90-day low-confidence). With a `sceneDate` param it becomes **scene-anchored**: answers the exact date with `mode 'optical'` (clean scene, `ndviValue`) / `'radar'` (Sentinel-1 RVI within ±15d, `rviValue`) / `'no_data'` (honest — no silent substitution). A `forceRadar` param (the RVI tab) skips the optical clean-scene check and always grades the date by RVI. |
 | `getFieldHealthScore` | **AIM composite (0–100)** — growth-stage-appropriate index blend, each normalized to its own range, weighted average, plus the 4-band verdict and discrepancy (F4). Month-scoped to the scrubbed slider position. |
 | `getRecentIndexValue` | Latest ≤90-day clean reading with cloud-blocked flag + plain-language band. |
 | `getAllFieldStatuses` | Batched per-field statuses for the field list on login. Uses a **far-past sentinel image** trick to keep `first()` defined even for scene-less fields. |
