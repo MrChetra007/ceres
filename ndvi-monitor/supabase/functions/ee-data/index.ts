@@ -579,36 +579,41 @@ async function actionGetIndexTile(payload: any) {
   }
 
   // 2. No clean scene THIS month (either none captured yet, or all too
-  //    cloudy) — try Sentinel-1 radar. It has its own independent revisit
-  //    schedule, so it doesn't care whether S2 has anything yet this month.
-  try {
-    const radar = await getRadarVegetationIndex(
-      geom,
-      start.advance(-15, "day"),
-      end.advance(15, "day"),
-    );
-    if (radar.count > 0 && radar.url) {
-      result = {
-        mode: "radar_fallback",
-        count: radar.count,
-        url: radar.url,
-        indexUsed: "RVI",
-      };
-      await writeTileCache({
-        index,
-        year: payload.year,
-        month: payload.month,
-        geometry_hash: geomHash,
-        mode: result.mode,
-        url: result.url,
-        count: result.count ?? 0,
-        index_used: result.indexUsed || null,
-        is_closed_period: closed,
-      });
-      return result;
+  //    cloudy) — try Sentinel-1 radar, but only as a proxy for NDVI. Radar
+  //    substitution is NDVI-only (it estimates canopy vigor); NDWI/LSWI/etc.
+  //    are water/moisture or untested bands with no radar equivalent, so their
+  //    blocked month falls through to the true-color cloud view below instead
+  //    of silently showing a radar tile under the wrong index.
+  if (index === "ndvi") {
+    try {
+      const radar = await getRadarVegetationIndex(
+        geom,
+        start.advance(-15, "day"),
+        end.advance(15, "day"),
+      );
+      if (radar.count > 0 && radar.url) {
+        result = {
+          mode: "radar_fallback",
+          count: radar.count,
+          url: radar.url,
+          indexUsed: "RVI",
+        };
+        await writeTileCache({
+          index,
+          year: payload.year,
+          month: payload.month,
+          geometry_hash: geomHash,
+          mode: result.mode,
+          url: result.url,
+          count: result.count ?? 0,
+          index_used: result.indexUsed || null,
+          is_closed_period: closed,
+        });
+        return result;
+      }
+    } catch (e) {
+      console.error("radar fallback failed:", e);
     }
-  } catch (e) {
-    console.error("radar fallback failed:", e);
   }
 
   // 3. No radar either — widen the OPTICAL search backward up to 90 days,
