@@ -909,6 +909,22 @@ async function consultAi() {
     ? { tier: 'medium', reason: 'Radar (Sentinel-1) proxy — optical blocked by cloud' }
     : (conf.value && conf.value.tier ? conf.value : null)
 
+  // Raw per-scene observation history for the open field (state.observations is
+  // newest-first). Give the AI the actual dated series — NDVI, cloud %, status —
+  // so it can reason about trend and cloud gaps, not just today's snapshot.
+  // Capped to the latest 10 scenes to keep the prompt small.
+  const observationHistory = Array.isArray(state.observations)
+    ? state.observations
+        .slice(0, 10)
+        .map((o) => ({
+          date: o.date || null,
+          ndvi: typeof o.ndvi === 'number' && isFinite(o.ndvi) ? Number(o.ndvi.toFixed(2)) : null,
+          cloudPct: o.cloudCover != null ? Math.round(o.cloudCover) : null,
+          status: o.status || null,
+        }))
+        .filter((o) => o.date)
+    : []
+
   let token
   try {
     const session = await requireSession()
@@ -935,6 +951,7 @@ async function consultAi() {
         confidenceTier: confidence ? confidence.tier : null,
         confidenceReason: confidence ? confidence.reason : '',
         lang: state.preferredLanguage,
+        observationHistory,
       }),
     })
     let body = null

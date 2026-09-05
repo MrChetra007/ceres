@@ -45,6 +45,7 @@ Deno.serve(async (req) => {
       confidenceTier,
       confidenceReason,
       lang,
+      observationHistory,
     } = await req.json();
 
     // The farmer's own profile language wins; fall back to what the client
@@ -127,8 +128,34 @@ Deno.serve(async (req) => {
         ? "IMPORTANT: the main value is a RADAR measurement of crop vigor taken under cloud cover \u2014 it is a proxy estimate, not the usual optical greenness reading. Explain it as such, never call it \"NDVI\", and suggest a field check."
         : "";
 
+    // Raw per-scene observation history (date, NDVI, cloud cover, status) sent
+    // by the client so the AI can reason about TREND and cloud gaps instead of
+    // only today's snapshot. Sanitized + capped: 10 scenes max, only valid
+    // dates, numbers coerced — garbage in is dropped, never injected.
+    const rawHistory = Array.isArray(observationHistory) ? observationHistory : [];
+    const historyRows = rawHistory
+      .filter((h: any) => h && typeof h.date === "string")
+      .slice(0, 10)
+      .reverse() // client sends newest-first; prompt reads oldest-to-newest
+      .map((h: any) => {
+        const ndvi =
+          typeof h.ndvi === "number" && isFinite(h.ndvi) ? h.ndvi.toFixed(2) : null;
+        const cloud = typeof h.cloudPct === "number" ? Math.round(h.cloudPct) : null;
+        const valuePart = ndvi != null ? `NDVI ${ndvi}` : "optically blocked (no NDVI)";
+        const qualifiers: string[] = [];
+        if (cloud != null) qualifiers.push(`${cloud}% cloud`);
+        if (typeof h.status === "string" && h.status) qualifiers.push(h.status);
+        return `  ${h.date}: ${valuePart}${qualifiers.length ? ", " + qualifiers.join(", ") : ""}`;
+      });
+    const historySection = historyRows.length
+      ? `Satellite observation history (per scene, oldest to newest):
+${historyRows.join("\n")}
+Use this history for TREND context only: you may describe direction (e.g. "your greenness has been falling since <date>") and cloud gaps, citing only these exact dates. NEVER invent values, dates or numbers that are not listed.`
+      : "";
+
     const prompt = `You are explaining satellite crop health data to a rice farmer in Battambang, Cambodia.
 Data: ${readingLine} LSWI (moisture) ${lswiValue?.toFixed(2) ?? "n/a"}, rainfall (21d) ${rainfallMm != null ? rainfallMm.toFixed(0) : "n/a"}mm, status: ${status}, growth stage: ${growthStage ?? "unknown"}, day ${dayCount ?? "?"} since planting.
+${historySection}
 ${sensorNote}
 ${confidenceLine}
 ${langLine}
