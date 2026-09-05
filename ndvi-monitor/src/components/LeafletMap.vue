@@ -79,6 +79,8 @@ function makeMainMap() {
       if (drawControl._toolbars && drawControl._toolbars.edit) drawControl._toolbars.edit.disable()
     }
   })
+  map.on(L.Draw.Event.DRAWSTART, () => { state.isDrawing = true })
+  map.on(L.Draw.Event.DRAWSTOP, () => { state.isDrawing = false })
 
   mapReg.map = map
   mapReg.baseLayer = baseLayer

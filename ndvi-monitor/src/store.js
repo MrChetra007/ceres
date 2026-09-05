@@ -1788,7 +1788,9 @@ export function setTrueColorDate(date, side = 'main') {
 }
 
 export function onMapClick(lat, lng) {
-  if (state.aoiEditMode) return
+  // Drawing a field polygon (or an AOI) captures map taps — they must not
+  // deselect the current field nor pop the detail drawer open mid-draw.
+  if (state.aoiEditMode || state.isDrawing) return
   state.currentFieldName = null
   state.currentFieldId = null
   state.ndviChartData = null // new subject (point) — drop the previous anchor
