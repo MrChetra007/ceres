@@ -45,12 +45,17 @@ export const CLOUD_RESILIENCE = {
 export function addCloudProbability(collection, ee) {
     const s2c = ee.ImageCollection("COPERNICUS/S2_CLOUD_PROBABILITY");
     const withProb = collection.map((img) => {
+        // Reduce the (possibly empty) filtered lookup with a LINEAR reducer: sum()
+        // returns an image of zeros when the matching s2cloudless granule is
+        // missing, whereas .first() would resolve to a server-side null and make
+        // Image.select throw "Parameter 'input' may not be null" inside this map
+        // (S2_CLOUD_PROBABILITY has gaps for recent granules). We rely on the SCL
+        // mask (below) to flag clouds that s2cloudless missed.
         const cloudProb = s2c
             .filter(ee.Filter.eq("system:index", img.get("system:index")))
-            .first();
-        // A missing probability granule yields an empty image of zeros; we rely on
-        // the SCL mask (below) to flag clouds that s2cloudless missed.
-        return img.addBands(cloudProb.select("probability"));
+            .select("probability")
+            .sum();
+        return img.addBands(cloudProb);
     });
     return withProb;
 }
