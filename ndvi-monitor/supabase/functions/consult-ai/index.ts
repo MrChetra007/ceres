@@ -31,6 +31,7 @@ Deno.serve(async (req) => {
     const {
       fieldId,
       ndviValue,
+      rviValue,
       lswiValue,
       rainfallMm,
       status,
@@ -50,12 +51,20 @@ Deno.serve(async (req) => {
       .maybeSingle();
     const langOut = profile?.preferred_language || lang || "en";
 
-    // There's nothing meaningful to explain without NDVI.
-    if (ndviValue == null) {
+    // The reading we explain is whichever sensor the client actually read.
+    // Radar (RVI) is a Sentinel-1 proxy used when optical NDVI is cloud-blocked.
+    const readingKind = rviValue != null ? "rvi" : "ndvi";
+    const readingValue = rviValue != null ? rviValue : ndviValue;
+
+    // There's nothing meaningful to explain without any reading at all.
+    if (readingValue == null) {
       return jsonResponse({ ok: false, error: "missing_data" }, 400, corsHeaders);
     }
 
-    // 1. Check cache — only reuse if NDVI + status haven't moved
+    // 1. Check cache — only reuse if the reading + status haven't moved. The
+    //    legacy ai_explanations.ndvi_value column stores whichever reading was
+    //    used (NDVI or RVI); the status string sent for radar reads is
+    //    "Radar (RVI) reading", which partitions the cache from optical reads.
     const { data: cached } = await supabase
       .from("ai_explanations")
       .select("explanation, ndvi_value, status, truncated")
@@ -64,7 +73,7 @@ Deno.serve(async (req) => {
 
     if (
       cached &&
-      Math.abs(cached.ndvi_value - ndviValue) < 0.02 &&
+      Math.abs(cached.ndvi_value - readingValue) < 0.02 &&
       cached.status === status
     ) {
       return jsonResponse({
@@ -102,8 +111,18 @@ Deno.serve(async (req) => {
           ? `Data confidence is MEDIUM (${confidenceReason || "limited cloud-free imagery"}). Hedge your advice — note the uncertainty and avoid over-confident statements.`
           : "";
 
+    const readingLine =
+    readingKind === "rvi"
+      ? `Radar Canopy-Vigor Index (RVI) ${readingValue.toFixed(2)} (Sentinel-1 radar, used because optical NDVI was cloud-blocked),`
+      : `NDVI ${readingValue.toFixed(2)},`;
+    const sensorNote =
+      readingKind === "rvi"
+        ? "IMPORTANT: the main value is a RADAR measurement of crop vigor taken under cloud cover \u2014 it is a proxy estimate, not the usual optical greenness reading. Explain it as such, never call it \"NDVI\", and suggest a field check."
+        : "";
+
     const prompt = `You are explaining satellite crop health data to a rice farmer in Battambang, Cambodia.
-Data: NDVI ${ndviValue.toFixed(2)}, LSWI (moisture) ${lswiValue?.toFixed(2) ?? "n/a"}, rainfall (21d) ${rainfallMm != null ? rainfallMm.toFixed(0) : "n/a"}mm, status: ${status}, growth stage: ${growthStage ?? "unknown"}, day ${dayCount ?? "?"} since planting.
+Data: ${readingLine} LSWI (moisture) ${lswiValue?.toFixed(2) ?? "n/a"}, rainfall (21d) ${rainfallMm != null ? rainfallMm.toFixed(0) : "n/a"}mm, status: ${status}, growth stage: ${growthStage ?? "unknown"}, day ${dayCount ?? "?"} since planting.
+${sensorNote}
 ${confidenceLine}
 ${langLine}
 In 2-3 short sentences: describe what the numbers suggest, and name 1-2 possible causes as possibilities to check — never state a single cause as certain. End with one practical next step. Do not use technical jargon like "NDVI" or "LSWI" in the reply itself.`;
@@ -135,7 +154,7 @@ Keep the whole reply under 45 words. Do not mention "NDVI", "LSWI" or any index 
     // 4. Cache it (model_used is for our own auditing only)
     await supabase.from("ai_explanations").upsert({
       field_id: fieldId,
-      ndvi_value: ndviValue,
+      ndvi_value: readingValue,
       status,
       explanation,
       model_used: modelUsed,

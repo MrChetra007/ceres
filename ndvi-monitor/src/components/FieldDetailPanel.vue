@@ -863,15 +863,24 @@ async function consultAi() {
   consultingAi.value = true
   aiExplanation.value = ''
   aiTruncated.value = false
+  // When the viewer is reading THAT exact pinned date via Sentinel-1 radar
+  // (cloud-blocked optical), the hero IS an RVI reading — the AI must explain
+  // the radar proxy, not fetch a separate NDVI value for a cloud-blocked day.
+  const heroObs = activeObservation.value
+  const radarReading = heroObs && heroObs.isRadar && heroObs.value != null ? heroObs.value : null
   let ndviValue = null
+  let rviValue = radarReading
   let lswiValue = null
   let rainfallMm = state.rainfallMm
   try {
     const [ndvi, lswi] = await Promise.all([recentValue(geometry, 'ndvi'), recentValue(geometry, 'lswi')])
-    ndviValue = ndvi
+    // Radar mode explains the RVI reading; a fresh NDVI (a different sensor and
+    // often null on a cloud-blocked day) is not what the farmer is looking at.
+    if (rviValue != null) ndviValue = null
+    else ndviValue = ndvi
     lswiValue = lswi
     if (rainfallMm == null) rainfallMm = await getRainfall(geometry)
-    if (ndviValue == null) {
+    if (ndviValue == null && rviValue == null) {
       consultingAi.value = false
       store.showToast(t('toast.no_sat_data'))
       return
@@ -891,8 +900,14 @@ async function consultAi() {
       growthStage = store.getGrowthStage(days).stage
     }
   }
-  const healthStatus = heroStatus.value && heroStatus.value.badgeText ? heroStatus.value.badgeText : ''
-  const confidence = conf.value && conf.value.tier ? conf.value : null
+  // Radar mode labels the reading honestly ("Radar (RVI) reading") so the
+  // backend prompt/cache treats it as the radar proxy, never an optical grade.
+  const healthStatus = rviValue != null
+    ? 'Radar (RVI) reading'
+    : (heroStatus.value && heroStatus.value.badgeText ? heroStatus.value.badgeText : '')
+  const confidence = rviValue != null
+    ? { tier: 'medium', reason: 'Radar (Sentinel-1) proxy — optical blocked by cloud' }
+    : (conf.value && conf.value.tier ? conf.value : null)
 
   let token
   try {
@@ -911,6 +926,7 @@ async function consultAi() {
       body: JSON.stringify({
         fieldId: field.id,
         ndviValue,
+        rviValue,
         lswiValue,
         rainfallMm,
         status: healthStatus,
