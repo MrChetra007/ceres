@@ -14,6 +14,16 @@ const GEMINI_KEY = Deno.env.get("GEMINI_API_KEY") || "";
 const DEEPSEEK_KEY = Deno.env.get("DEEPSEEK_API_KEY") || "";
 const QWEN_KEY = Deno.env.get("QWEN_API_KEY") || "";
 
+// TEST FLAGS: per-provider on/off switch. Set false to exclude a provider from
+// the fallback chain for A/B testing.
+//   3 true  -> Gemini -> DeepSeek -> Qwen (normal fallback)
+//   2 true  -> only those two, in their original order
+//   1 true  -> only that one model
+//   0 true  -> nothing runs (generateExplanation returns null)
+const USE_GEMINI = true;
+const USE_DEEPSEEK = true;
+const USE_QWEN = true;
+
 const PROVIDER_TIMEOUT_MS = 20_000;
 
 async function fetchWithTimeout(
@@ -184,11 +194,15 @@ export async function generateExplanation(
   prompt: string,
   concisePrompt?: string,
 ): Promise<{ text: string; model: string; truncated: boolean } | null> {
-  const providers: [string, (p: string) => Promise<ProviderResult | null>][] = [
-    ["gemini-3.5-flash", callGemini],
-    ["deepseek-v4-flash", callDeepSeek],
-    ["qwen3-max", callQwen],
-  ];
+  // Only enabled providers take part in the chain, in their fixed order.
+  const providers: [string, (p: string) => Promise<ProviderResult | null>][] = [];
+  if (USE_GEMINI) providers.push(["gemini-3.5-flash", callGemini]);
+  if (USE_DEEPSEEK) providers.push(["deepseek-v4-flash", callDeepSeek]);
+  if (USE_QWEN) providers.push(["qwen3-max", callQwen]);
+  if (!providers.length) {
+    console.error("All AI providers disabled — no provider chain to run");
+    return null;
+  }
   for (const [name, fn] of providers) {
     try {
       const first = await fn(prompt);
