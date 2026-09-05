@@ -1500,10 +1500,14 @@ export function fetchSelectedSceneStatus(dateStr) {
   if (!geom || !geom.coordinates) { state.selectedSceneStatus = null; return }
   const geometry = polygonGeometry(geom.coordinates)
   const req = ++selectedSceneStatusReq
+  // On the RVI tab radar is the explicit ask, not a fallback — the server must
+  // grade the exact date by Sentinel-1 RVI even when a clean optical scene
+  // exists that day.
+  const forceRadar = state.currentIndex === 'rvi'
   ee.getFieldStatus(geometry, field.plantingDate || null, sceneDate, (snap) => {
     if (req !== selectedSceneStatusReq) return
     state.selectedSceneStatus = snap
-  })
+  }, forceRadar)
 }
 
 // ---------------------------------------------------------------------------
@@ -1657,6 +1661,10 @@ export function setIndex(index) {
   state.currentIndex = index
   loadIndexForMonth(state.mainMonth, currentGeometry.value)
   if (state.compareMode) loadIndexForMonthRight(state.rightMonth)
+  // Switching tabs with an observation date already pinned re-runs the
+  // scene-anchored grade (e.g. NDVI→RVI should now force a radar reading for
+  // that exact date instead of reusing the optical one).
+  if (state.selectedObservationDate) fetchSelectedSceneStatus()
   if (index === 'truecolor') return // photo mode — no index trend/status to refresh
   // RVI: radar can't score growth stages, and its absolute scale isn't
   // comparable to the NDVI-based area benchmark (y-axis 0..1) — hide both.

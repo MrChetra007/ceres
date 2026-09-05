@@ -306,17 +306,48 @@ async function actionGetIndexTile(payload) {
     const geom = toEeGeometry(payload.geometry);
     const start = ee.Date.fromYMD(payload.year, payload.month, 1);
     const end = start.advance(1, "month");
+    // ── Per-scene RVI: the user clicked a specific Browse Observations date
+    // while on the RVI tab. Radar is the explicit ask, so center a ±15-day
+    // Sentinel-1 window on THAT exact date (not the scrubbed month) and bypass
+    // the month-level tile cache entirely — the cached rows are keyed to
+    // (index, month) with no date column, so a per-scene request must never
+    // resolve to a different date's cached composite. Returns an honest no_data
+    // when no radar pass lands near the clicked date.
+    if (index === "rvi" && payload.sceneDate) {
+        const day = ee.Date(payload.sceneDate);
+        const radar = await getRadarVegetationIndex(geom, day.advance(-15, "day"), day.advance(15, "day"));
+        if (radar.count > 0 && radar.url) {
+            return {
+                mode: "radar_index",
+                count: radar.count,
+                url: radar.url,
+                indexUsed: "RVI",
+                sceneDate: payload.sceneDate,
+            };
+        }
+        return { mode: "no_data", count: 0, url: null, sceneDate: payload.sceneDate };
+    }
     // ── Tile cache hit (§1 of the ee-cost-control directive) ────────────────
     // A repeat visit to an already-computed (index, month, area) returns the
     // cached mode/URL plus the facts the map renders, skipping Earth Engine
     // entirely. TTL differs for closed vs open months (see tileCacheTtlMs) —
     // closed months are deterministic but the signed URL still lapses, so both
     // are TTL'd, never permanent.
+    //
+    // A SCENE-DATED request (an observation clicked in the strip) MUST never be
+    // served from this month cache: the rows are keyed on (index, year, month,
+    // geometry_hash) with no date column, so a cached month composite would
+    // silently mask the clicked scene and the tile would look identical for
+    // every date in the month. Only month-scrub requests (no sceneDate) may hit
+    // it; per-scene requests always compute from Earth Engine and return before
+    // any writeTileCache.
     const geomHash = geometryHash(payload.geometry);
     const closed = tileIsClosed(payload.year, payload.month);
-    const cached = await readTileCache(index, payload.year, payload.month, geomHash, closed);
-    if (cached)
-        return cached;
+    if (!payload.sceneDate) {
+        const cached = await readTileCache(index, payload.year, payload.month, geomHash, closed);
+        if (cached)
+            return cached;
+    }
     let result;
     if (index === "rvi") {
         const radar = await getRadarVegetationIndex(geom, start.advance(-15, "day"), end.advance(15, "day"));
@@ -944,6 +975,10 @@ async function actionGetFieldStatus(payload) {
     const sceneDate = payload.sceneDate || null;
     if (sceneDate) {
         const day = ee.Date(sceneDate);
+        // forceRadar — the RVI tab makes radar the explicit ask, so skip the
+        // optical clean-scene check entirely and always grade the exact date by
+        // Sentinel-1 RVI, even when a clean optical scene exists that day.
+        const forceRadar = !!payload.forceRadar;
         const dayRaw = ee
             .ImageCollection("COPERNICUS/S2_SR_HARMONIZED")
             .filterBounds(geom)
@@ -951,7 +986,7 @@ async function actionGetFieldStatus(payload) {
             .sort("CLOUDY_PIXEL_PERCENTAGE");
         const clean = dayRaw.filter(ee.Filter.lt("CLOUDY_PIXEL_PERCENTAGE", 40));
         const cleanCount = await evaluate(clean.size());
-        if (cleanCount > 0) {
+        if (!forceRadar && cleanCount > 0) {
             const scene = clean.first();
             const ndvi = scene.normalizedDifference(["B8", "B4"]).rename("ndvi");
             const result = await evaluate(ndvi.reduceRegion({
@@ -973,7 +1008,8 @@ async function actionGetFieldStatus(payload) {
                 };
             }
         }
-        // No clean optical scene that exact date — try radar centered on it.
+        // No clean optical scene that exact date (or radar is forced on the RVI
+        // tab) — grade by radar centered on it.
         try {
             const radar = await getRadarRviValue(geom, day.advance(-15, "day"), day.advance(15, "day"));
             if (radar != null) {
