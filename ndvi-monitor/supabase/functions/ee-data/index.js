@@ -1251,13 +1251,15 @@ async function actionGetRecentIndexValue(payload) {
 }
 // ── getRainfall ────────────────────────────────────────────────────────────
 // Port of getRainfallMm(): CHIRPS cumulative precipitation over a trailing
-// window (default 21 days).
+// window (default 21 days). Also returns a 3-bucket weekly breakdown so callers
+// can reason about the rain PATTERN (was it all early, or still falling?) —
+// not just the total.
 async function actionGetRainfall(payload) {
     const geom = toEeGeometry(payload.geometry);
     const daysBack = payload.daysBack || 21;
     const end = ee.Date(Date.now());
     const start = end.advance(-daysBack, "day");
-    const result = await evaluate(ee
+    const total = await evaluate(ee
         .ImageCollection("UCSB-CHG/CHIRPS/DAILY")
         .filterDate(start, end)
         .filterBounds(geom)
@@ -1268,7 +1270,34 @@ async function actionGetRainfall(payload) {
         scale: 5000,
         maxPixels: 1e9,
     }));
-    return { mm: (result && result.precipitation) ?? null };
+    // 3 buckets over the trailing window (oldest → newest): 21 days → 7 each.
+    // Window edges are computed in plain JS (never ee.Date.millis(), which is a
+    // computed object and breaks new Date()).
+    const dayMs = 86400000;
+    const stepDays = Math.max(1, Math.ceil(daysBack / 3));
+    const nowTs = Date.now();
+    const startTs = nowTs - daysBack * dayMs;
+    const buckets = [];
+    for (let i = 0; i < 3; i++) {
+        const bsMs = startTs + i * stepDays * dayMs;
+        const beMs = bsMs + stepDays * dayMs;
+        const r = await evaluate(ee
+            .ImageCollection("UCSB-CHG/CHIRPS/DAILY")
+            .filterDate(ee.Date(bsMs), ee.Date(beMs))
+            .filterBounds(geom)
+            .sum()
+            .reduceRegion({
+            reducer: ee.Reducer.mean(),
+            geometry: geom,
+            scale: 5000,
+            maxPixels: 1e9,
+        }));
+        buckets.push({
+            start: new Date(bsMs).toISOString().slice(0, 10),
+            mm: (r && r.precipitation) ?? null,
+        });
+    }
+    return { mm: (total && total.precipitation) ?? null, buckets };
 }
 // ── getObservations ────────────────────────────────────────────────────────
 // Port of getObservations(): every S2 pass over the window with cloud cover,

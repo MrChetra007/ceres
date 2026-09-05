@@ -349,6 +349,23 @@ export function getRainfallMm(geometry, daysBack, cb) {
     })
 }
 
+// getRainfallDetail — same getRainfall call but returns the full body so the
+// caller also gets `buckets`: the trailing window split into 3 weekly sums
+// (oldest -> newest) for rain-PATTERN reasoning, not just the total.
+export function getRainfallDetail(geometry, daysBack, cb) {
+  callEE('getRainfall', { geometry, daysBack: daysBack || 21 })
+    .then((body) =>
+      cb({
+        mm: body.mm == null ? null : body.mm,
+        buckets: Array.isArray(body.buckets) ? body.buckets : null,
+      }),
+    )
+    .catch((err) => {
+      fail(err)
+      cb({ mm: null, buckets: null })
+    })
+}
+
 // Browse Observations — one batched server-side query over the whole S2
 // collection. Status derivation happens on the server with the app's existing
 // decision rules:

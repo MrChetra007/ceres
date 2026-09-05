@@ -11,6 +11,19 @@ const DAILY_CAP = 20;
 // true to restore caching when the test is done.
 const USE_EXPLANATION_CACHE = false;
 
+// Stage-aware water need, keyed by the exact growthStage strings the client
+// sends (src/config.js RICE_GROWTH_STAGES). Lets the model connect the rainfall
+// PATTERN to what the crop actually needs right now — the most honest signal
+// available when optical imagery is cloud-blocked.
+const WATER_NEED_BY_STAGE: Record<string, string> = {
+  "Transplanting": "seedlings are still establishing roots — keep the soil moist but avoid deep water over young plants.",
+  "Tillering": "the crop is building tillers and roots — steady, shallow moisture suits it; brief dry spells are tolerated but the field should not crack.",
+  "Stem Elongation / Booting": "entering the most water-hungry weeks — the canopy grows fast and booting needs good moisture; a dry phase now directly cuts tiller survival and grain count.",
+  "Flowering / Heading": "the most moisture-sensitive stage — stress or heat around flowering reduces pollination and grain set; keep shallow water if possible.",
+  "Grain Filling / Maturity": "the grains are filling and pump the most water of the season — avoid letting the field dry out until the final ~2 weeks before harvest.",
+  "Harvest / Senescence": "the crop is maturing naturally for harvest — time to drain the field down; it needs little standing water.",
+};
+
 const supabase = createClient(SUPABASE_URL, SERVICE_ROLE);
 
 function jsonResponse(body: unknown, status = 200, corsHeaders: Record<string, string>): Response {
@@ -39,6 +52,8 @@ Deno.serve(async (req) => {
       rviValue,
       lswiValue,
       rainfallMm,
+      rainfallBuckets,
+      lastClearReading,
       status,
       growthStage,
       dayCount,
@@ -153,9 +168,41 @@ ${historyRows.join("\n")}
 Use this history for TREND context only: you may describe direction (e.g. "your greenness has been falling since <date>") and cloud gaps, citing only these exact dates. NEVER invent values, dates or numbers that are not listed.`
       : "";
 
+    // Rainfall PATTERN (3 weekly buckets, oldest -> newest) + what the crop
+    // needs at this stage, so the model reads the pattern, not just the total —
+    // the most honest signal available while optical imagery is blocked.
+    const rawBuckets = Array.isArray(rainfallBuckets) ? rainfallBuckets : [];
+    const bucketsRows = rawBuckets
+      .filter((b: any) => b && typeof b.start === "string" && typeof b.mm === "number" && isFinite(b.mm))
+      .slice(0, 3)
+      .map((b: any) => `  ${b.start}: ${b.mm.toFixed(0)}mm`);
+    const rainfallTotal =
+      rainfallMm != null && isFinite(rainfallMm) ? rainfallMm.toFixed(0) + "mm" : "n/a";
+    const waterNeed =
+      typeof growthStage === "string" && WATER_NEED_BY_STAGE[growthStage]
+        ? WATER_NEED_BY_STAGE[growthStage]
+        : "keep the soil from drying out unless the crop is within ~2 weeks of harvest.";
+    const rainfallSection =
+      `Rainfall (last 21 days): ${rainfallTotal}${bucketsRows.length ? ` — weekly breakdown (oldest to most recent):\n${bucketsRows.join("\n")}` : "."}
+Water need at this stage (${growthStage ?? "unknown"}): ${waterNeed}
+Read the PATTERN of rain, not just the total — e.g. "most of the rain fell 2+ weeks ago and the last week has been dry" — and connect it to the crop's water need above. Never invent rainfall amounts or dates.`;
+
+    // Last clearly-viewed optical reading: an honest anchor so the radar proxy
+    // (or a blocked month) is never presented as a number floating in a vacuum.
+    const lastClearSection =
+      lastClearReading &&
+      typeof lastClearReading.date === "string" &&
+      typeof lastClearReading.ndvi === "number" &&
+      isFinite(lastClearReading.ndvi)
+        ? `Last clearly-viewed optical reading of this field: NDVI ${lastClearReading.ndvi.toFixed(2)} on ${lastClearReading.date}.
+If the current reading is the radar proxy (or the month is cloud-blocked), say in words whether the radar reading and that last clear view point the same direction (e.g. "consistent with your last clear reading"), but NEVER present the two numbers as directly comparable. Be honest that the view has been blocked.`
+        : "";
+
     const prompt = `You are explaining satellite crop health data to a rice farmer in Battambang, Cambodia.
-Data: ${readingLine} LSWI (moisture) ${lswiValue?.toFixed(2) ?? "n/a"}, rainfall (21d) ${rainfallMm != null ? rainfallMm.toFixed(0) : "n/a"}mm, status: ${status}, growth stage: ${growthStage ?? "unknown"}, day ${dayCount ?? "?"} since planting.
+Data: ${readingLine} LSWI (moisture) ${lswiValue?.toFixed(2) ?? "n/a"}, status: ${status}, growth stage: ${growthStage ?? "unknown"}, day ${dayCount ?? "?"} since planting.
+${rainfallSection}
 ${historySection}
+${lastClearSection}
 ${sensorNote}
 ${confidenceLine}
 ${langLine}
@@ -167,6 +214,9 @@ In plain, easy-to-understand language (a short paragraph is fine, longer if need
     // answer instead of a truncated one, and if it STILL gets cut we flag it so
     // the UI can tell the user rather than silently showing a dangling sentence.
     const concisePrompt = `Keep it clear and complete in a few sentences: what the field's satellite data suggests and ONE practical next step.
+Data: ${readingLine} rainfall (21d) ${rainfallTotal}, status: ${status}, growth stage: ${growthStage ?? "unknown"}.
+Water need at this stage: ${waterNeed}
+${lastClearSection === "" ? "" : `Note: ${lastClearSection}`}
 ${confidenceLine === "" ? "" : `Remember: ${confidenceLine}`}
 ${langLine}
 Write the reply directly — no checklist, no plan, no restating these instructions. Do not mention "NDVI", "LSWI" or any index name.`;

@@ -78,7 +78,7 @@
           <i class="ti ti-info-circle"></i>
           <span>{{ obsFallbackNote }}</span>
         </p>
-        <p v-else-if="showHeroStaleNote" class="hero-stale-note">{{ t('field.last_clear_reading', { date: heroLastClearDate }) }}</p>
+        <p v-else-if="showHeroStaleNote" class="hero-stale-note">{{ heroLastClearNote }}</p>
         <div class="hero-bench">
           <span class="bench-dot"></span> {{ t('field.aoi_benchmark') }}
           <b class="mono">{{ benchmarkText }}</b>
@@ -221,7 +221,7 @@ import { buildChartConfig } from '../services/chart'
 import { INDICES, MONTHS, CONSULT_AI_URL } from '../config'
 import { sb, requireSession } from '../services/supabase'
 import { loadFieldPhotos, createSignedPhotoUrl } from '../services/supabase'
-import { getRecentIndexValue, getRainfallMm, getFieldHealthScore, polygonGeometry } from '../services/earthEngine'
+import { getRecentIndexValue, getRainfallDetail, getFieldHealthScore, polygonGeometry } from '../services/earthEngine'
 import { getWeatherContext } from '../services/weatherService'
 import { getAimCache, setAimCache } from '../services/aimScoreCache'
 import { centroid as turfCentroid } from '@turf/turf'
@@ -589,6 +589,17 @@ const showHeroStaleNote = computed(() => {
   // reads as a fixed reference point, never as the hero value.
   return stale && !!heroLastClearDate.value && !monthStatus.value
 })
+// "Last clear view: NDVI 0.38 · 2026-08-25" — the honest anchor shown on a
+// cloud-blocked / radar month so the hero's "—" (or radar value) always has a
+// last-known-good point of comparison.
+const heroLastClearNote = computed(() => {
+  const date = heroLastClearDate.value
+  if (!date) return ''
+  const recent = status.value
+  const hasValue = recent && recent.value != null
+  const val = hasValue ? ' \u00b7 NDVI ' + recent.value.toFixed(3) : ''
+  return t('field.last_clear_reading', { date }) + val
+})
 
 const displayedSceneDate = computed(() => {
   if (state.currentIndex === 'truecolor') return state.trueColorDate || null
@@ -833,7 +844,7 @@ function recentValue(geometry, index) {
 
 function getRainfall(geometry) {
   return new Promise((resolve) => {
-    getRainfallMm(geometry, 21, (mm) => resolve(mm))
+    getRainfallDetail(geometry, 21, ({ mm, buckets }) => resolve({ mm, buckets }))
   })
 }
 
@@ -872,14 +883,23 @@ async function consultAi() {
   let rviValue = radarReading
   let lswiValue = null
   let rainfallMm = state.rainfallMm
+  let rainfallBuckets = null
   try {
-    const [ndvi, lswi] = await Promise.all([recentValue(geometry, 'ndvi'), recentValue(geometry, 'lswi')])
+    const [ndvi, lswi, rain] = await Promise.all([
+      recentValue(geometry, 'ndvi'),
+      recentValue(geometry, 'lswi'),
+      getRainfall(geometry),
+    ])
     // Radar mode explains the RVI reading; a fresh NDVI (a different sensor and
     // often null on a cloud-blocked day) is not what the farmer is looking at.
     if (rviValue != null) ndviValue = null
     else ndviValue = ndvi
     lswiValue = lswi
-    if (rainfallMm == null) rainfallMm = await getRainfall(geometry)
+    // The rain detail (total + weekly buckets) fetched here wins over the
+    // whole-session total so the AI reads the rain PATTERN, not just the sum.
+    if (rain && rain.mm != null) rainfallMm = rain.mm
+    if (rain && Array.isArray(rain.buckets)) rainfallBuckets = rain.buckets
+    else if (rainfallMm == null) rainfallMm = await getRainfall(geometry).then((r) => r.mm)
     if (ndviValue == null && rviValue == null) {
       consultingAi.value = false
       store.showToast(t('toast.no_sat_data'))
@@ -925,6 +945,16 @@ async function consultAi() {
         .filter((o) => o.date)
     : []
 
+  // Last clearly-viewed optical reading (latest scene with < 40% cloud and a
+  // real NDVI). The AI anchor for "when did we last really see the field?".
+  let lastClearReading = null
+  if (Array.isArray(state.observations)) {
+    const clear = state.observations.find(
+      (o) => o && o.date && typeof o.ndvi === 'number' && isFinite(o.ndvi) && o.cloudCover != null && o.cloudCover < 40,
+    )
+    if (clear) lastClearReading = { date: clear.date, ndvi: Number(clear.ndvi.toFixed(2)) }
+  }
+
   let token
   try {
     const session = await requireSession()
@@ -945,6 +975,8 @@ async function consultAi() {
         rviValue,
         lswiValue,
         rainfallMm,
+        rainfallBuckets,
+        lastClearReading,
         status: healthStatus,
         growthStage,
         dayCount,
