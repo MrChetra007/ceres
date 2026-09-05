@@ -17,12 +17,12 @@
 
 <script setup>
 import { computed } from 'vue'
-import { state, viewConfidence } from '../store'
+import { state, viewConfidence, effectiveIndex } from '../store'
 import ConfidenceBadge from './ConfidenceBadge.vue'
 import { useI18n } from '../i18n'
 
 const { t } = useI18n()
-const isTrueColor = computed(() => state.currentIndex === 'truecolor')
+const isTrueColor = computed(() => effectiveIndex() === 'truecolor')
 const conf = computed(() => viewConfidence('main'))
 
 // Per-index legend scale values (the gradient bar stays the same). New
@@ -37,5 +37,5 @@ const LEGEND_SCALE = {
   gndvi: ['-0.2', '0.3', '0.8'],
   rvi: ['0.0', '0.5', '1.0'],
 }
-const scale = computed(() => LEGEND_SCALE[state.currentIndex] || ['0.0', '0.4', '1.0'])
+const scale = computed(() => LEGEND_SCALE[effectiveIndex()] || ['0.0', '0.4', '1.0'])
 </script>

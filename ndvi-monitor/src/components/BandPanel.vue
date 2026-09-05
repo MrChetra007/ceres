@@ -40,7 +40,7 @@
       <div class="band-divider"></div>
       <!-- AIM F5 — a consistent classification legend follows the ACTIVE tab;
            switching indices swaps only the range labels, keeping the grammar. -->
-      <IndexLegend v-if="state.currentIndex !== 'truecolor'" :index="state.currentIndex" compact />
+      <IndexLegend v-if="effectiveIndex() !== 'truecolor'" :index="effectiveIndex()" compact />
       <div class="band-base segmented" role="group" :aria-label="t('band.base_layer')">
         <button
           v-for="b in ['street', 'satellite']"
@@ -98,7 +98,7 @@
 
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
-import { state } from '../store'
+import { state, effectiveIndex } from '../store'
 import * as store from '../store'
 import Tooltip from './Tooltip.vue'
 import IndexLegend from './IndexLegend.vue'

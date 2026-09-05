@@ -910,6 +910,16 @@ function applyTrueColorLayer(map, layer, url) {
   return l
 }
 
+// The band the UI should display right now. When the main map is showing a
+// radar fallback (a cloud-blocked month/date resolved to Sentinel-1 RVI), the
+// user's tab is still their pick but the tile, switcher and legends must
+// describe RVI. Only an explicit "rvi" tab is a radar view in its own right.
+export function effectiveIndex() {
+  if (state.currentIndex === 'truecolor') return 'truecolor'
+  if (state.currentIndex === 'rvi') return 'rvi'
+  return state.radarFallback.main ? 'rvi' : state.currentIndex
+}
+
 export function loadIndexForMonth(idx, geometry, silent) {
   const m = MONTHS[idx]
   if (!m || !state.eeReady) return
