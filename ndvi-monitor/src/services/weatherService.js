@@ -9,6 +9,8 @@
 const OPEN_METEO_URL = 'https://api.open-meteo.com/v1/forecast'
 const FORECAST_DAYS = 5
 const CACHE_TTL_MS = 15 * 60 * 1000
+// TEST FLAG: cache disabled globally — every field open refetches the forecast.
+const USE_CACHE = false
 const cache = new Map()
 
 function cacheKey(lat, lng) {
@@ -43,7 +45,7 @@ function buildWeatherContext(raw) {
 // avoid redundant calls if the user reopens the same field repeatedly.
 export async function getWeatherContext(lat, lng) {
   const key = cacheKey(lat, lng)
-  const hit = cache.get(key)
+  const hit = USE_CACHE ? cache.get(key) : null
   if (hit && Date.now() - hit.ts < CACHE_TTL_MS) return hit.data
 
   const params = new URLSearchParams({
@@ -57,7 +59,7 @@ export async function getWeatherContext(lat, lng) {
   if (!res.ok) throw new Error('weather_unavailable')
   const raw = await res.json()
   const ctx = buildWeatherContext(raw)
-  cache.set(key, { ts: Date.now(), data: ctx })
+  if (USE_CACHE) cache.set(key, { ts: Date.now(), data: ctx })
   return ctx
 }
 

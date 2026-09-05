@@ -182,6 +182,9 @@ export const fieldTrends = reactive({})
 // fieldTrends (that one is NDVI+fields-only for dashboard sparklines).
 const chartCache = new Map()
 const CHART_CACHE_TTL_MS = 15 * 60 * 1000
+// TEST FLAG: chartCache is unused while this flag is off, so every index/range
+// toggle refetches fresh from the server. Flip back to true to restore caching.
+const USE_CHART_CACHE = false
 
 // A field edit reshapes its geometry, so every cached series for that field
 // (all indices, all ranges) describes the old boundary. Planting-date edits do
@@ -1607,7 +1610,7 @@ function trendSource(index) {
 export function loadChartForPoint(lat, lng, index, onEmpty) {
   const cfg = INDICES[index] || TRUE_COLOR
   const key = chartCacheKey('point:' + lat.toFixed(4) + ',' + lng.toFixed(4), index, activeRangeKey())
-  const cached = chartCache.get(key)
+  const cached = USE_CHART_CACHE ? chartCache.get(key) : null
   if (cached && Date.now() - cached.fetchedAt < CHART_CACHE_TTL_MS) {
     state.chartData = cached.data
     state.chartIndex = index
@@ -1630,7 +1633,7 @@ export function loadChartForPoint(lat, lng, index, onEmpty) {
     state.chartIndex = index
     state.chartSubtitle = lat.toFixed(4) + ', ' + lng.toFixed(4) + ' \u00b7 ' + observationCount(state.preferredLanguage, data.length, trendSource(index))
     if (index !== 'rvi') state.ndviChartData = data
-    chartCache.set(key, { data, subtitle: state.chartSubtitle, fetchedAt: Date.now() })
+    if (USE_CHART_CACHE) chartCache.set(key, { data, subtitle: state.chartSubtitle, fetchedAt: Date.now() })
     checkStress(data, lat, lng, index)
     setStatus('ready', cfg.name + ' trend loaded \u2014 ' + data.length + ' observations')
   }
@@ -1647,7 +1650,7 @@ export function loadChartForGeometry(geometry, index, label) {
   // field id is the stable subject key; label alone could drift on rename.
   const subjectKey = state.currentFieldId ? 'field:' + state.currentFieldId : 'geom:' + label
   const key = chartCacheKey(subjectKey, index, activeRangeKey())
-  const cached = chartCache.get(key)
+  const cached = USE_CHART_CACHE ? chartCache.get(key) : null
   if (cached && Date.now() - cached.fetchedAt < CHART_CACHE_TTL_MS) {
     state.chartData = cached.data
     state.chartIndex = index
@@ -1667,7 +1670,7 @@ export function loadChartForGeometry(geometry, index, label) {
     state.chartIndex = index
     state.chartSubtitle = label + ' \u00b7 ' + observationCount(state.preferredLanguage, data.length, trendSource(index))
     if (index !== 'rvi') state.ndviChartData = data
-    chartCache.set(key, { data, subtitle: state.chartSubtitle, fetchedAt: Date.now() })
+    if (USE_CHART_CACHE) chartCache.set(key, { data, subtitle: state.chartSubtitle, fetchedAt: Date.now() })
     checkStress(data, null, null, index)
     setStatus('ready', cfg.name + ' trend loaded \u2014 ' + data.length + ' observations')
   }

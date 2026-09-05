@@ -15,18 +15,22 @@
 
 export const AIM_CACHE_TTL_MS = 5 * 24 * 60 * 60 * 1000 // 5 days
 
+// TEST FLAG: AIM score cache disabled globally — every field reopen recomputes
+// the composite score fresh. Flip back to true to restore the 5-day reuse.
+const USE_AIM_CACHE = false
+
 const aimCache = new Map()
 
 export function getAimCache(field, month) {
   if (!field || !field.id) return null
-  const hit = aimCache.get(cacheKey(field, month))
+  const hit = USE_AIM_CACHE ? aimCache.get(cacheKey(field, month)) : null
   if (hit && Date.now() - hit.fetchedAt < AIM_CACHE_TTL_MS) return hit.snapshot
   return null
 }
 
 export function setAimCache(field, snapshot, month) {
   if (!field || !field.id) return
-  aimCache.set(cacheKey(field, month), { snapshot, fetchedAt: Date.now() })
+  if (USE_AIM_CACHE) aimCache.set(cacheKey(field, month), { snapshot, fetchedAt: Date.now() })
 }
 
 function cacheKey(field, month) {

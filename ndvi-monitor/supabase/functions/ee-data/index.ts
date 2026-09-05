@@ -41,6 +41,11 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
 const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
 const supabase = createClient(SUPABASE_URL, SERVICE_ROLE);
 
+// TEST FLAG: disable EVERY server-side cache (ee_tile_cache, ee_observation_cache,
+// ee_trend_cache) so every request hits Earth Engine fresh. Flip back to true
+// to restore caching when the test is done.
+const USE_EE_CACHE = false;
+
 // ── Index/visualization config (mirrors src/config.js INDICES) ────────────
 const BANDS: Record<string, string[]> = {
   ndvi: ["B8", "B4"],
@@ -250,6 +255,8 @@ async function readTileCache(
   geomHash: string,
   closed: boolean,
 ): Promise<any | null> {
+  // TEST FLAG: bypass all cache reads — every request recomputes against EE.
+  if (!USE_EE_CACHE) return null;
   try {
     const before = Date.now() - tileCacheTtlMs(closed);
     const { data } = await supabase
@@ -277,6 +284,8 @@ async function readTileCache(
 }
 
 async function writeTileCache(row: any) {
+  // TEST FLAG: bypass all cache writes while disabled.
+  if (!USE_EE_CACHE) return;
   try {
     const { error } = await supabase
       .from("ee_tile_cache")
@@ -1470,9 +1479,11 @@ async function actionGetObservations(payload: any) {
   const start = ee.Date(startTs);
 
   // 1. Read whatever scenes are already permanent-cached in this window.
+  //    TEST FLAG: while USE_EE_CACHE is off this stays empty so the FULL
+  //    window is recomputed against Earth Engine every call.
   let cached: any[] = [];
   let cachedMax: string | null = null;
-  if (fieldId) {
+  if (fieldId && USE_EE_CACHE) {
     try {
       const { data } = await supabase
         .from("ee_observation_cache")
@@ -1559,7 +1570,8 @@ async function actionGetObservations(payload: any) {
   const fresh = [...freshByDate.values()];
 
   // 4. Persist the newly computed scenes (permanent — never recomputed after).
-  if (fieldId && fresh.length) {
+  //    TEST FLAG: writes skipped while USE_EE_CACHE is off.
+  if (fieldId && fresh.length && USE_EE_CACHE) {
     try {
       const { error } = await supabase
         .from("ee_observation_cache")
@@ -1745,18 +1757,22 @@ async function actionGetAllFieldTrends(payload: any) {
   // 2. Load every cached row for these fields + index in ONE query. Only rows
   //    flagged is_closed_period are served — an open-month row is interim, and
   //    a closed-marked month is the final, permanent one.
+  //    TEST FLAG: while USE_EE_CACHE is off the map stays empty so every closed
+  //    month is recomputed fresh for every field.
   const cacheMap = new Map<string, any[]>();
   try {
-    const { data } = await supabase
-      .from("ee_trend_cache")
-      .select("field_id, year, month, points, is_closed_period")
-      .eq("index", index)
-      .in("field_id", incoming.map((f: any) => f.id));
-    for (const row of data || []) {
-      if (!row.is_closed_period) continue;
-      const mk = monthKey(row.year, row.month);
-      if (!closedKeys.has(mk)) continue;
-      cacheMap.set(`${row.field_id}|${mk}`, row.points ?? []);
+    if (USE_EE_CACHE) {
+      const { data } = await supabase
+        .from("ee_trend_cache")
+        .select("field_id, year, month, points, is_closed_period")
+        .eq("index", index)
+        .in("field_id", incoming.map((f: any) => f.id));
+      for (const row of data || []) {
+        if (!row.is_closed_period) continue;
+        const mk = monthKey(row.year, row.month);
+        if (!closedKeys.has(mk)) continue;
+        cacheMap.set(`${row.field_id}|${mk}`, row.points ?? []);
+      }
     }
   } catch (e) {
     // Cache read failed — recompute everything this call and try to write.
@@ -1870,13 +1886,16 @@ async function actionGetAllFieldTrends(payload: any) {
         });
       }
     }
-    try {
-      const { error } = await supabase
-        .from("ee_trend_cache")
-        .upsert(upserts, { onConflict: "field_id,index,year,month" });
-      if (error) console.error("[ee-data] ee_trend_cache upsert failed:", error);
-    } catch (e) {
-      console.error("[ee-data] ee_trend_cache upsert failed:", e);
+    // TEST FLAG: cache writes skipped while USE_EE_CACHE is off.
+    if (USE_EE_CACHE) {
+      try {
+        const { error } = await supabase
+          .from("ee_trend_cache")
+          .upsert(upserts, { onConflict: "field_id,index,year,month" });
+        if (error) console.error("[ee-data] ee_trend_cache upsert failed:", error);
+      } catch (e) {
+        console.error("[ee-data] ee_trend_cache upsert failed:", e);
+      }
     }
   }
 
