@@ -5,6 +5,11 @@ import { getCorsHeaders } from "../_shared/cors.ts";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
 const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
 const DAILY_CAP = 20;
+// TEST FLAG: the ai_explanations cache might be serving stale/confusing
+// explanations instead of helping. Set false to bypass BOTH the cache read and
+// the cache write so every call generates a fresh explanation; flip back to
+// true to restore caching when the test is done.
+const USE_EXPLANATION_CACHE = false;
 
 const supabase = createClient(SUPABASE_URL, SERVICE_ROLE);
 
@@ -65,26 +70,28 @@ Deno.serve(async (req) => {
     //    legacy ai_explanations.ndvi_value column stores whichever reading was
     //    used (NDVI or RVI); the status string sent for radar reads is
     //    "Radar (RVI) reading", which partitions the cache from optical reads.
-    const { data: cached } = await supabase
-      .from("ai_explanations")
-      .select("explanation, ndvi_value, status, truncated")
-      .eq("field_id", fieldId)
-      .maybeSingle();
+    if (USE_EXPLANATION_CACHE) {
+      const { data: cached } = await supabase
+        .from("ai_explanations")
+        .select("explanation, ndvi_value, status, truncated")
+        .eq("field_id", fieldId)
+        .maybeSingle();
 
-    if (
-      cached &&
-      Math.abs(cached.ndvi_value - readingValue) < 0.02 &&
-      cached.status === status
-    ) {
-      return jsonResponse({
-        ok: true,
-        explanation: cached.explanation,
-        // Pre-migration rows have truncated = null; treat that as untruncated
-        // so old cached answers still render cleanly. New rows always have a
-        // real boolean written at cache time.
-        truncated: cached.truncated ?? false,
-        cached: true,
-      }, 200, corsHeaders);
+      if (
+        cached &&
+        Math.abs(cached.ndvi_value - readingValue) < 0.02 &&
+        cached.status === status
+      ) {
+        return jsonResponse({
+          ok: true,
+          explanation: cached.explanation,
+          // Pre-migration rows have truncated = null; treat that as untruncated
+          // so old cached answers still render cleanly. New rows always have a
+          // real boolean written at cache time.
+          truncated: cached.truncated ?? false,
+          cached: true,
+        }, 200, corsHeaders);
+      }
     }
 
     // 2. Check + increment daily usage
@@ -151,16 +158,19 @@ Write the reply directly — no checklist, no plan, no restating these instructi
       truncated,
     );
 
-    // 4. Cache it (model_used is for our own auditing only)
-    await supabase.from("ai_explanations").upsert({
-      field_id: fieldId,
-      ndvi_value: readingValue,
-      status,
-      explanation,
-      model_used: modelUsed,
-      truncated,
-      created_at: new Date().toISOString(),
-    });
+    // 4. Cache it (model_used is for our own auditing only) — skipped while the
+    //    USE_EXPLANATION_CACHE test flag is off.
+    if (USE_EXPLANATION_CACHE) {
+      await supabase.from("ai_explanations").upsert({
+        field_id: fieldId,
+        ndvi_value: readingValue,
+        status,
+        explanation,
+        model_used: modelUsed,
+        truncated,
+        created_at: new Date().toISOString(),
+      });
+    }
 
     return jsonResponse({ ok: true, explanation, truncated, cached: false }, 200, corsHeaders);
   } catch (e) {
