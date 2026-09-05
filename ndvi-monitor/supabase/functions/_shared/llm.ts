@@ -60,7 +60,7 @@ async function callGemini(prompt: string): Promise<ProviderResult | null> {
           contents: [{ parts: [{ text: prompt }] }],
           generationConfig: {
             thinkingConfig: { thinkingLevel: "low" },
-            maxOutputTokens: 800,
+            maxOutputTokens: 2048,
           },
         }),
       },
@@ -77,10 +77,15 @@ async function callGemini(prompt: string): Promise<ProviderResult | null> {
         JSON.stringify(data),
       );
     }
+    // RECITATION means the model reproduced memorized content and cut itself off
+    // before a real answer — that's never a usable explanation. Fail THIS
+    // provider so the fallback chain (DeepSeek/Qwen) serves a proper answer.
+    if (text && finishReason === "RECITATION") {
+      console.error("Gemini flagged RECITATION \u2014 falling through to next provider");
+      return null;
+    }
     // Gemini API surface: MAX_TOKENS / STOP / BLOCKED / SAFETY / RECITATION.
-    const truncated = text
-      ? finishReason === "MAX_TOKENS" || finishReason === "RECITATION"
-      : false;
+    const truncated = text ? finishReason === "MAX_TOKENS" : false;
     return text ? { text, truncated, finishReason } : null;
   } catch (e) {
     console.error("Gemini call failed:", e);
@@ -102,7 +107,7 @@ async function callDeepSeek(prompt: string): Promise<ProviderResult | null> {
         body: JSON.stringify({
           model: "deepseek-v4-flash",
           messages: [{ role: "user", content: prompt }],
-          max_tokens: 800,
+          max_tokens: 2048,
           temperature: 0.4,
         }),
       },
@@ -141,8 +146,12 @@ async function callQwen(prompt: string): Promise<ProviderResult | null> {
         body: JSON.stringify({
           model: "qwen3-max",
           messages: [{ role: "user", content: prompt }],
-          max_tokens: 800,
+          max_tokens: 2048,
           temperature: 0.4,
+          // Qwen3 defaults to a thinking mode that can leak its internal
+          // planning checklist ("did we mention radar? Yes (...)") as the
+          // answer. Turn it off — we want the plain explanation only.
+          enable_thinking: false,
         }),
       },
       PROVIDER_TIMEOUT_MS,
@@ -184,6 +193,15 @@ export async function generateExplanation(
     try {
       const first = await fn(prompt);
       if (!first?.text) continue;
+      // A model that answers with its own planning checklist ("did we mention
+      // radar? Yes (...)") instead of the explanation is a failed provider —
+      // bounce to the next one rather than showing the trace to the farmer.
+      if (/Yes \("|\{\*|^\s*\*[^*]?\s*\*/.test(first.text)) {
+        console.error(
+          `AI provider ${name} returned a plan/checklist instead of an answer — falling through`,
+        );
+        continue;
+      }
       // If the first pass hit the output token ceiling, retry the SAME provider
       // with a hard-trimmed "just be short" prompt (cheaper + faster than
       // bouncing to the next provider, and usually lands under budget).

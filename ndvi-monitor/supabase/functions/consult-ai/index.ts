@@ -125,17 +125,17 @@ Data: ${readingLine} LSWI (moisture) ${lswiValue?.toFixed(2) ?? "n/a"}, rainfall
 ${sensorNote}
 ${confidenceLine}
 ${langLine}
-In 2-3 short sentences: describe what the numbers suggest, and name 1-2 possible causes as possibilities to check — never state a single cause as certain. End with one practical next step. Do not use technical jargon like "NDVI" or "LSWI" in the reply itself.`;
+In plain, easy-to-understand language (a short paragraph is fine, longer if needed): describe what the numbers suggest, name 1-2 possible causes as possibilities to check — never state a single cause as certain — and explain enough that the farmer understands the situation. End with one practical next step. Write the reply directly: never restate these instructions, never list evaluation criteria, never write a checklist or plan. Do not use technical jargon like "NDVI" or "LSWI" in the reply itself.`;
 
     // If the model hits its output token ceiling (finish_reason "length" /
     // "MAX_TOKENS") and trails off mid-sentence, retry the same provider with a
     // hard-trimmed "keep it minimal" prompt. The user gets a complete short
     // answer instead of a truncated one, and if it STILL gets cut we flag it so
     // the UI can tell the user rather than silently showing a dangling sentence.
-    const concisePrompt = `Be EXTREMELY concise. In 1-2 short, simple sentences only: what the field's satellite data suggests and ONE practical next step.
+    const concisePrompt = `Keep it clear and complete in a few sentences: what the field's satellite data suggests and ONE practical next step.
 ${confidenceLine === "" ? "" : `Remember: ${confidenceLine}`}
 ${langLine}
-Keep the whole reply under 45 words. Do not mention "NDVI", "LSWI" or any index name.`;
+Write the reply directly — no checklist, no plan, no restating these instructions. Do not mention "NDVI", "LSWI" or any index name.`;
 
     const result = await generateExplanation(prompt, concisePrompt);
     const explanation =
