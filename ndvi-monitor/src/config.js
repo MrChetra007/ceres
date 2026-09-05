@@ -166,6 +166,16 @@ export const RICE_GROWTH_STAGES = [
   { maxDay: 130, stage: 'Harvest / Senescence', min: -0.1, max: 0.4 },
 ]
 
+// Day-based generic vegetative cycle for crops without rice-specific tables
+// (mango, cassava, banana, ...). Wider bands than rice and fewer stages — the
+// same day-since-planting driver, but with thresholds that don't assume the
+// flood-and-recede cycle of a paddy.
+export const GENERIC_GROWTH_STAGES = [
+  { maxDay: 40, stage: 'Vegetative', min: 0.15, max: 0.5 },
+  { maxDay: 85, stage: 'Flowering / Fruiting', min: 0.35, max: 0.65 },
+  { maxDay: 130, stage: 'Mature', min: 0.25, max: 0.55 },
+]
+
 export const EVENTS = [
   { year: 2025, month: 8, label: 'Flood', type: 'flood' },
   { year: 2025, month: 9, label: 'Flood', type: 'flood' },

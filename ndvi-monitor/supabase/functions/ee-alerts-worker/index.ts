@@ -415,7 +415,7 @@ Deno.serve(async (_req) => {
     const { data: fields, error } = await supabase
       .from("fields")
       .select(
-        "id, name, geojson, planting_date, centroid_lat, centroid_lng, owner_id, profiles!inner(telegram_chat_id, preferred_language)",
+        "id, name, geojson, planting_date, crop_english, centroid_lat, centroid_lng, owner_id, profiles!inner(telegram_chat_id, preferred_language)",
       )
       .not("profiles.telegram_chat_id", "is", null);
 
@@ -506,7 +506,8 @@ Deno.serve(async (_req) => {
 
         // reading.source === "ndvi" — unchanged optical path below.
         const { ndvi, confidence, windowDays } = reading;
-        const { status, stage } = statusFromNdvi(ndvi, field.planting_date);
+        const useGeneric = !!(field as any).crop_english && (field as any).crop_english !== "rice";
+        const { status, stage } = statusFromNdvi(ndvi, field.planting_date, useGeneric);
 
         // Always send — every run, regardless of whether status changed or
         // improved. (This intentionally removes the Part 5 dedup/"only on

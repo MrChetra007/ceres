@@ -46,6 +46,10 @@ const STAGE_NAMES_KM = {
   'Flowering / Heading': 'ចេញផ្កា / ចេញកួរ',
   'Grain Filling / Maturity': 'បំពេញគ្រាប់ / ចាស់ទុំ',
   'Harvest / Senescence': 'ការប្រមូលផល / ការចាស់ជរារបស់ដំណាំ',
+  // Generic vegetative cycle (non-rice crops)
+  'Vegetative': 'លូតលាស់',
+  'Flowering / Fruiting': 'ចេញផ្កា / ចេញផ្លែ',
+  'Mature': 'ចាស់ទុំ',
 }
 
 export function stageName(lang, stage) {

@@ -84,7 +84,7 @@ export function zoneThresholds(state, view) {
     days = Math.floor((asOf - new Date(field.plantingDate).getTime()) / 86400000)
   }
   if (!field || !field.plantingDate || days == null || days < 0) return flat
-  const stage = getGrowthStage(days)
+  const stage = getGrowthStage(days, field)
   if (!stage) return flat
   return {
     bad: clamp01(stage.min - STAGE_DEFICIT_BAD),

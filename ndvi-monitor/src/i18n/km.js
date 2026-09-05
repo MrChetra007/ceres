@@ -164,6 +164,10 @@ export default {
   "field.forecast_hint":
     "ការព្យាករណ៍ Open-Meteo សម្រាប់ទីតាំងវាល សម្រាប់បង្ហាញតែប៉ុណ្ណោះ។",
   "field.metadata": "ព័ត៌មានវាល",
+  "field.crop": "ដំណាំ",
+  "field.no_crop": "មិនទាន់កំណត់",
+  "field.crop_label": "តើអ្វីដែលកំពុងដាំនៅទីនេះ?",
+  "field.crop_placeholder": "ឧ. ស្រូវ, ស្វាយ, rice...",
   "field.planting_date": "កាលបរិច្ឆេទដាំ",
   "field.date_label": "កាលបរិច្ឆេទដាំ:",
   "field.area": "ផ្ទៃដី",
@@ -245,6 +249,7 @@ export default {
   "sidebar.parcels": "ដី",
   "sidebar.search": "ស្វែងរកវាល...",
   "sidebar.set_planting_date": "កំណត់កាលបរិច្ឆេទដាំ",
+  "sidebar.set_crop": "កំណត់ដំណាំ",
   "sidebar.edit_field": "កែសម្រួលព្រំដីវាល",
   "sidebar.delete_field": "លុបវាល",
   "sidebar.no_fields":

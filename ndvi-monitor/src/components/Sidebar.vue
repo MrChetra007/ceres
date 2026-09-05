@@ -44,7 +44,7 @@
         <div class="field-card-header">
           <div>
             <p class="field-card-name">{{ f.name }}</p>
-            <p class="field-card-meta mono">{{ formatHectares(getOrComputeArea(f)).toUpperCase() }} · {{ stageLine(f) }}</p>
+            <p class="field-card-meta mono">{{ cropLine(f) }}{{ cropLine(f) ? ' \u00b7 ' : '' }}{{ formatHectares(getOrComputeArea(f)).toUpperCase() }} · {{ stageLine(f) }}</p>
           </div>
           <div class="field-card-badges">
             <span class="status-badge" :class="badgeClass(f)">{{ status(f) ? status(f).badgeText : '\u2014' }}</span>
@@ -58,6 +58,7 @@
             <line v-else x1="0" y1="14" x2="100" y2="14" stroke-dasharray="3 3" />
           </svg>
           <div class="field-card-stats">
+            <button class="plant-date-btn" :title="t('sidebar.set_crop')" @click.stop="setCrop(f)"><i class="ti ti-leaf"></i></button>
             <button class="plant-date-btn" :title="t('sidebar.set_planting_date')" @click.stop="setPlantingDate(f)"><i class="ti ti-calendar-plus"></i></button>
             <button class="plant-date-btn" :title="t('sidebar.edit_field')" @click.stop="store.startFieldEdit(f)"><i class="ti ti-pencil"></i></button>
           </div>
@@ -194,6 +195,23 @@ function setPlantingDate(f) {
     if (newDate === undefined) return
     // A manual overwrite supersedes any satellite-estimated date.
     store.updateField(f.id, { planting_date: newDate, planting_date_source: 'manual' })
+  })
+}
+
+function cropLine(f) {
+  const c = f.cropName || f.cropEnglish || ''
+  if (!c) return ''
+  // Capitalize the first letter for display.
+  return c.charAt(0).toUpperCase() + c.slice(1)
+}
+
+function setCrop(f) {
+  store.promptCrop(f.cropName || f.cropEnglish || '', (cropRaw) => {
+    if (cropRaw === undefined) return
+    import('../services/crops').then(({ normalizeCrop }) => {
+      const c = normalizeCrop(cropRaw)
+      store.updateField(f.id, { crop_name: c.typed || null, crop_english: c.english || null })
+    })
   })
 }
 </script>

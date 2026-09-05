@@ -14,6 +14,8 @@ export function mapRowToField(row) {
     areaHectares: row.area_ha,
     plantingDate: row.planting_date,
     plantingDateSource: row.planting_date_source || 'manual',
+    cropName: row.crop_name ?? null,
+    cropEnglish: row.crop_english ?? null,
     centroidLat: row.centroid_lat ?? null,
     centroidLng: row.centroid_lng ?? null,
     notes: row.notes,
@@ -69,7 +71,7 @@ export function fieldCentroid(geojson) {
   }
 }
 
-export async function insertField({ name, geojson, area_ha, planting_date, planting_date_source }) {
+export async function insertField({ name, geojson, area_ha, planting_date, planting_date_source, crop_name, crop_english }) {
   const session = await requireSession()
   const centroid = fieldCentroid(geojson)
   const { data, error } = await sb
@@ -77,6 +79,8 @@ export async function insertField({ name, geojson, area_ha, planting_date, plant
     .insert({
       name, geojson, area_ha, planting_date,
       planting_date_source: planting_date_source || 'manual',
+      crop_name: crop_name || null,
+      crop_english: crop_english || null,
       owner_id: session.user.id,
       ...centroid,
     })

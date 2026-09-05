@@ -22,6 +22,12 @@ const WATER_NEED_BY_STAGE: Record<string, string> = {
   "Flowering / Heading": "the most moisture-sensitive stage — stress or heat around flowering reduces pollination and grain set; keep shallow water if possible.",
   "Grain Filling / Maturity": "the grains are filling and pump the most water of the season — avoid letting the field dry out until the final ~2 weeks before harvest.",
   "Harvest / Senescence": "the crop is maturing naturally for harvest — time to drain the field down; it needs little standing water.",
+  // Generic vegetative cycle — used for any crop that isn't rice (mango,
+  // cassava, banana, ...). Stage strings are keyed to GENERIC_GROWTH_STAGES in
+  // the client config so rice and non-rice can never collide.
+  "Vegetative": "the plant is young and building roots and leaves — keep the soil consistently moist; a newly planted tree or seedling has no deep root system yet.",
+  "Flowering / Fruiting": "the plant is in its most sensitive fortnight — water stress around flowering or fruit set directly cuts yield; keep the soil from drying out.",
+  "Mature": "the crop is approaching harvest — ease off watering and watch for ripeness; low greenness is natural here as growth slows.",
 };
 
 const supabase = createClient(SUPABASE_URL, SERVICE_ROLE);
@@ -61,6 +67,8 @@ Deno.serve(async (req) => {
       confidenceReason,
       lang,
       observationHistory,
+      cropEnglish,
+      locationName,
     } = await req.json();
 
     // The farmer's own profile language wins; fall back to what the client
@@ -198,11 +206,25 @@ Read the PATTERN of rain, not just the total — e.g. "most of the rain fell 2+ 
 If the current reading is the radar proxy (or the month is cloud-blocked), say in words whether the radar reading and that last clear view point the same direction (e.g. "consistent with your last clear reading"), but NEVER present the two numbers as directly comparable. Be honest that the view has been blocked.`
         : "";
 
-    const prompt = `You are explaining satellite crop health data to a rice farmer in Battambang, Cambodia.
+    const placeText = typeof locationName === "string" && locationName.trim() ? locationName.trim() : "Cambodia";
+    const cropText =
+      typeof cropEnglish === "string" && cropEnglish.trim() && cropEnglish.trim() !== "rice"
+        ? `a farmer growing ${cropEnglish.trim()}`
+        : "a rice farmer";
+    // When the crop isn't rice, the client's growth-stage string comes from the
+    // generic vegetative cycle (Vegetative / Flowering-Fruiting / Mature) —
+    // remind the model not to read rice assumptions into it.
+    const cropNote =
+      typeof cropEnglish === "string" && cropEnglish.trim() && cropEnglish.trim() !== "rice"
+        ? `\nCrop note: the plant here is ${cropEnglish.trim()}, not rice. Growth stage refers to a simple vegetative cycle (Vegetative / Flowering / Fruiting / Mature) — do not assume flooding, tillering or paddy management.`
+        : "";
+
+    const prompt = `You are explaining satellite crop health data to ${cropText} in ${placeText}.
 Data: ${readingLine} LSWI (moisture) ${lswiValue?.toFixed(2) ?? "n/a"}, status: ${status}, growth stage: ${growthStage ?? "unknown"}, day ${dayCount ?? "?"} since planting.
 ${rainfallSection}
 ${historySection}
 ${lastClearSection}
+${cropNote}
 ${sensorNote}
 ${confidenceLine}
 ${langLine}

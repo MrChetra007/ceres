@@ -11,16 +11,23 @@ export const RICE_GROWTH_STAGES = [
   { name: "Harvest", maxDay: Infinity, min: 0.1, max: 0.3 },
 ];
 
-export function stageForDay(day: number) {
-  return (
-    RICE_GROWTH_STAGES.find((s) => day <= s.maxDay) ||
-    RICE_GROWTH_STAGES[RICE_GROWTH_STAGES.length - 1]
-  );
+// Same day-based driver as RICE_GROWTH_STAGES but with a plain vegetative
+// cycle and wider bands — used for fields whose crop isn't rice.
+export const GENERIC_GROWTH_STAGES = [
+  { name: "Vegetative", maxDay: 40, min: 0.15, max: 0.5 },
+  { name: "Flowering", maxDay: 85, min: 0.35, max: 0.65 },
+  { name: "Mature", maxDay: 130, min: 0.25, max: 0.55 },
+];
+
+export function stageForDay(day: number, useGeneric = false) {
+  const table = useGeneric ? GENERIC_GROWTH_STAGES : RICE_GROWTH_STAGES;
+  return table.find((s) => day <= s.maxDay) || table[table.length - 1];
 }
 
 export function statusFromNdvi(
   ndvi: number,
   plantingDate: string | null,
+  useGeneric = false,
 ): { status: string; stage: string | null } {
   if (!plantingDate) {
     // flat fallback, same as the app
@@ -31,7 +38,7 @@ export function statusFromNdvi(
   const day = Math.floor(
     (Date.now() - new Date(plantingDate).getTime()) / 86400000,
   );
-  const stage = stageForDay(day);
+  const stage = stageForDay(day, useGeneric);
   const deficit = stage.min - ndvi;
   if (deficit > 0.15) return { status: "stressed", stage: stage.name };
   if (ndvi < stage.min) return { status: "below_expected", stage: stage.name };

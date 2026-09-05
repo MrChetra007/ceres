@@ -180,6 +180,7 @@
     <template v-if="isField">
       <div class="detail-section meta-card">
         <p class="detail-card-label">{{ t('field.metadata') }}</p>
+        <div class="meta-row"><span>{{ t('field.crop') }}</span><b class="mono">{{ cropMetaText }}</b></div>
         <div class="meta-row"><span>{{ t('field.planting_date') }}</span><b class="mono">{{ plantingText }}</b></div>
         <div class="meta-row"><span>{{ t('field.area') }}</span><b class="mono">{{ formatHectares(areaHa).toUpperCase() }}</b></div>
         <div class="meta-row"><span>{{ t('field.added') }}</span><b class="mono">{{ addedText }}</b></div>
@@ -551,7 +552,7 @@ const stageText = computed(() => {
   const days = growthStageDays.value
   const obs = activeObservation.value
   if (f && f.plantingDate && days != null && !stagePrePlanting.value) {
-    const stage = store.getGrowthStage(days).stage
+    const stage = store.getGrowthStage(days, currentField.value).stage
     // A radar reading is always labeled RVI (it's Sentinel-1, regardless of the
     // band tab the user has open) so it can never be mistaken for the active
     // optical band's value.
@@ -689,7 +690,14 @@ const stageName = computed(() => {
   const d = growthStageDays.value
   if (d == null) return t('field.no_planting_date')
   if (stagePrePlanting.value) return t('field.stage_future')
-  return stageNameKm(state.preferredLanguage, store.getGrowthStage(d).stage)
+  return stageNameKm(state.preferredLanguage, store.getGrowthStage(d, currentField.value).stage)
+})
+const cropMetaText = computed(() => {
+  const f = currentField.value
+  if (!f) return '\u2014'
+  const c = f.cropName || f.cropEnglish || ''
+  if (!c) return t('field.no_crop')
+  return c.charAt(0).toUpperCase() + c.slice(1)
 })
 const stageDaysText = computed(() => {
   const d = growthStageDays.value
@@ -869,6 +877,11 @@ async function consultAi() {
     store.showToast(t('toast.cant_explain'))
     return
   }
+  // Dynamic location from the stored polygon (centroid -> reverse geocode).
+  // Best-effort: a lookup that fails or times out just leaves the AI to say
+  // "in Cambodia" — never blocks the consult.
+  let locationName = null
+  try { locationName = await store.fieldLocationName(field) } catch (e) { locationName = null }
   const geometry = polygonGeometry(geom.coordinates)
 
   consultingAi.value = true
@@ -917,7 +930,7 @@ async function consultAi() {
     const days = Math.floor((new Date(asOfDate.value).getTime() - new Date(field.plantingDate).getTime()) / 86400000)
     if (days >= 0) {
       dayCount = days
-      growthStage = store.getGrowthStage(days).stage
+      growthStage = store.getGrowthStage(days, currentField.value).stage
     }
   }
   // Radar mode labels the reading honestly ("Radar (RVI) reading") so the
@@ -984,6 +997,8 @@ async function consultAi() {
         confidenceReason: confidence ? confidence.reason : '',
         lang: state.preferredLanguage,
         observationHistory,
+        cropEnglish: field.cropEnglish || null,
+        locationName,
       }),
     })
     let body = null

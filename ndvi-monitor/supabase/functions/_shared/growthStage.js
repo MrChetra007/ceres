@@ -10,11 +10,17 @@ export const RICE_GROWTH_STAGES = [
     { name: "Maturation", maxDay: 110, min: 0.35, max: 0.55 },
     { name: "Harvest", maxDay: Infinity, min: 0.1, max: 0.3 },
 ];
-export function stageForDay(day) {
-    return (RICE_GROWTH_STAGES.find((s) => day <= s.maxDay) ||
-        RICE_GROWTH_STAGES[RICE_GROWTH_STAGES.length - 1]);
+export const GENERIC_GROWTH_STAGES = [
+    { name: "Vegetative", maxDay: 40, min: 0.15, max: 0.5 },
+    { name: "Flowering", maxDay: 85, min: 0.35, max: 0.65 },
+    { name: "Mature", maxDay: 130, min: 0.25, max: 0.55 },
+];
+export function stageForDay(day, useGeneric = false) {
+    const table = useGeneric ? GENERIC_GROWTH_STAGES : RICE_GROWTH_STAGES;
+    return (table.find((s) => day <= s.maxDay) ||
+        table[table.length - 1]);
 }
-export function statusFromNdvi(ndvi, plantingDate) {
+export function statusFromNdvi(ndvi, plantingDate, useGeneric = false) {
     if (!plantingDate) {
         // flat fallback, same as the app
         if (ndvi >= 0.6)
@@ -24,7 +30,7 @@ export function statusFromNdvi(ndvi, plantingDate) {
         return { status: "stressed", stage: null };
     }
     const day = Math.floor((Date.now() - new Date(plantingDate).getTime()) / 86400000);
-    const stage = stageForDay(day);
+    const stage = stageForDay(day, useGeneric);
     const deficit = stage.min - ndvi;
     if (deficit > 0.15)
         return { status: "stressed", stage: stage.name };

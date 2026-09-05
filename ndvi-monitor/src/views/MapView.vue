@@ -32,6 +32,7 @@
   <ChartModal />
   <AuthOverlay />
   <DatePickerModal />
+  <CropPickerModal />
   <TelegramModal />
   <SettingsModal />
   <PaywallModal />
@@ -71,6 +72,7 @@ import HelpModal from '../components/HelpModal.vue'
 import ChartModal from '../components/ChartModal.vue'
 import AuthOverlay from '../components/AuthOverlay.vue'
 import DatePickerModal from '../components/DatePickerModal.vue'
+import CropPickerModal from '../components/CropPickerModal.vue'
 import TelegramModal from '../components/TelegramModal.vue'
 import SettingsModal from '../components/SettingsModal.vue'
 import PaywallModal from '../components/PaywallModal.vue'

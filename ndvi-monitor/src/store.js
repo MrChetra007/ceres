@@ -3,11 +3,13 @@ import { area as turfArea } from '@turf/turf'
 import { jsPDF } from 'jspdf'
 import {
   MONTHS, DEFAULT_AOI, DEFAULT_PRESETS,
-  RICE_GROWTH_STAGES, EVENTS, EVENT_COLORS, INDICES, TRUE_COLOR, MAP_CENTER, MAP_ZOOM,
+  RICE_GROWTH_STAGES, GENERIC_GROWTH_STAGES, EVENTS, EVENT_COLORS, INDICES, TRUE_COLOR, MAP_CENTER, MAP_ZOOM,
   TELEGRAM_BOT_USERNAME, TELEGRAM_LINK_TTL_MS, SEASON_PRESETS,
 } from './config'
 import * as ee from './services/earthEngine'
 import { loadTrueColor, rectGeometry, polygonGeometry, pointGeometry } from './services/earthEngine'
+import { normalizeCrop, isRiceCrop } from './services/crops'
+import { reverseGeocode } from './services/geocode'
 import {
   toKhmerDigits, stageName, statusLabel, futurePlantingText, noReadingText,
   observationCount, confReason, daySinceLabel,
@@ -197,10 +199,12 @@ function invalidateChartCacheForField(fieldId) {
   }
 }
 export const datePicker = reactive({ visible: false, currentDate: null })
+export const cropPicker = reactive({ visible: false, currentValue: null })
 let infoChart = null
 let loadingCount = 0
 const toastTimers = new Map()
 let pendingDateCallback = null
+let pendingCropCallback = null
 // Only surface the cloud-blocked toast ONCE per session (then rely on the
 // persistent "☁️ cloud-blocked" pill + its tooltip). Prevents toast spam when
 // the user scrubs across several cloud-heavy months.
@@ -265,11 +269,14 @@ function endLoading() {
 
 export function setInfoChart(ch) { infoChart = ch }
 
-export function getGrowthStage(daysSincePlanting) {
-  for (let i = 0; i < RICE_GROWTH_STAGES.length; i++) {
-    if (daysSincePlanting <= RICE_GROWTH_STAGES[i].maxDay) return RICE_GROWTH_STAGES[i]
+export function getGrowthStage(daysSincePlanting, field) {
+  // Rice (or no crop set — the historical default) keeps the exact stage
+  // tables; every other crop ages through the generic vegetative cycle.
+  const table = isRiceCrop(field && field.cropEnglish) ? RICE_GROWTH_STAGES : GENERIC_GROWTH_STAGES
+  for (let i = 0; i < table.length; i++) {
+    if (daysSincePlanting <= table[i].maxDay) return table[i]
   }
-  return RICE_GROWTH_STAGES[RICE_GROWTH_STAGES.length - 1]
+  return table[table.length - 1]
 }
 
 export function getFieldAreaHectares(geojson) {
@@ -2054,7 +2061,7 @@ export async function importLocalFieldsIfAny() {
   loadFieldsFromSupabase()
 }
 
-export async function saveField(name, geojson, plantingDate) {
+export async function saveField(name, geojson, plantingDate, cropRaw) {
   if (!state.supabaseUser) { showToast('Sign in to save fields'); return null }
   const area = getFieldAreaHectares(geojson)
   // UI-only hectare cap (TODO(backend): enforce server-side too — see
@@ -2079,6 +2086,7 @@ export async function saveField(name, geojson, plantingDate) {
       }
     }
   }
+  const crop = normalizeCrop(cropRaw)
   try {
     const field = await supabase.insertField({
       name,
@@ -2086,6 +2094,8 @@ export async function saveField(name, geojson, plantingDate) {
       area_ha: area,
       planting_date,
       planting_date_source,
+      crop_name: crop.typed || null,
+      crop_english: crop.english || null,
     })
     state.fields.push(field)
     if (planting_date_source === 'estimated' && planting_date) {
@@ -2100,6 +2110,17 @@ export async function saveField(name, geojson, plantingDate) {
   }
 }
 
+// Resolve a field's dynamic location ("Battambang, Cambodia") from its stored
+// geojson polygon — centroided and reverse-geocoded on demand, never persisted,
+// so the coordinates stay the single source of truth. Best-effort: returns
+// null on a failed lookup or timeout (the AI then just says "Cambodia").
+export async function fieldLocationName(field) {
+  if (!field || !field.geojson) return null
+  const { centroid_lat, centroid_lng } = supabase.fieldCentroid(field.geojson)
+  if (centroid_lat == null || centroid_lng == null) return null
+  return reverseGeocode(centroid_lat, centroid_lng)
+}
+
 export async function updateField(id, patch) {
   if (!state.supabaseUser) { showToast('Sign in to update fields'); return }
   try {
@@ -2111,6 +2132,8 @@ export async function updateField(id, patch) {
       if ('planting_date' in patch) state.fields[idx].plantingDate = patch.planting_date
       if ('planting_date_source' in patch) state.fields[idx].plantingDateSource = patch.planting_date_source
       if ('name' in patch) state.fields[idx].name = patch.name
+      if ('crop_name' in patch) state.fields[idx].cropName = patch.crop_name
+      if ('crop_english' in patch) state.fields[idx].cropEnglish = patch.crop_english
     }
   } catch (err) {
     showToast('Failed to update field: ' + err.message)
@@ -2490,7 +2513,10 @@ export function promptSaveField(geojson) {
   }
   promptDate(null, (date) => {
     if (date === undefined) date = null
-    saveField(name, geojson, date).then((saved) => { if (saved) loadField(saved) })
+    promptCrop(null, (cropRaw) => {
+      if (cropRaw === undefined) cropRaw = null
+      saveField(name, geojson, date, cropRaw).then((saved) => { if (saved) loadField(saved) })
+    })
   })
 }
 
@@ -2511,6 +2537,26 @@ export function cancelDate() {
   datePicker.visible = false
   const cb = pendingDateCallback
   pendingDateCallback = null
+  if (cb) cb(undefined)
+}
+
+export function promptCrop(currentValue, onResult) {
+  pendingCropCallback = onResult
+  cropPicker.visible = true
+  cropPicker.currentValue = currentValue || ''
+}
+
+export function submitCrop(value) {
+  cropPicker.visible = false
+  const cb = pendingCropCallback
+  pendingCropCallback = null
+  if (cb) cb(value)
+}
+
+export function cancelCrop() {
+  cropPicker.visible = false
+  const cb = pendingCropCallback
+  pendingCropCallback = null
   if (cb) cb(undefined)
 }
 
@@ -2543,7 +2589,7 @@ export function buildStatusObject(field, value, index, asOfDate) {
   if (daysSincePlanting < 0) {
     return { badgeClass: 'moderate', badgeText: statusLabel(lang, 'Check date'), stageLabel: futurePlantingText(lang) }
   }
-  const stage = getGrowthStage(daysSincePlanting)
+  const stage = getGrowthStage(daysSincePlanting, field)
   let cls3, lbl3
   if (value >= stage.min && value <= stage.max) {
     cls3 = 'healthy'; lbl3 = 'Healthy'
