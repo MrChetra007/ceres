@@ -12,7 +12,7 @@
       <!-- AIM — composite health score card (light "readable outdoors" surface
            on the dark panel, per the chosen hybrid design). Score + one plain
            verdict first; component chips and any index disagreement below. -->
-      <div v-if="aimLoading || (aim && !pinnedSceneNoData && !aim.noData)" class="detail-section aim-card">
+      <div v-if="aimLoading || (aim && !aimSuppressed && !aim.noData)" class="detail-section aim-card">
         <div class="aim-card-head">
           <span class="aim-card-title">{{ t('aim.heading') }}</span>
           <span v-if="aimLoading" class="aim-loading">{{ t('aim.loading') }}</span>
@@ -60,7 +60,7 @@
           </div>
         </div>
       </div>
-      <div v-else-if="aim && (aim.noData || pinnedSceneNoData)" class="detail-section aim-card aim-card--nodata">
+      <div v-else-if="aim && (aim.noData || aimSuppressed)" class="detail-section aim-card aim-card--nodata">
         <p class="aim-nodata">{{ t('aim.no_data') }}</p>
       </div>
 
@@ -354,6 +354,18 @@ const noSceneData = computed(() => !state.loading && state.sceneCount.main === 0
 const pinnedSceneNoData = computed(() =>
   !!state.selectedObservationDate && state.selectedSceneStatus?.mode === 'no_data'
 )
+
+// The AIM card is an OPTICAL health score computed from the month's clean
+// scenes — so it must never sit on top of a view whose map is NOT that optical
+// index: the pinned radar fallback ("optical blocked by cloud", RVI tile) and
+// the cloud-blocked true-color fallback both mean the month/date has no
+// readable optical reading, so the score would contradict the hero "—". The
+// RVI and True Color tabs are excluded: there the radar/true-color view IS the
+// point, not a substitution.
+const aimSuppressed = computed(() => {
+  if (state.currentIndex === 'rvi' || state.currentIndex === 'truecolor') return false
+  return pinnedSceneNoData.value || !!state.radarFallback.main || !!state.cloudBlock.main
+})
 
 // The active observation for the currently-scrubbed month. `state.chartData` is
 // the per-scene (cloud-free, same collection the map monthly composite uses)
