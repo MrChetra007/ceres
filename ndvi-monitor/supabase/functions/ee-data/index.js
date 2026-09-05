@@ -385,11 +385,13 @@ async function actionGetIndexTile(payload) {
     //
     //    If that exact date has NO clean (cloud < 40%) optical scene, we do NOT
     //    silently fall through to the month composite (that was the old bug).
-    //    Instead we honor the clicked date: try Sentinel-1 RVI centered on THAT
-    //    date (radar_scene_fallback), and if there's no radar pass nearby either,
-    //    return an honest "no data for this scene" (no_data_for_scene). This
-    //    matches the frontend store-patch that no longer nulls out sceneDate for
-    //    cloud-blocked observations.
+    //    Instead we honor the clicked date: for NDVI only, try Sentinel-1 RVI
+    //    centered on THAT date (radar_scene_fallback) — RVI is a defensible radar
+    //    stand-in for the NDVI canopy-vigor proxy. NDWI/LSWI (water/moisture)
+    //    and SAVI/EVI/GNDVI (untested) are NOT substituted. If there's no usable
+    //    radar nearby either, return an honest "no data for this scene"
+    //    (no_data_for_scene). This matches the frontend store-patch that no
+    //    longer nulls out sceneDate for cloud-blocked observations.
     if (index !== "rvi" && payload.sceneDate) {
         const day = ee.Date(payload.sceneDate);
         const dayRaw = ee
@@ -424,21 +426,23 @@ async function actionGetIndexTile(payload) {
                 console.error("scene cloud% read failed:", e);
             }
         }
-        try {
-            const radar = await getRadarVegetationIndex(geom, day.advance(-15, "day"), day.advance(15, "day"));
-            if (radar.count > 0 && radar.url) {
-                return {
-                    mode: "radar_scene_fallback",
-                    count: radar.count,
-                    url: radar.url,
-                    indexUsed: "RVI",
-                    sceneDate: payload.sceneDate,
-                    cloudPct: sceneCloudPct,
-                };
+        if (index === "ndvi") {
+            try {
+                const radar = await getRadarVegetationIndex(geom, day.advance(-15, "day"), day.advance(15, "day"));
+                if (radar.count > 0 && radar.url) {
+                    return {
+                        mode: "radar_scene_fallback",
+                        count: radar.count,
+                        url: radar.url,
+                        indexUsed: "RVI",
+                        sceneDate: payload.sceneDate,
+                        cloudPct: sceneCloudPct,
+                    };
+                }
             }
-        }
-        catch (e) {
-            console.error("per-scene radar fallback failed:", e);
+            catch (e) {
+                console.error("per-scene radar fallback failed:", e);
+            }
         }
         // No clean optical AND no radar pass near the clicked date — be honest.
         return {
@@ -1008,24 +1012,31 @@ async function actionGetFieldStatus(payload) {
                 };
             }
         }
-        // No clean optical scene that exact date (or radar is forced on the RVI
-        // tab) — grade by radar centered on it.
-        try {
-            const radar = await getRadarRviValue(geom, day.advance(-15, "day"), day.advance(15, "day"));
-            if (radar != null) {
-                return {
-                    mode: "radar",
-                    ndviValue: null,
-                    rviValue: radar,
-                    status: "radar",
-                    stage: stageNameAsOf(sceneDate, payload.plantingDate ?? null),
-                    confidence: "medium",
-                    windowDays: 30,
-                };
+        // Radar substitution for the exact PINNED date is NDVI-only (plus the
+        // explicit RVI tab, which reaches radar via forceRadar). RVI is a
+        // defensible radar stand-in for the NDVI canopy-vigor proxy; it is NOT a
+        // defensible stand-in for NDWI/LSWI (water/moisture indices — a different
+        // physical quantity) or SAVI/EVI/GNDVI (untested). Those return an honest
+        // no_data on a cloud-blocked exact date instead.
+        const allowRadarFallback = forceRadar || payload.index == null || payload.index === "ndvi";
+        if (allowRadarFallback) {
+            try {
+                const radar = await getRadarRviValue(geom, day.advance(-15, "day"), day.advance(15, "day"));
+                if (radar != null) {
+                    return {
+                        mode: "radar",
+                        ndviValue: null,
+                        rviValue: radar,
+                        status: "radar",
+                        stage: stageNameAsOf(sceneDate, payload.plantingDate ?? null),
+                        confidence: "medium",
+                        windowDays: 30,
+                    };
+                }
             }
-        }
-        catch (e) {
-            console.error("per-scene radar status failed:", e);
+            catch (e) {
+                console.error("per-scene radar status failed:", e);
+            }
         }
         return {
             mode: "no_data",

@@ -12,7 +12,7 @@
       <!-- AIM — composite health score card (light "readable outdoors" surface
            on the dark panel, per the chosen hybrid design). Score + one plain
            verdict first; component chips and any index disagreement below. -->
-      <div v-if="aimLoading || (aim && !aim.noData)" class="detail-section aim-card">
+      <div v-if="aimLoading || (aim && !pinnedSceneNoData && !aim.noData)" class="detail-section aim-card">
         <div class="aim-card-head">
           <span class="aim-card-title">{{ t('aim.heading') }}</span>
           <span v-if="aimLoading" class="aim-loading">{{ t('aim.loading') }}</span>
@@ -60,7 +60,7 @@
           </div>
         </div>
       </div>
-      <div v-else-if="aim && aim.noData" class="detail-section aim-card aim-card--nodata">
+      <div v-else-if="aim && (aim.noData || pinnedSceneNoData)" class="detail-section aim-card aim-card--nodata">
         <p class="aim-nodata">{{ t('aim.no_data') }}</p>
       </div>
 
@@ -346,6 +346,15 @@ const conf = computed(() => {
 })
 const noSceneData = computed(() => !state.loading && state.sceneCount.main === 0)
 
+// When a date is pinned and the server resolved it to honest no_data (cloud
+// blocked exact date, no radar substitution: non-NDVI indices, or NDVI with no
+// Sentinel-1 pass), the month-scoped AIM score is NOT a reading for THAT date —
+// suppress the score and show the no-data state instead of a number out of
+// nowhere. Un-pinning (or a radar/optical resolution) restores the score.
+const pinnedSceneNoData = computed(() =>
+  !!state.selectedObservationDate && state.selectedSceneStatus?.mode === 'no_data'
+)
+
 // The active observation for the currently-scrubbed month. `state.chartData` is
 // the per-scene (cloud-free, same collection the map monthly composite uses)
 // series that drives the trend chart — deriving the hero from THIS, rather than
@@ -586,6 +595,10 @@ const isObsFallback = computed(() => {
   // fallback — only resolveActiveObservation's cross-date substitution is.
   const s = state.selectedSceneStatus
   if (s && (s.mode === 'radar' || s.mode === 'optical')) return false
+  // Server said honest no-data for the pinned date (non-NDVI cloud-blocked):
+  // surface the "no valid scene" note even when there's no cross-reference
+  // date to substitute, so the hero isn't a silent "—".
+  if (s && s.mode === 'no_data') return true
   const displayed = displayedSceneDate.value
   return !!displayed && displayed !== state.selectedObservationDate
 })

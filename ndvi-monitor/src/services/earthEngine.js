@@ -226,12 +226,13 @@ export function getRecentIndexValue(geometry, index, cb) {
 //                     to a different date).
 // cb(snapshot|null): resolved payload, or null on any error (meaning "no radar /
 // optical certainty", which is exactly the no_data truth we want to surface).
-export function getFieldStatus(geometry, plantingDate, sceneDate, cb, forceRadar) {
+export function getFieldStatus(geometry, plantingDate, sceneDate, cb, forceRadar, index) {
   callEE('getFieldStatus', {
     geometry,
     plantingDate: plantingDate || null,
     sceneDate: sceneDate || null,
     forceRadar: !!forceRadar,
+    index: index || null,
   })
     .then((body) => cb({
       mode: body.mode || 'no_data',

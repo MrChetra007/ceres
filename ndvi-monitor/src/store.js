@@ -1018,11 +1018,20 @@ export function loadIndexForMonth(idx, geometry, silent) {
     // pass nearby — be honest instead of silently showing a different date.
     if (res.mode === 'no_data_for_scene') {
       endLoading()
+      state.radarFallback.main = null
       if (mapReg.ndviLayer) { mapReg.map.removeLayer(mapReg.ndviLayer); mapReg.ndviLayer = null }
       const sceneLabel = res.sceneDate
         ? new Date(res.sceneDate + 'T00:00:00').toLocaleDateString(state.preferredLanguage === 'km' ? 'km-KH' : 'en', { month: 'short', day: 'numeric', year: 'numeric' })
         : m.label
-      setStatus('error', 'No imagery (optical or radar) available for ' + sceneLabel)
+      const idxName = cfg.name
+      const pctText = res.cloudPct != null ? Math.round(res.cloudPct) + '% cloud' : 'cloud-covered'
+      // RVI is only a defensible stand-in for NDVI; for NDWI/LSWI/SAVI/EVI/GNDVI
+      // we never substituted, so say so instead of a generic error.
+      const substNote = state.currentIndex === 'ndvi'
+        ? 'no radar pass nearby either.'
+        : 'radar substitution is NDVI-only \u2014 nothing to show for ' + idxName + '.'
+      setStatus('error', 'No ' + idxName + ' data for ' + sceneLabel + ' \u2014 ' + pctText)
+      showToast('\u26a0\uFE0F No ' + idxName + ' data for ' + sceneLabel + ' (' + pctText + ') \u2014 ' + substNote, 4500)
       return
     }
     if (res.mode === 'cloud_blocked') {
@@ -1517,7 +1526,7 @@ export function fetchSelectedSceneStatus(dateStr) {
   ee.getFieldStatus(geometry, field.plantingDate || null, sceneDate, (snap) => {
     if (req !== selectedSceneStatusReq) return
     state.selectedSceneStatus = snap
-  }, forceRadar)
+  }, forceRadar, state.currentIndex)
 }
 
 // ---------------------------------------------------------------------------
@@ -2163,11 +2172,18 @@ function applyTileResult(res, m) {
   // The clicked date has neither a clean optical scene nor any Sentinel-1 pass
   // nearby — be honest instead of silently showing a different date.
   if (res.mode === 'no_data_for_scene') {
+    state.radarFallback.main = null
     if (mapReg.ndviLayer) { mapReg.map.removeLayer(mapReg.ndviLayer); mapReg.ndviLayer = null }
     const sceneLabel = res.sceneDate
       ? new Date(res.sceneDate + 'T00:00:00').toLocaleDateString(state.preferredLanguage === 'km' ? 'km-KH' : 'en', { month: 'short', day: 'numeric', year: 'numeric' })
       : m.label
-    setStatus('error', 'No imagery (optical or radar) available for ' + sceneLabel)
+    const idxName = INDICES[state.currentIndex]?.name || 'Index'
+    const pctText = res.cloudPct != null ? Math.round(res.cloudPct) + '% cloud' : 'cloud-covered'
+    const substNote = state.currentIndex === 'ndvi'
+      ? 'no radar pass nearby either.'
+      : 'radar substitution is NDVI-only \u2014 nothing to show for ' + idxName + '.'
+    setStatus('error', 'No ' + idxName + ' data for ' + sceneLabel + ' \u2014 ' + pctText)
+    showToast('\u26a0\uFE0F No ' + idxName + ' data for ' + sceneLabel + ' (' + pctText + ') \u2014 ' + substNote, 4500)
     return
   }
   if (res.mode === 'cloud_blocked') {
