@@ -69,6 +69,13 @@ Deno.serve(async (req) => {
       observationHistory,
       cropEnglish,
       locationName,
+      // Cloud-resilience metadata: which sensor/reading the value came from, so
+      // the AI never describes a radar RVI as "NDVI" and never turns a
+      // no_data/cloud-blocked state into a confident stress diagnosis.
+      source,
+      mode,
+      observationAgeDays,
+      reason,
     } = await req.json();
 
     // The farmer's own profile language wins; fall back to what the client
@@ -142,14 +149,24 @@ Deno.serve(async (req) => {
           ? `Data confidence is MEDIUM (${confidenceReason || "limited cloud-free imagery"}). Hedge your advice — note the uncertainty and avoid over-confident statements.`
           : "";
 
-    const readingLine =
-    readingKind === "rvi"
+const readingLine =
+      readingKind === "rvi"
       ? `Radar Canopy-Vigor Index (RVI) ${readingValue.toFixed(2)} (Sentinel-1 radar, used because optical NDVI was cloud-blocked),`
       : `NDVI ${readingValue.toFixed(2)},`;
     const sensorNote =
       readingKind === "rvi"
         ? "IMPORTANT: the main value is a RADAR measurement of crop vigor taken under cloud cover \u2014 it is a proxy estimate, not the usual optical greenness reading. Explain it as such, never call it \"NDVI\", and suggest a field check."
         : "";
+
+    // Cloud-resilience metadata (source/mode/reason/age) from the client, so the
+    // AI never mistakes a radar RVI for NDVI and never turns no_data into a
+    // confident stress diagnosis even when the main reading is optical.
+    const noDataNote =
+      mode === "no_data"
+        ? ` The reading for this date is ${reason || "cloud blocked"} — say plainly that no reliable optical observation is available right now and do NOT guess or imply a stress diagnosis.`
+        : observationAgeDays != null
+          ? ` This reading is ${observationAgeDays} day(s) old — tell the farmer it is not from today.`
+          : "";
 
     // Raw per-scene observation history (date, NDVI, cloud cover, status) sent
     // by the client so the AI can reason about TREND and cloud gaps instead of
@@ -221,6 +238,7 @@ If the current reading is the radar proxy (or the month is cloud-blocked), say i
 
     const prompt = `You are explaining satellite crop health data to ${cropText} in ${placeText}.
 Data: ${readingLine} LSWI (moisture) ${lswiValue?.toFixed(2) ?? "n/a"}, status: ${status}, growth stage: ${growthStage ?? "unknown"}, day ${dayCount ?? "?"} since planting.
+Source: ${source || "sentinel-2"}, mode: ${mode || "optical"}.${noDataNote}
 ${rainfallSection}
 ${historySection}
 ${lastClearSection}

@@ -7,9 +7,22 @@ const allowedOrigins = (Deno.env.get("APP_URLS") ?? "")
   .map((s) => s.trim())
   .filter((s) => s.length > 0);
 
+// Local-dev loopback origins are always allowed so a frontend served by Vite or
+// any local dev server (http://localhost:<port>, http://127.0.0.1:<port>) can
+// call the deployed functions without a CORS preflight failure. This mirrors the
+// official Supabase dev experience and does NOT widen production CORS — a real
+// HTTP(S) origin still has to be explicitly listed in APP_URLS.
+function isLoopbackOrigin(origin: string): boolean {
+  return (
+    origin === "http://localhost" ||
+    origin === "http://127.0.0.1" ||
+    /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)
+  );
+}
+
 function getCorsHeaders(req: Request): Record<string, string> {
   const origin = req.headers.get("origin") ?? "";
-  const isAllowed = allowedOrigins.includes(origin);
+  const isAllowed = isLoopbackOrigin(origin) || allowedOrigins.includes(origin);
   const allowOrigin = isAllowed ? origin : allowedOrigins[0] ?? "*";
   return {
     "Access-Control-Allow-Origin": allowOrigin,

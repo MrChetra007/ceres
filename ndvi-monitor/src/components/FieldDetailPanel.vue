@@ -329,6 +329,19 @@ const conf = computed(() => {
   if (state.radarFallback.main) {
     return { tier: 'medium', reason: confReason(state.preferredLanguage, 'radarBlocked') }
   }
+  // Cloud-resilience: when a specific optical scene is pinned, use the server's
+  // field-level valid-pixel fraction to grade confidence honestly. Fewer than
+  // ~60% clear pixels over the field → downgrade to medium (partial cloud), even
+  // if the scene itself is cloud-clean elsewhere.
+  if (state.selectedSceneStatus && state.selectedSceneStatus.mode === 'optical') {
+    const vs = state.selectedSceneStatus
+    if (vs.validFraction != null && vs.validFraction < 0.6) {
+      return { tier: 'medium', reason: confReason(state.preferredLanguage, 'partialCloud') }
+    }
+    if (vs.clearSceneCount != null && vs.clearSceneCount === 0) {
+      return { tier: 'low', reason: confReason(state.preferredLanguage, 'partialCloud') }
+    }
+  }
   // When a specific observation is pinned, anchor the confidence badge to
   // that scene's cloud status instead of the field's most-recent-available
   // reading (actionGetRecentIndexValue always looks at "now", not the
@@ -933,7 +946,7 @@ async function consultAi() {
       growthStage = store.getGrowthStage(days, currentField.value).stage
     }
   }
-  // Radar mode labels the reading honestly ("Radar (RVI) reading") so the
+// Radar mode labels the reading honestly ("Radar (RVI) reading") so the
   // backend prompt/cache treats it as the radar proxy, never an optical grade.
   const healthStatus = rviValue != null
     ? 'Radar (RVI) reading'
@@ -968,6 +981,20 @@ async function consultAi() {
     if (clear) lastClearReading = { date: clear.date, ndvi: Number(clear.ndvi.toFixed(2)) }
   }
 
+  // Cloud-resilience metadata for the AI: which sensor/mode produced the value
+  // (so the model never calls radar RVI "NDVI" and never turns no_data into a
+  // stress diagnosis). Falls back to optical when no pinned scene resolved.
+  const s = state.selectedSceneStatus
+  const aiSource = s && s.mode === 'radar' ? 'sentinel-1' : 'sentinel-2'
+  const aiMode = s ? s.mode : 'optical'
+  const aiDays = s && s.daysSinceObservation != null ? s.daysSinceObservation : null
+  const aiReason =
+    aiMode === 'no_data'
+      ? (ndviValue == null ? 'cloud_blocked' : 'no_scene')
+      : aiMode === 'radar'
+        ? 'radar_read'
+        : 'clear_optical'
+
   let token
   try {
     const session = await requireSession()
@@ -995,6 +1022,10 @@ async function consultAi() {
         dayCount,
         confidenceTier: confidence ? confidence.tier : null,
         confidenceReason: confidence ? confidence.reason : '',
+        source: aiSource,
+        mode: aiMode,
+        observationAgeDays: aiDays,
+        reason: aiReason,
         lang: state.preferredLanguage,
         observationHistory,
         cropEnglish: field.cropEnglish || null,

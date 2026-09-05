@@ -111,6 +111,10 @@ export const state = reactive({
   sceneCount: { main: 0, right: 0 },
   cloudBlock: { main: null, right: null },
   radarFallback: { main: null, right: null },
+  // Cloud-resilience: optical composite metadata the server returns so the UI
+  // can label honesty (clear scene count, field valid-pixel fraction, the ACTUAL
+  // window used). null when the current month isn't a clear optical reading.
+  opticalMeta: { main: null, right: null },
   observationsVisible: false,
   observationsLoading: false,
   observations: [],
@@ -940,6 +944,7 @@ export function loadIndexForMonth(idx, geometry, silent) {
   state.sceneCount.main = 0
   state.cloudBlock.main = null
   state.radarFallback.main = null
+  state.opticalMeta.main = null
   beginLoading()
   const geom = geometry || getGeometry()
   if (state.currentIndex === 'truecolor') {
@@ -983,6 +988,7 @@ export function loadIndexForMonth(idx, geometry, silent) {
   const sceneDate = state.currentIndex !== 'truecolor' ? state.selectedObservationDate : null
   ee.loadIndexTile(m, state.currentIndex, geom, (res) => {
     state.sceneCount.main = res.count
+    state.opticalMeta.main = null // set only by the clear-optical branch below
     if (res.mode === 'error') {
       endLoading()
       if (mapReg.ndviLayer) { mapReg.map.removeLayer(mapReg.ndviLayer); mapReg.ndviLayer = null }
@@ -1088,7 +1094,22 @@ export function loadIndexForMonth(idx, geometry, silent) {
     const sceneLabel = sceneDate
       ? new Date(sceneDate + 'T00:00:00').toLocaleDateString(state.preferredLanguage === 'km' ? 'km-KH' : 'en', { month: 'short', day: 'numeric', year: 'numeric' })
       : m.label
-    setStatus('ready', cfg.name + ' layer loaded \u2014 ' + sceneLabel)
+    state.opticalMeta.main = {
+      clearSceneCount: res.clearSceneCount ?? res.count,
+      validFraction: res.validFraction ?? null,
+      compositeStart: res.compositeStart || null,
+      compositeEnd: res.compositeEnd || null,
+      sceneDate: sceneDate || null,
+    }
+    const metaBits = []
+    if (state.opticalMeta.main.compositeStart) {
+      metaBits.push('composite ' + state.opticalMeta.main.compositeStart + ' \u2013 ' + (state.opticalMeta.main.compositeEnd || ''))
+    }
+    if (res.validFraction != null) {
+      metaBits.push(Math.round(res.validFraction * 100) + '% valid')
+    }
+    metaBits.push(state.opticalMeta.main.clearSceneCount + ' ' + (state.opticalMeta.main.clearSceneCount === 1 ? 'scene' : 'scenes'))
+    setStatus('ready', cfg.name + ' layer \u2014 ' + sceneLabel + (metaBits.length ? ' \u00b7 ' + metaBits.join(' \u00b7 ') : ''))
   }, sceneDate)
 }
 
@@ -1130,6 +1151,7 @@ export function loadIndexForMonthRight(idx, silent) {
   ee.loadIndexTile(m, state.currentIndex, geom, (res) => {
     if (!mapReg.mapRight) { endLoading(); return }
     state.sceneCount.right = res.count
+    state.opticalMeta.right = null // set only by the clear-optical branch below
     if (res.mode === 'error') {
       endLoading()
       if (mapReg.ndviLayerRight) { mapReg.mapRight.removeLayer(mapReg.ndviLayerRight); mapReg.ndviLayerRight = null }
@@ -1196,6 +1218,13 @@ export function loadIndexForMonthRight(idx, silent) {
     }
     mapReg.ndviLayerRight = applyTileLayer(mapReg.mapRight, mapReg.ndviLayerRight, res.url)
     endLoading()
+    state.opticalMeta.right = {
+      clearSceneCount: res.clearSceneCount ?? res.count,
+      validFraction: res.validFraction ?? null,
+      compositeStart: res.compositeStart || null,
+      compositeEnd: res.compositeEnd || null,
+      sceneDate: state.selectedObservationDate || null,
+    }
   }, state.selectedObservationDate)
 }
 
@@ -1529,7 +1558,7 @@ export function fetchSelectedSceneStatus(dateStr) {
   if (!geom || !geom.coordinates) { state.selectedSceneStatus = null; return }
   const geometry = polygonGeometry(geom.coordinates)
   const req = ++selectedSceneStatusReq
-  // On the RVI tab radar is the explicit ask, not a fallback — the server must
+// On the RVI tab radar is the explicit ask, not a fallback — the server must
   // grade the exact date by Sentinel-1 RVI even when a clean optical scene
   // exists that day.
   const forceRadar = state.currentIndex === 'rvi'
@@ -1692,7 +1721,8 @@ export function setIndex(index) {
   if (state.compareMode) loadIndexForMonthRight(state.rightMonth)
   // Switching tabs with an observation date already pinned re-runs the
   // scene-anchored grade (e.g. NDVI→RVI should now force a radar reading for
-  // that exact date instead of reusing the optical one).
+  // that exact date instead of reusing the optical one). No-op/clears on
+  // truecolor.
   if (state.selectedObservationDate) fetchSelectedSceneStatus()
   if (index === 'truecolor') return // photo mode — no index trend/status to refresh
   // RVI: radar can't score growth stages, and its absolute scale isn't

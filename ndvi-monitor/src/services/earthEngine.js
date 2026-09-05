@@ -241,6 +241,12 @@ export function getFieldStatus(geometry, plantingDate, sceneDate, cb, forceRadar
       status: body.status || 'no_data',
       stage: body.stage || null,
       confidence: body.confidence || 'low',
+      clearSceneCount: body.clearSceneCount ?? null,
+      validFraction: body.validFraction ?? null,
+      compositeStart: body.compositeStart || null,
+      compositeEnd: body.compositeEnd || null,
+      observationDate: body.observationDate || null,
+      daysSinceObservation: body.daysSinceObservation ?? null,
     }))
     .catch((err) => {
       fail(err)

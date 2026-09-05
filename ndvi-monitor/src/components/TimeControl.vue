@@ -50,6 +50,14 @@
           :title="cloudTooltip(state.cloudBlock.main)"
           >☁️ {{ t("time.cloud_blocked") }}</span
         >
+        <button
+          v-if="!state.loading && showRviOffer"
+          class="pill rvi-offer-btn"
+          :title="t('time.view_rvi_tip')"
+          @click="viewRvi"
+        >
+          📡 {{ t("time.view_rvi") }}
+        </button>
         <span v-else class="pill" :class="scenePillClass">{{
           mainSceneText || t("common.no_scenes")
         }}<span v-if="state.currentIndex === 'rvi'" class="radar-info-inline"
@@ -375,6 +383,19 @@ function cloudTooltip(block) {
 function radarTooltip(block) {
   if (!block) return "";
   return t("time.radar_tooltip", { month: block.month });
+}
+
+// Cloud-resilience: expose an explicit radar escape hatch instead of burying the
+// switch. Shown on an optical tab when this month is cloud-blocked (or optical
+// is no-data) and RVI radar is the fallback; clicking jumps to the RVI tab.
+const showRviOffer = computed(
+  () =>
+    state.currentIndex !== "rvi" &&
+    (!!state.radarFallback.main ||
+      (!!state.cloudBlock.main && !state.radarFallback.main)),
+);
+function viewRvi() {
+  store.setIndex("rvi");
 }
 
 function sceneText(count) {

@@ -118,6 +118,8 @@ export default {
   'time.radar_tooltip': 'Optical satellite blocked by cloud on {month} — showing a radar-based vegetation signal (RVI) instead. This measures a different thing than NDVI and isn\'t directly comparable — treat it as a rough structural/moisture indicator, not a health score.',
   'time.radar_fallback_info': 'Optical satellite has no clear image yet this month — showing radar data instead, which sees through clouds.',
   'time.radar_tab_info': 'Showing Sentinel-1 radar data, which measures vegetation differently than optical NDVI and sees through clouds.',
+  'time.view_rvi': 'View Sentinel-1 RVI',
+  'time.view_rvi_tip': 'Optical imagery is blocked by cloud here — switch to the Sentinel-1 radar vegetation index (RVI), which sees through clouds, to keep monitoring this period.',
   'time.wet_season': 'Wet Season (Rainfed)',
   'time.dry_season': 'Dry Season (Irrigated)',
   'time.last_valid_reading': 'Last valid reading: ',
