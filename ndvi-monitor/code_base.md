@@ -31,7 +31,9 @@ src/
 │   ├── chart.js             Chart.js trend-chart config builder
 │   ├── healthZone.js        Health-zone color ramp + threshold helpers
 │   ├── weatherService.js    Open-Meteo 5-day forecast (cached)
-│   └── aimScoreCache.js     Client cache for the AIM composite health score
+│   ├── aimScoreCache.js     Client cache for the AIM composite health score
+│   ├── crops.js             Khmer/English crop-name normalization + known crops
+│   └── geocode.js           Nominatim reverse-geocode (centroid → place name), cached
 │
 ├── views/                Route-level pages
 │   ├── MapView.vue          ★ The main map application page (/map)
@@ -121,6 +123,8 @@ bands:
   chart y-axis, and the server tile all derive from these).
 - **`MONTHS` / `buildMonths()`** — rolling 14-month window (current month back 13).
 - **`RICE_GROWTH_STAGES`** — the 6-stage rice phenology table (maxDay → stage + min/max NDVI).
+- **`GENERIC_GROWTH_STAGES`** — the fallback vegetative cycle (`Vegetative` /
+  `Flowering / Fruiting` / `Mature`) used for any field whose crop isn't rice.
 - **`EVENTS` / `EVENT_COLORS`** — hand-placed flood/drought markers.
 - **`SEASON_PRESETS`** — date-range presets for the slider demo.
 - **`DEFAULT_PRESETS`** — saved map-location presets.
@@ -190,7 +194,8 @@ bands:
 **Helpers**
 - `setStatus(s, text)`, `showToast(msg)`, `isAuthError(err)`, `handleAuthError(err)`
 - `getGeometry()`, `getFieldAreaHectares()`, `formatHectares()`, `getOrComputeArea()`, `getAreaWarning()`
-- `getGrowthStage(days)` — stage lookup in `RICE_GROWTH_STAGES`
+- `getGrowthStage(days, field)` — stage lookup, crop-aware: uses `GENERIC_GROWTH_STAGES`
+  when the field has a non-rice `cropEnglish`, otherwise `RICE_GROWTH_STAGES`.
 
 **Auth / session**
 - `beginSessionWork()` / `endSessionWork()` — toggle `eeReady` and kick off map load + background work
@@ -245,10 +250,15 @@ bands:
   `reloadChartForIndex()`, `checkStress(data,lat,lng,index)`, `getStageAtDate(date)`
 
 **Fields CRUD**
-- `saveField()` (with LSWI auto-planting detection), `updateField()`, `deleteField()`, `loadField(field)`, `loadFieldById(id)`
+- `saveField(name, geojson, plantingDate, cropRaw)` (with LSWI auto-planting detection),
+  `updateField()`, `deleteField()`, `loadField(field)`, `loadFieldById(id)`
 - `importLocalFieldsIfAny()`, `loadFieldsFromSupabase()`
 - Field edit: `startFieldEdit()`, `endFieldEdit()`, `cancelFieldEdit()`
 - `clearFieldSelection()`, `loadFieldTrend()`, `loadRainfall()`, `loadBenchmark()`
+- Crop name: `promptCrop()`/`submitCrop()`/`cancelCrop()` (drives `CropPickerModal`,
+  free text in Khmer/English), `cropPicker` state
+- `fieldLocationName(field)` — derives the location label **on demand** from the
+  field's geojson (centroid → Nominatim reverse-geocode, cached+queued); never persisted
 
 **Dashboard statuses**
 - `buildStatusObject(field, value, index, asOfDate)` — growth-stage-aware badge
@@ -327,7 +337,7 @@ EE actions (each maps to an `ee-data` server handler):
 | `getRecentIndexValue` | `getRecentIndexValue` | One-shot recent reading + cloudBlocked flag. |
 | `getFieldBundle` | `getFieldBundle` | ONE request combining tile + NDVI trend + chart trend + rainfall + benchmark. |
 | `getFieldHealthScore` | `getFieldHealthScore` | AIM composite 0-100 score. |
-| `getFieldStatus` | `getFieldStatus` | Scene-anchored status for the **exact** pinned date: `mode 'optical'` (clean scene + `ndviValue`) / `'radar'` (Sentinel-1 RVI within ±15d + `rviValue`) / `'no_data'`. Signature `getFieldStatus(geometry, plantingDate, sceneDate, cb, forceRadar)` — `forceRadar` (sent on the RVI tab) makes radar the explicit ask, skipping the optical check. |
+| `getFieldStatus` | `getFieldStatus` | Scene-anchored status for the **exact** pinned date: `mode 'optical'` (clean scene + `ndviValue`) / `'radar'` (Sentinel-1 RVI within ±15d + `rviValue`) / `'no_data'`. Signature `getFieldStatus(geometry, plantingDate, sceneDate, cb, forceRadar, index)` — `forceRadar` (sent on the RVI tab) makes radar the explicit ask, skipping the optical check; `index` makes the radar fallback **NDVI-only** (non-NDVI tabs return honest `no_data` instead of a radar proxy). |
 | `getAllFieldStatuses` | `getAllFieldStatuses` | Recent status for ALL fields (1 batch). |
 | `getAllFieldTrends` | `getAllFieldTrends` | NDVI trend for ALL fields (1 batch). |
 | `getRainfallMm` | `getRainfall` | 21-day CHIRPS rainfall mm. |
@@ -359,6 +369,18 @@ probability), cached 15-min per location. Display-only today.
 `getAimCache(field, month)` / `setAimCache(...)` — client cache for the AIM
 score (5-day TTL), keyed by `field.id | plantingDate | year-month` so editing the
 planting date or scrubbing months forces a fresh score.
+
+### `services/crops.js`
+Crop-name handling: `normalizeCrop(raw)` trims case/whitespace, and the `CROP_MAP`
+maps common Khmer names (ស្រូវ, ស្វាយ, ចេក, ដំឡូងមី ...) to their English
+equivalents so "rice" / "ស្រូវ" both store as `crop_english: "rice"` and
+downstream growing logic picks rice vs the generic cycle.
+
+### `services/geocode.js`
+`reverseGeocode(lat, lng)` — Nominatim reverse-geocoder behind
+`store.fieldLocationName()` so Consult AI can name *where* the field is (district /
+commune) without storing a column. Cached per rounded coordinate and queued so
+bursts of field switches don't hammer the endpoint.
 
 ---
 
@@ -424,8 +446,9 @@ functions (the app has no per-component state management layer beyond local
   `position`, `width`, `noHeader`, slots). Exposes `open/close/toggle`.
 - `CollapsibleBottomSheet.vue` — Reusable bottom sheet (`v-model`, `maxHeight`).
 - `Sidebar.vue` — "Monitored Fields" list: search, filter tabs, field cards
-  (name, area, status badge, sparkline, confidence), planting-date edit, field
-  edit, delete. Triggers `loadFieldById` / `clearFieldSelection`.
+  (name, crop, area, status badge, sparkline, confidence), planting-date edit,
+  field edit, delete, and a `ti ti-leaf` "Set crop" button that opens
+  `CropPickerModal`. Triggers `loadFieldById` / `clearFieldSelection`.
 - `FieldDetailPanel.vue` — The rich right-drawer panel for the selected field:
   AIM score card, hero card (value + status + confidence), growth-stage card,
   stress alert, Consult AI, trend chart, rainfall, weather forecast, metadata,
@@ -451,6 +474,9 @@ functions (the app has no per-component state management layer beyond local
   place search via Nominatim.
 - `PresetEditor.vue` — Manage map-location presets (add current view, edit, delete, reset).
 - `DatePickerModal.vue` — Planting-date picker (stores to `datePicker`).
+- `CropPickerModal.vue` — Free-text crop entry (Khmer or English placeholder
+  "rice, mango, ស្រូវ...") writing `crop_name`/`crop_english` via `store.cropPicker`.
+  Sets the stage table used for the field (rice vs generic vegetative cycle).
 - `TelegramModal.vue` — 3-state Telegram linking flow.
 - `HelpModal.vue` — Onboarding tour + reference guide (bilingual).
 - `ChartModal.vue` — Large trend-chart modal (enlarge chart).
@@ -580,12 +606,17 @@ request → tile + trends + rainfall + benchmark), populates `fieldTrends`,
 
 **Draw + save a field:**
 `LeafletMap` `draw:created` → `onFieldCreated(layer)` → `promptSaveField` →
-`saveField(name, geojson, date)` → (optional LSWI auto-planting detection) →
-`supabase.insertField` → push to `state.fields` → `loadFieldTrend`.
+`saveField(name, geojson, date, cropRaw)` (optional LSWI auto-planting detection,
+then a crop prompt — free text, rice/generic stage table chosen by
+`normalizeCrop`) → `supabase.insertField` → push to `state.fields` →
+`loadFieldTrend`. Map taps during drawing are ignored by `onMapClick`
+(`state.isDrawing`), so the detail drawer never pops open mid-draw.
 
 **Consult AI:**
-`FieldDetailPanel.consultAi` → gather NDVI/LSWI/rainfall/growth-stage →
-POST to `CONSULT_AI_URL` with JWT → show explanation.
+`FieldDetailPanel.consultAi` → gather reading values + rainfall pattern
+(`rainfallBuckets`), `lastClearReading`, observation history, growth stage,
+confidence tier, `source/mode/reason/age`, crop + live-reverse-geocoded location
+→ POST to `CONSULT_AI_URL` with JWT → show explanation.
 
 **Download chart/PDF:**
 `store.exportChart()` (canvas→PNG) / `store.exportPdf()` (jsPDF + chart canvas).
@@ -629,6 +660,7 @@ supabase/
 ├── .temp/                           Local CLI state (ignored; not real config)
 ├── functions/
 │   ├── _shared/                     Reusable helpers imported by functions
+│   │   ├── cloudMask.ts             Pixel-level S2 cloud/shadow masking + validity
 │   │   ├── cors.ts
 │   │   ├── discrepancy.ts
 │   │   ├── growthStage.ts
@@ -650,6 +682,11 @@ supabase/
 **Key backend facts:**
 - **Run on Deno**, using `npm:`-prefixed imports (e.g. `npm:@google/earthengine`,
   `npm:@supabase/supabase-js`). No build step / bundler.
+- **`.ts` is the deployed source of truth.** `supabase functions deploy` uploads
+  `index.ts` and bundles `_shared/*.ts` (confirmed in deploy output). Hand-kept
+  transpiled `.js` mirrors exist next to several functions (`ee-data`,
+  `consult-ai`, `ee-alerts-worker`, `_shared/*.js`) — they should stay in sync
+  with the `.ts` for anyone reading them, but are **not** what the deploy runs.
 - **Secrets** come from `Deno.env.get(...)`, set once via
   `supabase secrets set` (never committed). Key secrets across functions:
   `EE_SERVICE_ACCOUNT_KEY`, `SUPABASE_SERVICE_ROLE_KEY` (auto-injected),
@@ -701,15 +738,34 @@ These are ES-module files imported by multiple functions (relative imports like
 - Standard headers for `authorization`, `x-client-info`, `apikey`,
   `content-type` and GET/POST/OPTIONS methods.
 
+### `_shared/cloudMask.ts`
+- **Cloud-resilience core** (pixel-level Sentinel-2 cloud/shadow masking) — imported
+  by `ee-data`. `CLOUD_RESILIENCE` holds the configurable defaults
+  (s2cloudless probability threshold 55 %, 300 m cloud-edge buffer, invalid SCL
+  classes, `MIN_VALID_PIXEL_FRACTION`, clear-scene counts for confidence, optical
+  composite windows).
+- `addCloudProbability(collection, ee)` — joins each S2_SR granule to its
+  s2cloudless `probability` band by `system:index`. **Reduces the lookup with
+  `sum()` (a linear reducer), not `.first()`** — a missing probability granule
+  yields an image of zeros instead of a server-side null, which would make
+  `Image.select` throw "input required" inside the map.
+- `validPixelMask(scene, ee)` — 0/1 mask per scene: probability > threshold, SCL
+  invalid classes, a focal-cloud-edge buffer, and no-SR-data pixels.
+- `validPixelFraction(image, band, geometry, scale, ee, evaluate)` — field-level
+  fraction of valid (non-NaN) pixels over the geometry, 0..1 or null.
+
 ### `_shared/growthStage.ts`
-- Home of `RICE_GROWTH_STAGES` (name + maxDay + ndvi min/max per stage) and
-  `stageForDay(day)`.
-- `statusFromNdvi(ndvi, plantingDate)` → `{ status, stage }`. With no planting
-  date it uses flat thresholds; with a date it computes days-since-planting,
-  finds the stage, and compares NDVI against that stage's minimum to yield
+- Home of `RICE_GROWTH_STAGES` (rice name + maxDay + ndvi min/max per stage),
+  `GENERIC_GROWTH_STAGES` (Vegetative / Flowering-Fruiting / Mature) and
+  `stageForDay(day, useGeneric = false)`.
+- `statusFromNdvi(ndvi, plantingDate, useGeneric = false)` → `{ status, stage }`.
+  With no planting date it uses flat thresholds; with a date it computes
+  days-since-planting, finds the stage (rice table or generic cycle per
+  `useGeneric`), and compares NDVI against that stage's minimum to yield
   `healthy` / `below_expected` / `stressed`.
-- **Shared by both `ee-data` and `ee-alerts-worker`** so their health
-  classification is identical.
+- **Shared by `ee-data`, `ee-alerts-worker`, and consult-ai's water-need table**
+  so their health classification is identical. Non-rice fields pass
+  `useGeneric = true` (client derives it from `crop_english`).
 
 ### `_shared/indexTranslations.ts`
 - The server-side **plain-language translation layer** for raw index values
@@ -787,15 +843,24 @@ service account, computes, and returns tile URLs / time-series / readings.
 - **`applyIndex(img, index, name)`** is the single place index math lives
   (NDVI/NDWI/LSWI/GNDVI via `normalizedDifference`, SAVI/EVI via custom
   expressions). All actions that compute an index route through it.
+- **`buildMaskedComposite(geom, start, end, index)`** is the cloud-resilience
+  optical composite builder: pixel-cloud/shadow-masks each scene
+  (via `_shared/cloudMask.ts`), takes a robust median over *valid* pixels only,
+  and returns `{ img, clearSceneCount, validFraction, compositeStart, compositeEnd }`
+  — replacing the old `CLOUDY_PIXEL_PERCENTAGE < 40` scene-level filter on all
+  optical reads (map tiles, per-scene status). Missing s2cloudless granules can't
+  crash it (the `sum()` lookup in `addCloudProbability` degrades to a zero band).
 - **`initEE()` / `ensureEE()`:** the EE session is cached per warm isolate and
   re-authenticated before the ~1 h service-account token expires
   (`EE_INIT_TTL_MS = 45 min`). Failures aren't cached so the next request
   retries auth.
 - **Cost-control caching** (the "ee-cost-control" directive) uses service_role
   writes to three tables:
-  - **`ee_tile_cache`** (per `index, year, month, geometry_hash`): drives
-    `getIndexTile`, TTL'd (12 h closed month / 20 min open month) because the
-    signed tile URL lapses.
+  - **`ee_tile_cache`** (per `index, year, month, geometry_hash` **\+ `mode`**):
+    drives `getIndexTile`, TTL'd (12 h closed month / 20 min open month) because the
+    signed tile URL lapses. The `mode` column (`optical` / `radar_fallback` /
+    `cloud_blocked` / `no_data`) keeps cloud-dependent modes from serving each
+    other's tiles; per-scene (`sceneDate`) requests bypass the cache entirely.
   - **`ee_observation_cache`** (per `field_id, scene_date`, permanent): drives
     `getObservations` — only scenes newer than the newest cached one are fetched
     from EE.
@@ -814,7 +879,7 @@ service account, computes, and returns tile URLs / time-series / readings.
 | `getRviTimeSeries` | Radar Vegetation Index over time from Sentinel-1 (includes orbit direction). |
 | `detectPlantingDate` | Steepest dry→flooded LSWI jump over ~90 days to estimate planting date (never a guess). |
 | `getDryMonths` | CHIRPS monthly rainfall → which requested months are "dry" (< threshold). |
-| `getFieldStatus` | NDVI status using the shared growth-stage logic (14-day window first, widened to 90-day low-confidence). With a `sceneDate` param it becomes **scene-anchored**: answers the exact date with `mode 'optical'` (clean scene, `ndviValue`) / `'radar'` (Sentinel-1 RVI within ±15d, `rviValue`) / `'no_data'` (honest — no silent substitution). A `forceRadar` param (the RVI tab) skips the optical clean-scene check and always grades the date by RVI. |
+| `getFieldStatus` | NDVI status using the shared growth-stage logic (14-day window first, widened to 90-day low-confidence). With a `sceneDate` param it becomes **scene-anchored**: answers the exact date with `mode 'optical'` (clean `buildMaskedComposite` scene, `ndviValue`) / `'radar'` (Sentinel-1 RVI within ±15d, `rviValue`) / `'no_data'` (honest — no silent substitution). A `forceRadar` param (the RVI tab) skips the optical clean-scene check and always grades the date by RVI. `payload.index` gates the radar substitution to **NDVI-only** — RVI is a defensible proxy for canopy vigor, not for NDWI/LSWI/SAVI/EVI, so other tabs get an honest `no_data`. |
 | `getFieldHealthScore` | **AIM composite (0–100)** — growth-stage-appropriate index blend, each normalized to its own range, weighted average, plus the 4-band verdict and discrepancy (F4). Month-scoped to the scrubbed slider position. |
 | `getRecentIndexValue` | Latest ≤90-day clean reading with cloud-blocked flag + plain-language band. |
 | `getAllFieldStatuses` | Batched per-field statuses for the field list on login. Uses a **far-past sentinel image** trick to keep `first()` defined even for scene-less fields. |
@@ -837,7 +902,9 @@ The cron worker (invoked on a schedule / daily, posting to its URL) that sends
 **Telegram alerts** to farmers whose profiles have a `telegram_chat_id`.
 
 - **Query:** all fields joined to their owner's `telegram_chat_id` and
-  `preferred_language`.
+  `preferred_language`; also selects `crop_english` so the health classification
+  matches the crop (non-rice fields pass `useGeneric` to the shared
+  `growthStage.ts`).
 - **Reading:** `getFieldReading()` → optical NDVI (tight 14-day window, then
   widened 90-day low-confidence), and **only** if optical has nothing in 90 days,
   a Sentinel-1 RVI radar fallback. Emits a `FieldReading` discriminated union
@@ -868,15 +935,28 @@ The cron worker (invoked on a schedule / daily, posting to its URL) that sends
 The endpoint behind the frontend's "Consult AI" button.
 
 - Authenticates with the user's JWT (`supabase.auth.getUser`).
-- Reads the field's `ndviValue` (required), `lswiValue`, `rainfallMm`, `status`,
-  growth stage, day count, and a confidence tier/reason, plus `lang`. The
-  farmer's stored `preferred_language` wins over the client-sent `lang`.
-- **Cache:** reuses the prior `ai_explanations` row only if NDVI and status
-  haven't meaningfully moved.
+- Reads the field's reading values and rich context: `ndviValue` (or `rviValue` —
+  whichever the client actually read), `lswiValue`, `rainfallMm` +
+  `rainfallBuckets` (3 weekly CHIRPS buckets for the **pattern**),
+  `lastClearReading` (the field's last clearly-viewed optical NDVI as an anchor),
+  `observationHistory` (capped per-scene series for trend/cloud-gap reasoning),
+  `status`, `growthStage`, `dayCount`, a confidence tier/reason, cloud-resilience
+  `source`/`mode`/`observationAgeDays`/`reason` metadata, `cropEnglish` +
+  `locationName` (field crop + reverse-geocoded place), and `lang`.
+- **`WATER_NEED_BY_STAGE`** maps every client growth-stage string (rice stages +
+  generic `Vegetative`/`Flowering / Fruiting`/`Mature`) to stage-appropriate water
+  advice, so the model connects the rainfall pattern to what the crop needs now.
+  Non-rice fields add a `cropNote` telling the model the stage string is from the
+  generic vegetative cycle, never paddy management.
+- The farmer's stored `preferred_language` wins over the client-sent `lang`.
+- **Cache:** reuses the prior `ai_explanations` row only if the reading and status
+  haven't meaningfully moved (`ndvi_value` stores whichever reading was used,
+  partitioning radar reads via the `"Radar (RVI) reading"` status).
 - **Daily cap:** enforces a per-user `DAILY_CAP = 20` via the `ai_usage` table.
 - **LLM:** builds a prompt + a concise retry prompt, runs `generateExplanation`,
   caches the result (with `model_used` and `truncated` for auditing), and returns
-  `{ explanation, truncated, cached }`.
+  `{ explanation, truncated, cached }`. A `USE_EXPLANATION_CACHE` flag (currently
+  `false`) bypasses both cache read and write for testing.
 
 ---
 
