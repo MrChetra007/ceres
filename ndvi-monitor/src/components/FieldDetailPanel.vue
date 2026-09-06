@@ -220,7 +220,7 @@ import ConfidenceBadge from './ConfidenceBadge.vue'
 import IndexLegend from './IndexLegend.vue'
 import { buildChartConfig } from '../services/chart'
 import { INDICES, MONTHS, CONSULT_AI_URL } from '../config'
-import { sb, requireSession } from '../services/supabase'
+import { sb, requireSession, refreshSession } from '../services/supabase'
 import { loadFieldPhotos, createSignedPhotoUrl } from '../services/supabase'
 import { getRecentIndexValue, getRainfallDetail, getFieldHealthScore, polygonGeometry } from '../services/earthEngine'
 import { getWeatherContext } from '../services/weatherService'
@@ -1005,11 +1005,10 @@ async function consultAi() {
     return
   }
 
-  try {
-    const res = await fetch(CONSULT_AI_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + token },
-      body: JSON.stringify({
+  const postConsult = (accessToken) => fetch(CONSULT_AI_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + accessToken },
+    body: JSON.stringify({
         fieldId: field.id,
         ndviValue,
         rviValue,
@@ -1032,6 +1031,15 @@ async function consultAi() {
         locationName,
       }),
     })
+
+  let res = await postConsult(token)
+  if (res.status === 401) {
+    // Stale/racy token captured just after sign-in (see requireSession). Force
+    // a real refresh and retry once before surfacing the failure.
+    const fresh = await refreshSession()
+    res = await postConsult(fresh.access_token)
+  }
+  try {
     let body = null
     try { body = await res.json() } catch (e) {}
     if (res.status === 429 || (body && body.ok === false && body.error === 'daily_limit_reached')) {

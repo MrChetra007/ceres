@@ -23,25 +23,71 @@ export function mapRowToField(row) {
   }
 }
 
-// Returns a valid session, refreshing the access token if it's stale/expired.
-// Throws a clear message if there is genuinely no active session — callers can
-// surface that as "please sign in again" instead of a confusing RLS error.
-export async function requireSession() {
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+
+// A session is only usable if it carries a real access token. Right after
+// sign-in (email/password submit or OAuth redirect back) supabase-js can emit
+// SIGNED_IN while the session object is still settling — getSession() may
+// return null or an access_token of '' for a tick. Sending that empty Bearer
+// header makes the server answer 401, producing exactly the "auth only works
+// after a page refresh" symptom.
+function tokenUsable(session) {
+  return !!(session && typeof session.access_token === 'string' && session.access_token.length > 0)
+}
+
+// Force an access-token refresh with the stored refresh token. Exportable so
+// callers with a bare fetch (services/earthEngine.js) can also retry a
+// rejected request with a guaranteed-fresh token instead of erroring the load.
+export async function refreshSession() {
+  const { data, error } = await sb.auth.refreshSession()
+  if (error || !data || !data.session || !tokenUsable(data.session)) {
+    await sb.auth.signOut().catch(() => {})
+    throw new Error('Session expired \u2014 please sign in again')
+  }
+  return data.session
+}
+
+async function readSession() {
   const { data, error } = await sb.auth.getSession()
   if (error) throw error
-  let session = data && data.session ? data.session : null
-  if (session) {
-    const expMs = session.expires_at ? session.expires_at * 1000 : Infinity
-    if (expMs < Date.now() + 60000) {
-      const { data: refreshed, error: refreshErr } = await sb.auth.refreshSession()
-      if (refreshErr || !refreshed.session) {
-        await sb.auth.signOut().catch(() => {})
-        throw new Error('Session expired \u2014 please sign in again')
-      }
-      session = refreshed.session
+  return data && data.session ? data.session : null
+}
+
+// Returns a valid session, refreshing the access token if it's stale/expired or
+// missing. Throws a clear message if there is genuinely no active session —
+// callers can surface that as "please sign in again" instead of a confusing RLS
+// error.
+export async function requireSession() {
+  let session = await readSession()
+
+  // The sign-in race: SUPABASE auth emits SIGNED_IN before getSession() is
+  // guaranteed to return the finished session. Give a null/empty session two
+  // short retries before deciding the user is signed out.
+  if (!tokenUsable(session)) {
+    await sleep(100)
+    session = await readSession()
+    if (!tokenUsable(session)) {
+      await sleep(200)
+      session = await readSession()
     }
   }
+
   if (!session) throw new Error('Please sign in to continue')
+
+  if (!tokenUsable(session)) {
+    // A session handle exists but carries no access token. Refresh it rather
+    // than sending an empty Authorization header; if there is no refresh token
+    // at all there is nothing to refresh with, so treat it as signed out.
+    if (!session.refresh_token) throw new Error('Please sign in to continue')
+    session = await refreshSession()
+  }
+
+  // expires_at of 0/undefined means we can't trust the expiry — refresh instead
+  // of shipping a possibly-dead token to the server.
+  const expMs = session.expires_at ? session.expires_at * 1000 : 0
+  if (expMs < Date.now() + 60000) {
+    session = await refreshSession()
+  }
   return session
 }
 

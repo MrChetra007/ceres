@@ -9,7 +9,7 @@
 // Geometries are plain GeoJSON objects now — build them with rectGeometry(),
 // polygonGeometry() or pointGeometry() instead of window.ee.Geometry.*.
 
-import { requireSession } from './supabase'
+import { requireSession, refreshSession } from './supabase'
 import { EE_DATA_URL, INDICES } from '../config'
 
 export function rectGeometry(coords) {
@@ -25,13 +25,25 @@ export function pointGeometry(lng, lat) {
   return { type: 'Point', coordinates: [lng, lat] }
 }
 
-async function callEE(action, payload) {
-  const session = await requireSession()
-  const res = await fetch(EE_DATA_URL, {
+async function postEE(action, payload, accessToken) {
+  return fetch(EE_DATA_URL, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + session.access_token },
+    headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + accessToken },
     body: JSON.stringify({ action, ...payload }),
   })
+}
+
+async function callEE(action, payload) {
+  let session = await requireSession()
+  let res = await postEE(action, payload, session.access_token)
+  if (res.status === 401) {
+    // The just-used token was rejected server-side even though the client
+    // considered it valid — the classic stale/racy token captured in the first
+    // moments after sign-in (a manual page refresh implicitly repairs this).
+    // Force a real refresh and retry ONCE before surfacing the error.
+    session = await refreshSession()
+    res = await postEE(action, payload, session.access_token)
+  }
   let body = null
   try { body = await res.json() } catch (e) { /* non-JSON error body */ }
   if (!res.ok || !body || body.ok === false) {
