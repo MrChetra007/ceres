@@ -56,16 +56,11 @@
   min-width: 0;
 }
 
-.brand-icon {
-  width: 34px;
-  height: 34px;
-  border-radius: 10px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--accent-dim);
-  color: var(--accent);
-  font-size: 19px;
+.brand-logo {
+  height: 30px;
+  width: auto;
+  max-width: 170px;
+  object-fit: contain;
   flex-shrink: 0;
 }
 

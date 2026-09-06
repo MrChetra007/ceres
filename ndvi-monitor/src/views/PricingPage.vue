@@ -2,12 +2,7 @@
   <div class="pricing-page">
     <header class="pp-nav">
       <div class="brand-chip">
-        <span class="brand-mark">
-          <svg viewBox="0 0 24 24" fill="none">
-            <path d="M12 2L3 7v10l9 5 9-5V7l-9-5z" stroke="#E3A72E" stroke-width="1.4" />
-            <path d="M12 2v20M3 7l9 5 9-5" stroke="#E3A72E" stroke-width="1.1" opacity=".55" />
-          </svg>
-        </span>
+        <img class="brand-mark" :src="logo1" alt="" />
         <span class="brand-text">
           <span class="brand-name">{{ t('app.name') }}</span>
           <span class="brand-loc mono">Battambang, Cambodia</span>
@@ -41,6 +36,7 @@
 import { state } from '../store'
 import PricingCards from '../components/PricingCards.vue'
 import { useI18n } from '../i18n'
+import logo1 from '../assets/logos-icons/logo1.png'
 
 const { t } = useI18n()
 
@@ -70,15 +66,11 @@ function go(path) {
   gap: 10px;
 }
 .brand-mark {
-  width: 34px;
-  height: 34px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.brand-mark svg {
-  width: 24px;
-  height: 24px;
+  height: 30px;
+  width: auto;
+  max-width: 190px;
+  object-fit: contain;
+  flex-shrink: 0;
 }
 .brand-text {
   display: flex;

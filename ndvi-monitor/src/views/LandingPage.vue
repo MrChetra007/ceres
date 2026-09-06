@@ -6,21 +6,7 @@
   >
     <header class="landing-nav">
       <div class="brand-chip">
-        <span class="brand-mark">
-          <svg viewBox="0 0 24 24" fill="none">
-            <path
-              d="M12 2L3 7v10l9 5 9-5V7l-9-5z"
-              stroke="#E3A72E"
-              stroke-width="1.4"
-            />
-            <path
-              d="M12 2v20M3 7l9 5 9-5"
-              stroke="#E3A72E"
-              stroke-width="1.1"
-              opacity=".55"
-            />
-          </svg>
-        </span>
+        <img class="brand-mark" :src="logo1" alt="" />
         <div class="brand-text">
           <span class="brand-name">NDVI Rice Monitor</span>
           <span class="brand-loc mono">Battambang, Cambodia</span>
@@ -506,6 +492,7 @@ import { state } from "../store.js";
 import * as store from "../store.js";
 import { sb } from "../services/supabase.js";
 import { landingIndices } from "../data/landing-indices.js";
+import logo1 from "../assets/logos-icons/logo1.png";
 import IndexSection from "../components/landing-page/IndexSection.vue";
 import PricingCards from "../components/PricingCards.vue";
 
@@ -765,13 +752,11 @@ onBeforeUnmount(() => {
   gap: 10px;
 }
 .brand-mark {
-  width: 22px;
-  height: 22px;
+  height: 26px;
+  width: auto;
+  max-width: 200px;
+  object-fit: contain;
   flex: none;
-}
-.brand-mark svg {
-  width: 100%;
-  height: 100%;
 }
 .brand-text {
   display: flex;

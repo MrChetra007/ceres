@@ -4,7 +4,7 @@
       <button class="auth-close" :title="t('common.close')" @click="store.hideAuthOverlay()"><i class="ti ti-x"></i></button>
 
       <div class="auth-brand">
-        <span class="auth-brand-icon"><i class="ti ti-leaf"></i></span>
+        <img class="auth-brand-logo" :src="logo1" alt="" />
       </div>
       <h2>{{ t('app.name') }}</h2>
       <p class="subtitle mono">BATTAMBANG · CAMBODIA</p>
@@ -90,6 +90,7 @@ import { ref } from 'vue'
 import { state } from '../store'
 import * as store from '../store'
 import { useI18n } from '../i18n'
+import logo1 from '../assets/logos-icons/logo1.png'
 
 const { t } = useI18n()
 

@@ -2,7 +2,7 @@
   <div class="topbar">
     <div class="topbar-left">
       <div class="brand-chip">
-        <span class="brand-icon"><i class="ti ti-leaf"></i></span>
+        <img class="brand-logo" :src="logo1" alt="" />
         <div class="brand-text">
           <span class="brand-name">{{ t('app.name') }}</span>
           <span class="brand-loc mono">BATTAMBANG · {{ fieldCountLabel }}</span>
@@ -183,6 +183,7 @@ import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { state } from '../store'
 import * as store from '../store'
 import { useI18n } from '../i18n'
+import logo1 from '../assets/logos-icons/logo1.png'
 
 defineEmits(['menu'])
 

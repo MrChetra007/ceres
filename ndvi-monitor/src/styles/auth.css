@@ -63,18 +63,13 @@
 
 .auth-brand { margin-bottom: 1rem; }
 
-.auth-brand-icon {
-  width: 52px;
-  height: 52px;
+.auth-brand-logo {
+  display: block;
+  width: auto;
+  max-width: 230px;
+  height: 56px;
   margin: 0 auto;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--accent-dim);
-  color: var(--accent);
-  border-radius: 14px;
-  font-size: 26px;
-  box-shadow: 0 0 0 1px rgba(34, 201, 142, 0.25), 0 8px 24px rgba(34, 201, 142, 0.18);
+  object-fit: contain;
 }
 
 .auth-card h2 {
