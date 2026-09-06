@@ -26,6 +26,38 @@ import { useI18n } from '../i18n'
 
 const L = window.L
 const { t } = useI18n()
+
+// --- Mobile polygon-close patch for leaflet-draw 1.0.4 ---
+// leaflet-draw only finishes a polygon on touch when the tap lands within a
+// HARDCODED 10px of the first point (_endPoint -> _calculateFinishDistance,
+// which measures container-pixel distance to this._markers[0]). A finger tap
+// routinely lands 10-30px off, so on a phone the shape either never closes or
+// silently grows a tiny stray vertex (a thin slit spike) when the user
+// miss-clicks the starting point. Re-implement the endpoint handler on the
+// shared Polyline prototype (Polygon inherits it) with a much more generous
+// close radius for touch/pointer input. Desktop behavior is unchanged: it
+// still closes only via the first-vertex marker click / double-click, since
+// the proximity-finish branch below only ever fires for touch input.
+const TOUCH_CLOSE_PX = 28
+if (L.Draw && L.Draw.Polyline && typeof L.Draw.Polyline.prototype._endPoint === 'function') {
+  L.Draw.Polyline.prototype._endPoint = function (clientX, clientY, e) {
+    if (!this._mouseDownOrigin) return
+    const dragCheckDistance = L.point(clientX, clientY).distanceTo(this._mouseDownOrigin)
+    const lastPtDistance = this._calculateFinishDistance(e.latlng)
+    const isTouch = L.Browser.touch ||
+      (e.originalEvent && (e.originalEvent.pointerType === 'touch' || e.originalEvent.touches != null))
+    if (this.options.maxPoints > 1 && this.options.maxPoints === this._markers.length + 1) {
+      this.addVertex(e.latlng)
+      this._finishShape()
+    } else if (isTouch && lastPtDistance < TOUCH_CLOSE_PX) {
+      this._finishShape()
+    } else if (Math.abs(dragCheckDistance) < 9 * (window.devicePixelRatio || 1)) {
+      this.addVertex(e.latlng)
+    }
+    this._enableNewMarkers()
+    this._mouseDownOrigin = null
+  }
+}
 const mapEl = ref(null)
 const mapRightEl = ref(null)
 const containerEl = ref(null)

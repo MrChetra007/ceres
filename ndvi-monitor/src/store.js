@@ -528,7 +528,7 @@ export function startAoiDraw() {
     mapReg.activeDraw = draw
     state.isAoiDraw = true
     draw.enable()
-    showToast('Click points on the map to draw the area \u2014 double-click to finish \u2014 Esc to cancel')
+    showToast('Click points on the map to draw the area \u2014 tap the first point to finish \u2014 Esc to cancel')
   } catch (e) {
     showToast('Drawing unavailable')
   }
@@ -2519,7 +2519,7 @@ export function startDraw() {
     mapReg.activeDraw = draw
     state.isDrawing = true
     draw.enable()
-    showToast('Click to place points, then double-click to finish \u2014 Esc to cancel')
+    showToast('Click to place points, then tap the first point to finish \u2014 Esc to cancel')
   } catch (e) {
     showToast('Drawing unavailable')
   }
