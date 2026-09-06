@@ -230,9 +230,9 @@ export function setStatus(s, text) {
   state.statusText = text
 }
 
-export function showToast(msg, duration = 3000) {
+export function showToast(msg, duration = 3000, actions = null) {
   const id = crypto.randomUUID()
-  state.toasts.push({ id, msg })
+  state.toasts.push({ id, msg, actions })
   if (state.toasts.length > 3) {
     const dropped = state.toasts.shift()
     clearTimeout(toastTimers.get(dropped.id))
@@ -245,6 +245,14 @@ export function showToast(msg, duration = 3000) {
       toastTimers.delete(id)
     }, duration),
   )
+}
+
+// Pulls a toast out immediately (used by action buttons that shouldn't leave a
+// dangling auto-dismiss timer behind).
+export function dismissToast(id) {
+  clearTimeout(toastTimers.get(id))
+  toastTimers.delete(id)
+  state.toasts = state.toasts.filter((t) => t.id !== id)
 }
 
 // A request reached Supabase without a valid user JWT (stale/expired session).

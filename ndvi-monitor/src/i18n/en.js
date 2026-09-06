@@ -32,6 +32,7 @@ export default {
   'topbar.export_pdf': 'Export as PDF',
   'topbar.how_this_works': 'How this works',
   'topbar.help': 'Help',
+  'topbar.install_app': 'Install app',
   'topbar.signed_in': 'Signed in',
   'topbar.sign_in': 'Sign in',
   'topbar.sign_in_sync': 'Sign in to sync fields',

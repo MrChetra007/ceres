@@ -32,6 +32,7 @@ export default {
   "topbar.export_pdf": "នាំចេញជា PDF",
   "topbar.how_this_works": "របៀបប្រើប្រាស់",
   "topbar.help": "ជំនួយ",
+  "topbar.install_app": "ដំឡើងកម្មវិធី",
   "topbar.signed_in": "បានចូល",
   "topbar.sign_in": "ចូល",
   "topbar.sign_in_sync": "ចូលដើម្បីធ្វើសមកាលកម្មវាល",

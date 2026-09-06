@@ -67,6 +67,9 @@
               <span class="tg-status-dot" :class="{ on: state.telegramChatId }"></span>
             </button>
             <button class="settings-item" @click="state.helpVisible = true"><i class="ti ti-help"></i>{{ t('topbar.help') }}</button>
+            <button class="settings-item" @click="installApp">
+              <i class="ti ti-download"></i>{{ t('topbar.install_app') }}
+            </button>
             <div class="settings-item lang-toggle">
               <i class="ti ti-language"></i>
               <span>{{ t('common.language') }}</span>
@@ -184,6 +187,7 @@ import { state } from '../store'
 import * as store from '../store'
 import { useI18n } from '../i18n'
 import logo1 from '../assets/logos-icons/logo1.png'
+import { installApp as pwaInstallApp, showInstallHint } from '../services/pwa'
 
 defineEmits(['menu'])
 
@@ -217,6 +221,11 @@ function openPlanBilling() {
   settingsOpen.value = false
   hamburgerOpen.value = false
   store.openPlanBillingModal()
+}
+
+async function installApp() {
+  const installed = await pwaInstallApp()
+  if (!installed) showInstallHint()
 }
 
 function onUserClick(e) {

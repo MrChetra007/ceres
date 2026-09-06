@@ -38,15 +38,6 @@
   <PaywallModal />
   <SpotlightTutorial :on-open-left="openLeftDrawer" :on-open-right="openRightDrawer" />
 
-  <div id="toast-stack" class="toast-stack">
-    <transition-group name="toast">
-      <div
-        v-for="toast in state.toasts"
-        :key="toast.id"
-        class="toast"
-      >{{ toast.msg }}</div>
-    </transition-group>
-  </div>
 </template>
 
 <script setup>

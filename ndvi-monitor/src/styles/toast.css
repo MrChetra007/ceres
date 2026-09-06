@@ -31,6 +31,39 @@
   max-width: 320px;
   white-space: normal;
   line-height: 1.4;
+  pointer-events: auto;
+}
+
+.toast-action {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border-radius: 14px;
+  padding: 10px 12px;
+  max-width: 360px;
+}
+
+.toast-msg {
+  flex: 1;
+  min-width: 0;
+}
+
+.toast-btn {
+  flex-shrink: 0;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--accent-fg, #06120c);
+  font-weight: 700;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: opacity 0.15s;
+}
+
+.toast-btn:hover,
+.toast-btn:active {
+  opacity: 0.85;
 }
 
 .toast-enter-active,
