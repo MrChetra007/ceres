@@ -1,9 +1,26 @@
 import { showToast } from '../store'
 
-const INSTALL_DISMISS_KEY = 'ndvi-install-dismissed'
+// Simple one-time gate: as soon as this is true we stop showing the install
+// popup. Initial state is "false" (absent). We set it to true the first time
+// the invite is shown (and again when the user actually installs).
+const IS_DOWNLOAD_KEY = 'isDownload'
 
 let deferredPrompt = null
 let inviteShown = false
+
+function isDownloaded() {
+  try {
+    return localStorage.getItem(IS_DOWNLOAD_KEY) === 'true'
+  } catch {
+    return false
+  }
+}
+
+function markDownloaded() {
+  try {
+    localStorage.setItem(IS_DOWNLOAD_KEY, 'true')
+  } catch {}
+}
 
 export function isStandalone() {
   return (
@@ -24,6 +41,7 @@ export async function installApp() {
   if (!deferredPrompt) return false
   const p = deferredPrompt
   deferredPrompt = null
+  markDownloaded()
   p.prompt()
   await p.userChoice.catch(() => {})
   return true
@@ -36,35 +54,24 @@ export function showInstallHint() {
   showToast(msg, 6000, [{ label: 'OK', onClick: () => {} }])
 }
 
-function dismissInstallInvite() {
-  try {
-    localStorage.setItem(INSTALL_DISMISS_KEY, '1')
-  } catch {}
-}
-
-// First-visit invite: shown once per browser, unless dismissed. On Android/
-// Chrome it both advertises and triggers the native install prompt; on iOS it
-// explains the Share -> Add to Home Screen path.
+// First-visit invite: only ever shows once, then isDownload stops it. On
+// Android/Chrome it both advertises and triggers the native install prompt; on
+// iOS it explains the Share -> Add to Home Screen path.
 export function maybeShowInstallInvite() {
-  if (inviteShown || isStandalone()) return
+  if (inviteShown || isStandalone() || isDownloaded()) return
   inviteShown = true
-  try {
-    if (localStorage.getItem(INSTALL_DISMISS_KEY)) return
-  } catch {}
+  markDownloaded()
   if (installAvailable()) {
     showToast(
       'Install the NDVI Rice app for one-tap access and offline maps.',
       12000,
-      [
-        { label: 'Install', onClick: installApp },
-        { label: 'Later', onClick: dismissInstallInvite },
-      ],
+      [{ label: 'Install', onClick: installApp }],
     )
   } else if (isIOS()) {
     showToast(
       'Tap Share, then "Add to Home Screen" to install the app.',
       12000,
-      [{ label: 'Later', onClick: dismissInstallInvite }],
+      [{ label: 'OK', onClick: () => {} }],
     )
   }
 }
