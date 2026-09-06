@@ -2,7 +2,9 @@
   <div class="topbar">
     <div class="topbar-left">
       <div class="brand-chip">
-        <img class="brand-logo" :src="logo1" alt="" />
+        <button class="brand-logo-btn" aria-label="Menu" @click="brandMenuClick">
+          <img class="brand-logo" :src="logo1" alt="" />
+        </button>
         <div class="brand-text">
           <span class="brand-name">{{ t('app.name') }}</span>
           <span class="brand-loc mono">BATTAMBANG · {{ fieldCountLabel }}</span>
@@ -110,6 +112,14 @@
           <i class="ti ti-menu-2"></i>
         </button>
         <div class="settings-menu hamburger-menu" v-show="hamburgerOpen" @click.stop>
+          <div class="hamburger-brand">
+            <img class="brand-logo" :src="logo1" alt="" />
+            <div class="brand-text">
+              <span class="brand-name">{{ t('app.name') }}</span>
+              <span class="brand-loc mono">BATTAMBANG · {{ fieldCountLabel }}</span>
+            </div>
+          </div>
+          <div class="hamburger-divider"></div>
           <button class="settings-item" @click="openFields">
             <i class="ti ti-list-details"></i>{{ t('sidebar.monitored_fields') }}
           </button>
@@ -271,6 +281,11 @@ function toggleHamburgerMenu() {
   hamburgerOpen.value = !hamburgerOpen.value
   settingsOpen.value = false
   userMenuOpen.value = false
+}
+
+function brandMenuClick() {
+  // On phones the logo collapses to an icon-only button that opens the drawer.
+  if (window.matchMedia('(max-width: 480px)').matches) toggleHamburgerMenu()
 }
 
 function openFields() {

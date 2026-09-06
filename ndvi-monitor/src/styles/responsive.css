@@ -73,43 +73,98 @@
     border-radius: var(--radius-lg) var(--radius-lg) 0 0;
   }
   .dashboard { width: 100%; }
+  /* Step 12: slim collapsed bar on mobile — one row of the existing controls.
+     Play + month + scene pill + Today (icon-only) + chevron; season tag and
+     the diagnostic pills collapse away (still reachable when expanded). */
+  .time-panel.collapsed { padding: 6px 12px; }
+  .time-panel.collapsed .time-head { flex-wrap: nowrap; row-gap: 0; margin-bottom: 0; }
+  .time-panel.collapsed .season-tag { display: none; }
+  .time-panel.collapsed .time-pills { flex-basis: auto; width: auto; margin-left: auto; flex-wrap: nowrap; }
+  .time-panel.collapsed .jump-btn,
+  .time-panel.collapsed .rvi-offer-btn,
+  .time-panel.collapsed .pill.radar-fallback,
+  .time-panel.collapsed .pill.cloud-blocked,
+  .time-panel.collapsed .latest-btn { display: none; }
+  .time-panel.collapsed .today-icon-expanded { display: none; }
+  .time-panel.collapsed .today-icon-collapsed { display: inline-flex; }
+  .time-panel.collapsed .today-btn {
+    display: inline-flex;
+    width: 26px;
+    height: 26px;
+    padding: 0;
+    align-items: center;
+    justify-content: center;
+  }
+  .time-panel.collapsed .today-btn .ti { font-size: 14px; }
+  .time-panel.collapsed .today-btn .today-label { display: none; }
 }
 
-/* BUG B: keep the mobile map zoom controls clear of the time-slider panel
-   (which sits across the top of the viewport). Base is top:64px (line 2887);
-   push it below the panel's bottom edge on phones/tablets only. */
+/* Floating overlays below the compact chrome: the zoom (+/−) control stays
+   top-left and the Zones toggle stacks under it. body.tc-expanded (set by
+   TimeControl) drops both below the taller expanded date panel. All are
+   top-anchored, so they never collide with the bottom sheets/drawers. */
 @media (max-width: 767px) {
+  /* Clear the collapsed slim bar (~46px tall; bottom ≈ 102px on phones,
+     114px on 481-767px). The expanded panel is much taller (~230px), so
+     tc-expanded drops both controls well clear of the scrubber. */
   #map .leaflet-top,
-  #map-right .leaflet-top { top: 172px; }
+  #map-right .leaflet-top {
+    top: 120px;
+    transition: top 150ms ease;
+  }
+  body.tc-expanded #map .leaflet-top,
+  body.tc-expanded #map-right .leaflet-top { top: 264px; }
 }
 
 @media (max-width: 480px) {
-  /* BUG A: two-row header — row 1 logo + title/subtitle + hamburger, row 2
-     full-width search input. Header grows taller, so the panels below shift. */
+  /* Compact single-row header: icon-only logo (opens the drawer) + search
+     (dominant) + hamburger. App name / BATTAMBANG rows move into the drawer. */
   .topbar {
-    flex-wrap: wrap;
-    height: auto;
-    align-content: flex-start;
-    row-gap: 6px;
-    padding-top: 6px;
-    padding-bottom: 6px;
+    flex-wrap: nowrap;
+    height: 48px;
+    align-content: center;
+    row-gap: 0;
+    padding: 0 10px;
   }
-  .topbar-left { flex-wrap: wrap; row-gap: 6px; }
-  .brand-text { display: flex; }
-  .brand-loc { display: block; }
+  .topbar-left { flex-wrap: nowrap; row-gap: 0; gap: 8px; }
+  .topbar-right { flex: 0 0 auto; }
+  .topbar-left .brand-chip .brand-text { display: none; }
+  .brand-logo-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+  }
+  .brand-logo-btn .brand-logo { height: 30px; width: auto; }
   .place-search {
     display: flex;
-    flex: 1 1 100%;
-    order: 5;
-    width: 100%;
+    flex: 1 1 auto;
+    order: 0;
+    width: auto;
+    min-width: 0;
     box-sizing: border-box;
+    margin-left: 10px;
   }
   .topbar-desktop-controls { display: none; }
   .topbar-center { display: none; }
   .drawer-toggle { display: flex; }
-  .time-panel { top: 104px; }
-  #map .leaflet-top,
-  #map-right .leaflet-top { top: 206px; }
+  .time-panel { top: 56px; }
+  .hamburger-menu { top: 52px; }
+  /* App-name header inside the drawer (mirrors the header branding). */
+  .hamburger-brand {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+  }
+  .hamburger-brand .brand-text { display: flex; }
+  .hamburger-brand .brand-loc { display: block; }
   .band-panel { bottom: 10px; }
   .band-base { display: none; }
   .band-explainer { bottom: 66px; }

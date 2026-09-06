@@ -78,7 +78,9 @@
           <i class="ti ti-last"></i>
         </button>
         <button class="today-btn" :title="t('time.today_tip')" @click="goToday">
-          <i class="ti ti-calendar-event"></i> {{ t("time.today") }}
+          <i class="ti ti-calendar-event today-icon-expanded"></i>
+          <i class="ti ti-calendar-check today-icon-collapsed"></i>
+          <span class="today-label">{{ t("time.today") }}</span>
         </button>
       </div>
     </div>
@@ -244,7 +246,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onBeforeUnmount } from "vue";
+import { ref, computed, watch, onBeforeUnmount } from "vue";
 import { state } from "../store";
 import * as store from "../store";
 import {
@@ -260,7 +262,15 @@ import { formatMonthYear } from "../services/format";
 
 const { t } = useI18n();
 const playing = ref(false);
-const collapsed = ref(true);
+// Mobile defaults to the slim collapsed bar; desktop always expands the panel.
+// The user's own collapse/expand choice is persisted so it survives reloads.
+const isMobile = ref(window.matchMedia("(max-width: 780px)").matches);
+const TC_KEY = "ndvi-tc-collapsed";
+let savedCollapsed = null;
+try { savedCollapsed = localStorage.getItem(TC_KEY); } catch (e) {}
+const collapsed = ref(
+  savedCollapsed !== null ? savedCollapsed === "1" : isMobile.value,
+);
 let playTimer = null;
 let debounceTimer = null;
 let debounceTimerRight = null;
@@ -454,7 +464,20 @@ function togglePlay() {
 
 function toggleCollapsed() {
   collapsed.value = !collapsed.value;
+  try { localStorage.setItem(TC_KEY, collapsed.value ? "1" : "0"); } catch (e) {}
 }
+
+// Body hook so the floating overlays (zoom, Zones toggle) drop below the
+// taller expanded panel instead of sliding under it on mobile.
+watch(
+  [collapsed, isMobile],
+  () =>
+    document.body.classList.toggle(
+      "tc-expanded",
+      !collapsed.value && isMobile.value,
+    ),
+  { immediate: true },
+);
 
 function startPlay() {
   stopPlay();
@@ -497,6 +520,7 @@ function goToday() {
 }
 
 onBeforeUnmount(() => {
+  document.body.classList.remove("tc-expanded");
   stopPlay();
   clearTimeout(debounceTimer);
   clearTimeout(debounceTimerRight);

@@ -322,6 +322,7 @@
 .today-btn .ti {
   font-size: 12px;
 }
+.today-icon-collapsed { display: none; }
 
 #slider-panel.loading .segmented::after {
   content: ' \u27f3';

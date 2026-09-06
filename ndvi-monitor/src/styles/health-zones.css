@@ -256,3 +256,19 @@
 @media (max-width: 480px) {
   .hz-panel { width: calc(100vw - 28px); }
 }
+
+/* ---- Mobile floating stack (Step 12) ----
+   ≤767px: the Zones toggle joins the zoom (+/−) column on the left instead of
+   the top-right corner, staying clear of the collapsed/expanded time panel.
+   body.tc-expanded (set by TimeControl) drops it below the expanded panel.
+   Lives here (not responsive.css) so the base .hz-toggle block above can't be
+   re-won by sibling files — health-zones.css is imported last. */
+@media (max-width: 767px) {
+  .hz-toggle {
+    top: 192px;
+    right: auto;
+    left: 10px;
+    transition: top 150ms ease, background 0.15s, color 0.15s, border-color 0.15s, right 0.25s var(--ease);
+  }
+  body.tc-expanded .hz-toggle { top: 336px; }
+}
