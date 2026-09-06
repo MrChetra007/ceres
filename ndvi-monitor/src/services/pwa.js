@@ -3,7 +3,7 @@ import { showToast } from '../store'
 // Simple one-time gate: as soon as this is true we stop showing the install
 // popup. Initial state is "false" (absent). We set it to true the first time
 // the invite is shown (and again when the user actually installs).
-const IS_DOWNLOAD_KEY = 'isDownload'
+const IS_DOWNLOAD_KEY = 'isDownload-v2'
 
 let deferredPrompt = null
 let inviteShown = false
@@ -52,6 +52,17 @@ export function showInstallHint() {
     ? 'Tap Share, then "Add to Home Screen" to install the app.'
     : 'Open this site in your browser menu and choose "Install App".'
   showToast(msg, 6000, [{ label: 'OK', onClick: () => {} }])
+}
+
+// Entry point for an explicit "Download app" button: fires the native install
+// prompt when the browser offers it, otherwise explains {iOS: Share→Add to
+// Home Screen | other: menu → Install App}.
+export async function promptInstall() {
+  if (installAvailable()) {
+    return installApp()
+  }
+  showInstallHint()
+  return false
 }
 
 // First-visit invite: only ever shows once, then isDownload stops it. On

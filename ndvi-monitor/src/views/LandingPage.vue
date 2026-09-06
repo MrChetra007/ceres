@@ -13,20 +13,24 @@
         </div>
       </div>
       <div class="nav-right">
-        <div class="lang-seg">
-          <button
-            :class="{ on: state.preferredLanguage === 'en' }"
-            @click="setLang('en')"
-          >
-            EN
-          </button>
-          <button
-            :class="{ on: state.preferredLanguage === 'km' }"
-            @click="setLang('km')"
-          >
-            ខ្មែរ
-          </button>
-        </div>
+        <button
+          class="lang-seg"
+          :aria-label="state.preferredLanguage === 'en' ? 'ខ្មែរ' : 'English'"
+          :title="state.preferredLanguage === 'en' ? 'ខ្មែរ' : 'English'"
+          @click="toggleLang"
+        >
+          <i class="ti ti-world"></i>
+          {{ state.preferredLanguage === 'en' ? 'EN' : 'ខ្មែរ' }}
+        </button>
+        <button
+          class="landing-cta ghost small download-btn"
+          aria-label="Install app"
+          title="Install the app"
+          @click="promptInstall"
+        >
+          <i class="ti ti-device-mobile-down"></i>
+          <span>Install app</span>
+        </button>
         <button class="landing-cta primary small" @click="enter">
           Sign in
         </button>
@@ -495,6 +499,7 @@ import { landingIndices } from "../data/landing-indices.js";
 import logo1 from "../assets/logos-icons/logo1.png";
 import IndexSection from "../components/landing-page/IndexSection.vue";
 import PricingCards from "../components/PricingCards.vue";
+import { promptInstall } from "../services/pwa.js";
 
 const leaving = ref(false);
 
@@ -512,6 +517,10 @@ let tiltCleanups = [];
 
 function setLang(lang) {
   state.preferredLanguage = lang;
+}
+
+function toggleLang() {
+  setLang(state.preferredLanguage === "en" ? "km" : "en");
 }
 
 function scrollTo(sel) {
@@ -782,32 +791,25 @@ onBeforeUnmount(() => {
   gap: 16px;
 }
 .lang-seg {
-  display: flex;
-  border: 1px solid var(--line-on-dark);
-  border-radius: 999px;
-  padding: 3px;
-  gap: 2px;
-  font-family: var(--font-mono);
-  font-size: 11px;
-}
-.lang-seg button {
   background: none;
   border: none;
   color: var(--husk-paper);
-  opacity: 0.55;
-  padding: 6px 12px;
-  border-radius: 999px;
-  cursor: pointer;
-  font-family: inherit;
-  font-size: inherit;
-  transition: all 0.25s var(--landing-ease);
+  opacity: 0.8;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 8px;
+  font-family: var(--font-mono);
+  font-size: 12px;
   letter-spacing: 0.04em;
+  cursor: pointer;
+  transition:
+    color 0.25s var(--landing-ease),
+    opacity 0.25s;
 }
-.lang-seg button.on {
-  background: var(--ripening-gold);
-  color: var(--paddy-night);
+.lang-seg:hover {
+  color: var(--ripening-gold);
   opacity: 1;
-  font-weight: 600;
 }
 
 .landing-cta {
@@ -1769,5 +1771,28 @@ onBeforeUnmount(() => {
 }
 .footer-links button:hover {
   color: var(--ripening-gold);
+}
+
+/* Compact nav on phones: hide the location subtitle (nothing meaningful
+   pre-login) instead of truncating it; drop the Install label to icon-only
+   so the row stays unwrapped. */
+@media (max-width: 640px) {
+  .landing-nav .brand-loc {
+    display: none;
+  }
+}
+@media (max-width: 520px) {
+  .landing-nav {
+    padding: 12px 14px;
+  }
+  .nav-right {
+    gap: 8px;
+  }
+  .download-btn span {
+    display: none;
+  }
+  .download-btn {
+    padding: 8px 10px;
+  }
 }
 </style>
