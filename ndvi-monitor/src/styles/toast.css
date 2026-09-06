@@ -8,6 +8,27 @@
   box-shadow: var(--shadow);
 }
 
+/* Mobile: status text is low-priority chrome — bottom-center, clear of the
+   top chrome (header + timeline), capped at 2 lines inside the viewport. */
+@media (max-width: 767px) {
+  .status-toast {
+    top: auto;
+    bottom: 84px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 1090;
+    width: calc(100vw - 24px);
+    max-width: none;
+    white-space: normal;
+    overflow: visible;
+    display: block;
+    border-radius: 14px;
+    padding: 10px 16px;
+    text-align: center;
+    line-height: 1.45;
+  }
+}
+
 .toast-stack {
   position: fixed;
   top: 64px;
@@ -83,4 +104,21 @@
 
 .toast-move {
   transition: transform 0.3s var(--ease);
+}
+
+/* Mobile: toasts anchor bottom-center, clear of the top chrome (expanded
+   timeline) and the bottom-sheet pull tab, and always stay on-screen. */
+@media (max-width: 767px) {
+  .toast-stack {
+    top: auto;
+    bottom: 84px;
+    left: 10px;
+    right: 10px;
+    align-items: center;
+    z-index: 1100;
+  }
+  .toast {
+    max-width: none;
+    border-radius: 14px;
+  }
 }

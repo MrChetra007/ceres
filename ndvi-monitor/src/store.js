@@ -230,7 +230,7 @@ export function setStatus(s, text) {
   state.statusText = text
 }
 
-export function showToast(msg, duration = 3000, actions = null) {
+export function showToast(msg, duration = 5000, actions = null) {
   const id = crypto.randomUUID()
   state.toasts.push({ id, msg, actions })
   if (state.toasts.length > 3) {

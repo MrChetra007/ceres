@@ -110,10 +110,12 @@ watch(leftDrawerOpen, (v) => {
   document.body.style.overflow = v ? 'hidden' : ''
 })
 
+// Each statusText update restarts the window, so the LAST message of a rapid
+// burst still gets the full readable duration instead of a fraction of it.
 watch(() => state.statusText, () => {
   clearTimeout(statusTimer)
   if (state.statusState === 'ready' && state.statusText) {
-    statusTimer = setTimeout(() => { state.statusText = '' }, 2500)
+    statusTimer = setTimeout(() => { state.statusText = '' }, 4000)
   }
 })
 
