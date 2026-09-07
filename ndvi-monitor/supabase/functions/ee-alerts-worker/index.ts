@@ -506,8 +506,14 @@ Deno.serve(async (_req) => {
 
         // reading.source === "ndvi" — unchanged optical path below.
         const { ndvi, confidence, windowDays } = reading;
-        const useGeneric = !!(field as any).crop_english && (field as any).crop_english !== "rice";
-        const { status, stage } = statusFromNdvi(ndvi, field.planting_date, useGeneric);
+        const useGeneric =
+          !!(field as any).crop_english &&
+          (field as any).crop_english !== "rice";
+        const { status, stage } = statusFromNdvi(
+          ndvi,
+          field.planting_date,
+          useGeneric,
+        );
 
         // Always send — every run, regardless of whether status changed or
         // improved. (This intentionally removes the Part 5 dedup/"only on

@@ -164,13 +164,26 @@ async function buildMaskedComposite(
 
   const count = await evaluate(maskedIndices.size());
   if (!count || count === 0) {
-    return Promise.resolve({ img: null, clearSceneCount: 0, validFraction: null, compositeStart: "", compositeEnd: "" });
+    return Promise.resolve({
+      img: null,
+      clearSceneCount: 0,
+      validFraction: null,
+      compositeStart: "",
+      compositeEnd: "",
+    });
   }
 
   const composite = maskedIndices.median().rename(name);
   // Field-level valid fraction over the geometry (fraction of pixels carrying a
   // non-NaN index value = pixel survived cloud/shadow mask AND has data).
-  const validFraction = await validPixelFraction(composite, name, geom, 10, ee, evaluate);
+  const validFraction = await validPixelFraction(
+    composite,
+    name,
+    geom,
+    10,
+    ee,
+    evaluate,
+  );
 
   // d may be a plain timestamp, a JS Date, or an ee.Date — only the last case
   // is a computed value that must be evaluated before Date can consume it.
@@ -181,7 +194,13 @@ async function buildMaskedComposite(
   };
   const compositeStart = await iso(start);
   const compositeEnd = await iso(end);
-  return Promise.resolve({ img: composite, clearSceneCount: count, validFraction, compositeStart, compositeEnd });
+  return Promise.resolve({
+    img: composite,
+    clearSceneCount: count,
+    validFraction,
+    compositeStart,
+    compositeEnd,
+  });
 }
 
 function jsonResponse(
@@ -285,7 +304,9 @@ function s2Collection(geom: any, start: any, end: any) {
     .filterDate(start, end)
     .filter(ee.Filter.lt("CLOUDY_PIXEL_PERCENTAGE", 40));
   const withProb = addCloudProbability(raw, ee);
-  return withProb.map((scene: any) => scene.updateMask(validPixelMask(scene, ee)));
+  return withProb.map((scene: any) =>
+    scene.updateMask(validPixelMask(scene, ee)),
+  );
 }
 
 function tsToISO(ts: any): string | null {
@@ -298,7 +319,9 @@ function tsToISO(ts: any): string | null {
 // hash of the input geometry, and refreshes it on a TTL — it can never hold a
 // closed month permanently (the token would expire), unlike ee_trend_cache.
 function geometryHash(geojson: any): string {
-  const s = JSON.stringify(geojson && geojson.type === "Feature" ? geojson.geometry : geojson);
+  const s = JSON.stringify(
+    geojson && geojson.type === "Feature" ? geojson.geometry : geojson,
+  );
   // FNV-1a 32-bit — deterministic, stable across restarts, not crypto.
   let h = 0x811c9dc5;
   for (let i = 0; i < s.length; i++) {
@@ -353,11 +376,16 @@ async function readTileCache(
       indexUsed: data.index_used || undefined,
       cloudPct: data.cloud_pct != null ? data.cloud_pct : undefined,
       lastValidDate: data.last_valid_date || undefined,
-      clearSceneCount: data.clear_scene_count != null ? data.clear_scene_count : undefined,
-      validFraction: data.valid_fraction != null ? data.valid_fraction : undefined,
+      clearSceneCount:
+        data.clear_scene_count != null ? data.clear_scene_count : undefined,
+      validFraction:
+        data.valid_fraction != null ? data.valid_fraction : undefined,
       compositeStart: data.composite_start || undefined,
       compositeEnd: data.composite_end || undefined,
-      daysSinceObservation: data.days_since_observation != null ? data.days_since_observation : undefined,
+      daysSinceObservation:
+        data.days_since_observation != null
+          ? data.days_since_observation
+          : undefined,
     };
   } catch (e) {
     console.error("[ee-data] ee_tile_cache read failed:", e);
@@ -381,6 +409,10 @@ async function writeTileCache(row: any) {
 // ── getRadarVegetationIndex ────────────────────────────────────────────────
 // Sentinel-1 radar RVI composite over a date window — the radar fallback
 // and the direct RVI band tab.
+// ── getRadarVegetationIndex ────────────────────────────────────────────────
+// Returns the SINGLE freshest S1 pass in the window (not a median composite)
+// so a fallback always has one real, reportable date — useful for the RVI
+// ground-truth validation this app still needs to do.
 async function getRadarVegetationIndex(
   geom: any,
   startDate: any,
@@ -392,17 +424,19 @@ async function getRadarVegetationIndex(
     .filterDate(startDate, endDate)
     .filter(ee.Filter.eq("instrumentMode", "IW"))
     .filter(ee.Filter.listContains("transmitterReceiverPolarisation", "VV"))
-    .filter(ee.Filter.listContains("transmitterReceiverPolarisation", "VH"));
+    .filter(ee.Filter.listContains("transmitterReceiverPolarisation", "VH"))
+    .sort("system:time_start", false); // freshest first
   const count = await evaluate(s1.size());
-  if (!count) return { count: 0, url: null };
-  const composite = s1.median().clip(geom);
+  if (!count) return { count: 0, url: null, radarDate: null };
+  const scene = s1.first().clip(geom); // single freshest pass, not median()
+  const radarDate = tsToISO(await evaluate(scene.get("system:time_start")));
   // S1_GRD backscatter arrives in dB (log scale); RVI must be computed on
   // LINEAR power or the ratio saturates into a flat image.
-  const vvLinear = ee.Image(10).pow(composite.select("VV").divide(10));
-  const vhLinear = ee.Image(10).pow(composite.select("VH").divide(10));
+  const vvLinear = ee.Image(10).pow(scene.select("VV").divide(10));
+  const vhLinear = ee.Image(10).pow(scene.select("VH").divide(10));
   const rvi = vhLinear.multiply(4).divide(vvLinear.add(vhLinear)).rename("RVI");
   const url = await getMapUrl(rvi, VIS.rvi as Record<string, unknown>);
-  return { count, url };
+  return { count, url, radarDate };
 }
 
 // Numeric mean RVI over a date window for a geometry (the radar twin of
@@ -410,7 +444,11 @@ async function getRadarVegetationIndex(
 // VALUE the sidebar can grade). Same dB→linear-power conversion required (S1_GRD
 // backscatter arrives in dB; RVI on raw dB saturates flat). Returns null when
 // there's no usable pass in the window.
-async function getRadarRviValue(geom: any, startDate: any, endDate: any): Promise<number | null> {
+async function getRadarRviValue(
+  geom: any,
+  startDate: any,
+  endDate: any,
+): Promise<number | null> {
   const s1 = ee
     .ImageCollection("COPERNICUS/S1_GRD")
     .filterBounds(geom)
@@ -438,10 +476,15 @@ async function getRadarRviValue(geom: any, startDate: any, endDate: any): Promis
 // Growth-stage name as-of a specific SCENE date (not "now"), so the sidebar's
 // stage for a clicked observation matches the era of that scene. Returns null
 // when there's no valid planting date.
-function stageNameAsOf(sceneDate: string, plantingDate: string | null): string | null {
+function stageNameAsOf(
+  sceneDate: string,
+  plantingDate: string | null,
+): string | null {
   if (!plantingDate) return null;
   const days = Math.floor(
-    (new Date(sceneDate + "T00:00:00Z").getTime() - new Date(plantingDate).getTime()) / 86400000,
+    (new Date(sceneDate + "T00:00:00Z").getTime() -
+      new Date(plantingDate).getTime()) /
+      86400000,
   );
   return stageNameForDayCount(days >= 0 ? days : null);
 }
@@ -487,7 +530,12 @@ async function actionGetIndexTile(payload: any) {
         sceneDate: payload.sceneDate,
       };
     }
-    return { mode: "no_data", count: 0, url: null, sceneDate: payload.sceneDate };
+    return {
+      mode: "no_data",
+      count: 0,
+      url: null,
+      sceneDate: payload.sceneDate,
+    };
   }
 
   // ── Tile cache hit (§1 of the ee-cost-control directive) ────────────────
@@ -512,7 +560,14 @@ async function actionGetIndexTile(payload: any) {
   // (no sceneDate) may hit it. Mode-aware: an optical request must never be
   // handed a radar-fallback row and vice versa.
   if (!payload.sceneDate) {
-    const cached = await readTileCache(index, payload.year, payload.month, geomHash, "optical", closed);
+    const cached = await readTileCache(
+      index,
+      payload.year,
+      payload.month,
+      geomHash,
+      "optical",
+      closed,
+    );
     if (cached) return cached;
   }
 
@@ -541,7 +596,12 @@ async function actionGetIndexTile(payload: any) {
         sceneDate: payload.sceneDate,
       };
     }
-    return { mode: "no_data", count: 0, url: null, sceneDate: payload.sceneDate };
+    return {
+      mode: "no_data",
+      count: 0,
+      url: null,
+      sceneDate: payload.sceneDate,
+    };
   }
 
   if (index === "rvi") {
@@ -604,7 +664,12 @@ async function actionGetIndexTile(payload: any) {
     // cloud may have clear pixels over THIS field, so the pixel-level mask
     // decides. Use the masked single-day composite; only use it if it actually
     // has valid pixels over the geometry.
-    const masked = await buildMaskedComposite(geom, day, day.advance(1, "day"), index);
+    const masked = await buildMaskedComposite(
+      geom,
+      day,
+      day.advance(1, "day"),
+      index,
+    );
     if (masked.clearSceneCount > 0 && masked.img) {
       const img = masked.img.clip(geom);
       const url = await getMapUrl(img, vis);
@@ -628,7 +693,9 @@ async function actionGetIndexTile(payload: any) {
     let sceneCloudPct: number | null = null;
     if (dayCount > 0) {
       try {
-        sceneCloudPct = await evaluate(dayRaw.first().get("CLOUDY_PIXEL_PERCENTAGE"));
+        sceneCloudPct = await evaluate(
+          dayRaw.first().get("CLOUDY_PIXEL_PERCENTAGE"),
+        );
       } catch (e) {
         console.error("scene cloud% read failed:", e);
       }
@@ -637,8 +704,8 @@ async function actionGetIndexTile(payload: any) {
       try {
         const radar = await getRadarVegetationIndex(
           geom,
-          day.advance(-15, "day"),
-          day.advance(15, "day"),
+          day.advance(-45, "day"), // backward-only, was ±15 days
+          day.advance(1, "day"), // through the clicked date, no further
         );
         if (radar.count > 0 && radar.url) {
           return {
@@ -647,6 +714,7 @@ async function actionGetIndexTile(payload: any) {
             url: radar.url,
             indexUsed: "RVI",
             sceneDate: payload.sceneDate,
+            radarDate: radar.radarDate,
             cloudPct: sceneCloudPct,
           };
         }
@@ -713,8 +781,8 @@ async function actionGetIndexTile(payload: any) {
     try {
       const radar = await getRadarVegetationIndex(
         geom,
-        start.advance(-15, "day"),
-        end.advance(15, "day"),
+        start.advance(-45, "day"), // backward-only, was ±15 days
+        start, // no forward reach past the period start
       );
       if (radar.count > 0 && radar.url) {
         result = {
@@ -722,6 +790,7 @@ async function actionGetIndexTile(payload: any) {
           count: radar.count,
           url: radar.url,
           indexUsed: "RVI",
+          radarDate: radar.radarDate,
         };
         await writeTileCache({
           index,
@@ -1045,7 +1114,10 @@ async function actionGetRviTimeSeries(payload: any) {
   const series = s1.map((img: any) => {
     const vvLinear = ee.Image(10).pow(img.select("VV").divide(10));
     const vhLinear = ee.Image(10).pow(img.select("VH").divide(10));
-    const rvi = vhLinear.multiply(4).divide(vvLinear.add(vhLinear)).rename("RVI");
+    const rvi = vhLinear
+      .multiply(4)
+      .divide(vvLinear.add(vhLinear))
+      .rename("RVI");
     const value = rvi.reduceRegion({
       reducer: ee.Reducer.mean(),
       geometry: geom,
@@ -1269,7 +1341,12 @@ async function actionGetFieldStatus(payload: any) {
     if (!forceRadar) {
       // Pixel-level mask decides optically valid coverage over THIS field; the
       // single-day composite is used only if it has valid pixels over the geom.
-      const masked = await buildMaskedComposite(geom, day, day.advance(1, "day"), "ndvi");
+      const masked = await buildMaskedComposite(
+        geom,
+        day,
+        day.advance(1, "day"),
+        "ndvi",
+      );
       if (masked.clearSceneCount > 0 && masked.img) {
         const result = await evaluate(
           masked.img.reduceRegion({
@@ -1314,7 +1391,11 @@ async function actionGetFieldStatus(payload: any) {
       forceRadar || payload.index == null || payload.index === "ndvi";
     if (allowRadarFallback) {
       try {
-        const radar = await getRadarRviValue(geom, day.advance(-15, "day"), day.advance(15, "day"));
+        const radar = await getRadarRviValue(
+          geom,
+          day.advance(-15, "day"),
+          day.advance(15, "day"),
+        );
         if (radar != null) {
           return {
             mode: "radar",
@@ -1406,7 +1487,9 @@ async function actionGetFieldHealthScore(payload: any) {
     // read from, exactly like the hero badge. Date.UTC(year, month, 1) is the
     // start of the NEXT month; subtract one ms for month-end.
     const monthEndMs = Date.UTC(year, month, 1) - 1;
-    const days = Math.floor((monthEndMs - new Date(plantingDate).getTime()) / 86400000);
+    const days = Math.floor(
+      (monthEndMs - new Date(plantingDate).getTime()) / 86400000,
+    );
     if (days >= 0) dayCount = days;
   }
   const stage = stageNameForDayCount(dayCount);
@@ -1429,7 +1512,12 @@ async function actionGetFieldHealthScore(payload: any) {
     if (value === null) {
       // Tier 2: no clean scene that month — widen to a 90-day lookback ending
       // at month-end (low confidence, same spirit as the map's fallback).
-      value = await reduceIndexMean(geom, index, monthEnd.advance(-90, "day"), monthEnd);
+      value = await reduceIndexMean(
+        geom,
+        index,
+        monthEnd.advance(-90, "day"),
+        monthEnd,
+      );
       confidence = "low";
     }
     if (value === null) {
@@ -1629,16 +1717,18 @@ async function actionGetObservations(payload: any) {
   // share the exact same bounds (no EE Date → ISO round-trip needed). The
   // relative default (now − 14 calendar months) gets a 1-day margin on the
   // front so an EE/JS month-arithmetic edge can never drop an in-window scene.
-  const endTs = endISO && !isNaN(new Date(endISO).getTime())
-    ? new Date(endISO).getTime()
-    : Date.now();
-  const startTs = startISO && !isNaN(new Date(startISO).getTime())
-    ? new Date(startISO).getTime()
-    : (() => {
-        const d = new Date(endTs);
-        d.setMonth(d.getMonth() - 14);
-        return d.getTime() - 86400000;
-      })();
+  const endTs =
+    endISO && !isNaN(new Date(endISO).getTime())
+      ? new Date(endISO).getTime()
+      : Date.now();
+  const startTs =
+    startISO && !isNaN(new Date(startISO).getTime())
+      ? new Date(startISO).getTime()
+      : (() => {
+          const d = new Date(endTs);
+          d.setMonth(d.getMonth() - 14);
+          return d.getTime() - 86400000;
+        })();
   const iso = (ts: number) => new Date(ts).toISOString().slice(0, 10);
   const qStart = iso(startTs);
   const qEnd = iso(endTs);
@@ -1660,7 +1750,8 @@ async function actionGetObservations(payload: any) {
         .lte("scene_date", qEnd);
       cached = (data as any[]) || [];
       for (const row of cached) {
-        if (!cachedMax || row.scene_date > cachedMax) cachedMax = row.scene_date;
+        if (!cachedMax || row.scene_date > cachedMax)
+          cachedMax = row.scene_date;
       }
     } catch (e) {
       // Cache read failed — fall back to computing the full window this call.
@@ -1740,19 +1831,18 @@ async function actionGetObservations(payload: any) {
   //    TEST FLAG: writes skipped while USE_EE_CACHE is off.
   if (fieldId && fresh.length && USE_EE_CACHE) {
     try {
-      const { error } = await supabase
-        .from("ee_observation_cache")
-        .upsert(
-          fresh.map((r: any) => ({
-            field_id: fieldId,
-            scene_date: r.date,
-            source: r.source || "Sentinel-2",
-            cloud_cover: r.cloudCover,
-            ndvi: r.ndvi,
-          })),
-          { onConflict: "field_id,scene_date" },
-        );
-      if (error) console.error("[ee-data] ee_observation_cache upsert failed:", error);
+      const { error } = await supabase.from("ee_observation_cache").upsert(
+        fresh.map((r: any) => ({
+          field_id: fieldId,
+          scene_date: r.date,
+          source: r.source || "Sentinel-2",
+          cloud_cover: r.cloudCover,
+          ndvi: r.ndvi,
+        })),
+        { onConflict: "field_id,scene_date" },
+      );
+      if (error)
+        console.error("[ee-data] ee_observation_cache upsert failed:", error);
     } catch (e) {
       console.error("[ee-data] ee_observation_cache upsert failed:", e);
     }
@@ -1874,8 +1964,7 @@ async function actionGetAllFieldStatuses(payload: any) {
   const result = await evaluate(statuses);
   const rows = ((result && result.features) || []).map((f: any) => {
     const value = f.properties.value;
-    const band =
-      value == null ? {} : translateIndexValue(index, value);
+    const band = value == null ? {} : translateIndexValue(index, value);
     return {
       id: f.properties.fid,
       count: f.properties.count,
@@ -1915,7 +2004,8 @@ async function actionGetAllFieldTrends(payload: any) {
   //    progress → always recomputed). Plain-JS calendar math, no EE: month M
   //    is closed once the first day of M+1 has passed. Date.UTC is 0-indexed,
   //    so Date.UTC(year, month, 1) is the start of the NEXT real month.
-  const monthKey = (y: number, m: number) => `${y}-${String(m).padStart(2, "0")}`;
+  const monthKey = (y: number, m: number) =>
+    `${y}-${String(m).padStart(2, "0")}`;
   const now = Date.now();
   const closed = months.filter((m: any) => Date.UTC(m.year, m.month, 1) <= now);
   const open = months.filter((m: any) => Date.UTC(m.year, m.month, 1) > now);
@@ -1933,7 +2023,10 @@ async function actionGetAllFieldTrends(payload: any) {
         .from("ee_trend_cache")
         .select("field_id, year, month, points, is_closed_period")
         .eq("index", index)
-        .in("field_id", incoming.map((f: any) => f.id));
+        .in(
+          "field_id",
+          incoming.map((f: any) => f.id),
+        );
       for (const row of data || []) {
         if (!row.is_closed_period) continue;
         const mk = monthKey(row.year, row.month);
@@ -1974,7 +2067,10 @@ async function actionGetAllFieldTrends(payload: any) {
       1,
     );
     const last = computeMonths[computeMonths.length - 1];
-    const endDate = ee.Date.fromYMD(last.year, last.month, 1).advance(1, "month");
+    const endDate = ee.Date.fromYMD(last.year, last.month, 1).advance(
+      1,
+      "month",
+    );
 
     const fc = ee.FeatureCollection(
       incoming.map((f: any) =>
@@ -2038,7 +2134,8 @@ async function actionGetAllFieldTrends(payload: any) {
     //    it would be re-queried as "missing" on every call forever.
     const upserts: any[] = [];
     for (const f of incoming) {
-      const buckets = freshByField.get(String(f.id)) ?? new Map<string, any[]>();
+      const buckets =
+        freshByField.get(String(f.id)) ?? new Map<string, any[]>();
       for (const m of computeMonths) {
         const mk = monthKey(m.year, m.month);
         upserts.push({
@@ -2059,7 +2156,8 @@ async function actionGetAllFieldTrends(payload: any) {
         const { error } = await supabase
           .from("ee_trend_cache")
           .upsert(upserts, { onConflict: "field_id,index,year,month" });
-        if (error) console.error("[ee-data] ee_trend_cache upsert failed:", error);
+        if (error)
+          console.error("[ee-data] ee_trend_cache upsert failed:", error);
       } catch (e) {
         console.error("[ee-data] ee_trend_cache upsert failed:", e);
       }
@@ -2098,9 +2196,10 @@ async function actionGetAllFieldTrends(payload: any) {
 // each as a separate ee-data invocation, paying EE auth/isolate-cold-start
 // latency N times instead of once. See field-bundle-fix-guide.md.
 async function actionGetFieldBundle(payload: any) {
-  const currentIndex = payload.currentIndex && BANDS[payload.currentIndex]
-    ? payload.currentIndex
-    : "ndvi";
+  const currentIndex =
+    payload.currentIndex && BANDS[payload.currentIndex]
+      ? payload.currentIndex
+      : "ndvi";
   const months = payload.months || [];
   const year = payload.year;
   const month = payload.month;
