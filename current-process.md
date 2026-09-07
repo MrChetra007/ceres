@@ -22,8 +22,14 @@ Last updated: 2026-09-07
      scene failed the 0.6 coverage gate → `no_data_for_scene`. Fixed to measure the index
      band **mask** (0/1) instead. Committed: `26bbe76`, pushed.
 - A **third** backend bug — `actionGetFieldStatus` hardcoded `"ndvi"` instead of
-  `payload.index` — is **fixed in the working tree but NOT yet committed/deployed**.
+  `payload.index` — is **fixed, committed (`383240b`) and pushed**, but its LIVE deploy has
+  not been verified end-to-end yet (step 1 in section 4).
 - NDWI tile renders correctly (post-fix) — verified visually on 2026-09-05, ~19% cloud.
+- Frontend/user-facing work since then (all committed & pushed):
+  - Landing page wired to `t()` with all Khmer `landing.*` keys blanked for the user to fill
+    (`8e37faa`).
+  - Language switching now works for unauthenticated users via localStorage with DB override
+    on login (`7fa0940`).
 
 ---
 
@@ -75,7 +81,7 @@ Verification: per-scene NDWI 2026-09-05 previously logged
 field, matches "Harvest / Senescence, Day 247"), no error toast, no radar fallback. That is
 the "validFraction ≈ 1 → optical" outcome, confirmed visually.
 
-### 2.3 `actionGetFieldStatus` hardcoded `"ndvi"` (working tree, NOT committed/deployed)
+### 2.3 `actionGetFieldStatus` hardcoded `"ndvi"` (committed `383240b`, pushed — deploy unverified)
 Bug: the scene-anchored sidebar grade in `actionGetIndexTile`'s sibling
 `actionGetFieldStatus` always built the single-day composite with `"ndvi"` and read the
 result under the `NDVI` band name, ignoring `payload.index` even though the frontend sends it
@@ -114,9 +120,8 @@ or reducing them.
 
 ## 4. What to CHECK NEXT (in order)
 
-1. **Deploy 2.3**: commit/push the current working tree, then
-   `supabase functions deploy ee-data` (it bundles `_shared/cloudMask.ts`; the `.js` mirror is
-   NOT what deploys).
+1. **Deploy 2.3**: `supabase functions deploy ee-data` (bundles `_shared/cloudMask.ts`; the
+   `.js` mirror is NOT what deploys). The fix is already committed/pushed under `383240b`.
 2. **Verify 2.3 on the NDWI tab** (the exact scenario from the screenshot):
    - Load the same field, pin 2026-09-05, NDWI tab.
    - Sidebar "Field Reading" should now show the **real per-scene NDWI**, consistent with the
@@ -138,7 +143,7 @@ or reducing them.
 
 ---
 
-## 4b. Map probe interaction — long-press (UI, working tree)
+## 4b. Map probe interaction — long-press (UI, committed `75192b9`, pushed)
 
 Changed: the main map no longer point-probes on a plain click. `LeafletMap.vue` removed
 `map.on('click', ...)` and now listens for a **long-press** (hold ~600 ms with < 8 px travel)
@@ -153,10 +158,50 @@ Impact to verify on device: users must hold to probe a point; a stray click no l
 the field or pops the detail drawer. Dragging to pan is unaffected. If discoverability is a
 concern later, add a "long-press to probe" hint.
 
+## 4c. Landing page translation wiring (committed `8e37faa`, pushed)
+
+The landing page template was 100% hardcoded English — the existing `landing.*` i18n keys were
+unused. Now:
+- `views/LandingPage.vue`: every visible string replaced with `{{ t('landing.xxx') }}`
+  (hero, stats labels, problem, 5 how-it-works steps + photo captions, features, indices intro,
+  language/mock panel, trust chips, pricing headings, CTA, footer). Added a
+  `landing.title_accent` key so the hero accent word ("satellite") translates independently.
+- `components/landing-page/IndexSection.vue`: each index's `fullName` / `description` /
+  `scaleLow` / `scaleHigh` now read `t('landing.idx.<key>.full|desc|low|high')` (the index
+  name, formula, and `−1 / 0 / +1` scale marks stay as-is).
+- `i18n/en.js`: landing block rewritten to EXACTLY match the current page copy (only
+  `subtitle`, `how_1_text`, `lang_title` had drifted) + ~30 new keys
+  (`download`, `scan_label`, `scroll`, `how_N_cap`, `indices_*`, `pricing_*`, `trust_s1/s2/chirps/gee/nominatim`, `title_accent`, `idx.*`).
+- `i18n/km.js`: EVERY `landing.*` value blanked to `""` (user opted for a clean slate — the
+  page will show empty text in Khmer until the user fills each key). A comment points to en.js
+  as the source text.
+- Build passes. Note: with km values `""`, `translate()` returns the empty string (no EN
+  fallback), so the Khmer landing page is intentionally blank pending the user's translations.
+
+## 4d. Language switching works before sign-in (committed `7fa0940`, pushed)
+
+`setLanguage()` previously required login (`Sign in to change language`) and wrote straight to
+the DB. Now:
+- New localStorage key `ndvi_lang`. `state.preferredLanguage` initializes from it at module
+  load (`readPrefLang()`), so the stored language is live before auth resolves.
+- `store.js setLanguage()`: always sets `state.preferredLanguage` + `writePrefLang()`; when
+  signed in it ALSO persists to the DB (`supabase.setPreferredLanguage`). No more gating on the
+  user.
+- `loadTelegramChatId()` (fires on `SIGNED_IN` + app init): DB value overrides local, and is
+  written back to localStorage — so a logged-in user's DB preference wins.
+- `LandingPage.vue` `setLang` and `PricingPage.vue` EN/ខ្មែរ buttons now call
+  `store.setLanguage()` instead of assigning the reactive field directly (`TopBar.vue` already did).
+- Build passes.
+
 ## 5. Bookkeeping + gotchas
 
-- Local branch is currently in sync with `origin/main` for pushed commits; the 2.3 fix is
-  UNCOMMITTED working-tree changes to `ee-data/index.ts` + `ee-data/index.js`.
+- Local branch `main` is currently in sync with `origin/main` — all recent work
+  (backend fixes, long-press, landing i18n, language persistence) is committed & pushed.
+  No uncommitted changes in the `ee-data` realm right now.
+- `i18n/km.js` `landing.*` keys are intentionally `""` — the user fills them in; do not
+  "help" by re-adding translated values. en.js holds the authoritative English copy.
+- `ndvi_lang` localStorage key drives the language for unauthenticated users; the DB
+  `preferred_language` profile column overrides once signed in.
 - NEVER commit or push the three untracked credential JSONs in the repo root
   (`oauth-client_secret_…json`, `old-project-worker-gen-lang-client-…json`,
   `trim-array-479621-…json`) — they are credentials. Stage only the intended files.
