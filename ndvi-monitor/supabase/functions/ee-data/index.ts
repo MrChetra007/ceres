@@ -1477,6 +1477,10 @@ async function actionGetFieldStatus(payload: any) {
   // This is what lets the sidebar (hero value / growth stage / confidence)
   // follow the exact clicked date, exactly like the map tile's per-scene branch.
   const sceneDate = payload.sceneDate || null;
+  // The scene-anchored optical grade must use the ACTIVE tab's band pair.
+  // BANDS has no "rvi" key, so a radar tab resolves back to ndvi (radar is
+  // reached via forceRadar below, never through buildMaskedComposite).
+  const index = payload.index && BANDS[payload.index] ? payload.index : "ndvi";
   if (sceneDate) {
     const day = ee.Date(sceneDate);
     // forceRadar — the RVI tab makes radar the explicit ask, so skip the
@@ -1490,7 +1494,7 @@ async function actionGetFieldStatus(payload: any) {
         geom,
         day,
         day.advance(1, "day"),
-        "ndvi",
+        index,
       );
       if (masked.clearSceneCount > 0 && masked.img) {
         const result = await evaluate(
@@ -1501,7 +1505,7 @@ async function actionGetFieldStatus(payload: any) {
             maxPixels: 1e9,
           }),
         );
-        const name = "ndvi".toUpperCase();
+        const name = index.toUpperCase();
         const value = result && result[name] != null ? result[name] : null;
         if (value != null) {
           const daysSince = Math.round(
