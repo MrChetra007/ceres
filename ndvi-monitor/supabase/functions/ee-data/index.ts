@@ -163,6 +163,11 @@ async function buildMaskedComposite(
   });
 
   const count = await evaluate(maskedIndices.size());
+  console.log("[DEBUG-RVI] buildMaskedComposite scene count", {
+    index,
+    requestedStart: await evaluate(start.format ? start.format("YYYY-MM-dd") : null),
+    rawSceneCount: count,
+  });
   if (!count || count === 0) {
     return Promise.resolve({
       img: null,
@@ -738,7 +743,14 @@ async function actionGetIndexTile(payload: any) {
       day.advance(1, "day"),
       index,
     );
+    const dayStartISO = await evaluate(day.format("YYYY-MM-dd"));
+    const dayEndISO = await evaluate(day.advance(1, "day").format("YYYY-MM-dd"));
     console.log("[DEBUG-RVI] step0-scene coverage check", {
+      index,
+      sceneDate: payload.sceneDate,
+      dayCount,
+      dayStartISO,
+      dayEndISO,
       clearSceneCount: masked.clearSceneCount,
       validFraction: masked.validFraction,
       threshold: CLOUD_RESILIENCE.MIN_VALID_PIXEL_FRACTION,
@@ -751,7 +763,7 @@ async function actionGetIndexTile(payload: any) {
     ) {
       const img = masked.img.clip(geom);
       const url = await getMapUrl(img, vis);
-      return {
+      const perSceneOpticalResult = {
         mode: "optical",
         count: dayCount,
         url,
@@ -761,6 +773,14 @@ async function actionGetIndexTile(payload: any) {
         compositeStart: masked.compositeStart,
         compositeEnd: masked.compositeEnd,
       };
+      console.log("[DEBUG-RVI] per-scene optical RESULT returned in HTTP body", {
+        index,
+        sceneDate: payload.sceneDate,
+        mode: perSceneOpticalResult.mode,
+        validFraction: perSceneOpticalResult.validFraction,
+        clearSceneCount: perSceneOpticalResult.clearSceneCount,
+      });
+      return perSceneOpticalResult;
     }
 
     // No clean optical scene on that exact date (no capture, all same-day

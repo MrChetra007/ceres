@@ -110,7 +110,13 @@ export function validPixelMask(scene, ee) {
 export async function validPixelFraction(image, band, geometry, scale, ee, evaluate) {
     const fraction = await evaluate(image
         .select(band)
-        .unmask(0) // NaN -> 0, now 0(no data)/1(valid)
+        // Validity is measured on the MASK (1 where the index band has data,
+        // 0 where masked), NOT on the band values themselves. The old code
+        // reduced the mean of the index values with nodata -> 0, which is
+        // index-dependent bias: NDWI is <= 0 over healthy vegetation, so it
+        // always clamped to 0 and every clear NDWI scene read as "0% valid".
+        .mask()
+        .unmask(0) // nodata -> 0
         .reduceRegion({
         reducer: ee.Reducer.mean(),
         geometry,
