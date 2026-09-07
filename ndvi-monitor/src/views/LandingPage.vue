@@ -9,7 +9,7 @@
         <img class="brand-mark" :src="logo1" alt="" />
         <div class="brand-text">
           <span class="brand-name">NDVI Rice Monitor</span>
-          <span class="brand-loc mono">Battambang, Cambodia</span>
+          <span class="brand-loc mono">{{ t('landing.loc_sub') }}</span>
         </div>
       </div>
       <div class="nav-right">
@@ -24,15 +24,15 @@
         </button>
         <button
           class="landing-cta ghost small download-btn"
-          aria-label="Install app"
-          title="Install the app"
+          :aria-label="t('landing.download')"
+          :title="t('landing.download')"
           @click="promptInstall"
         >
           <i class="ti ti-device-mobile-down"></i>
-          <span>Install app</span>
+          <span>{{ t('landing.download') }}</span>
         </button>
         <button class="landing-cta primary small" @click="enter">
-          Sign in
+          {{ t('landing.sign_in') }}
         </button>
       </div>
     </header>
@@ -51,7 +51,7 @@
         />
         <div class="ndvi-tint"></div>
         <div class="scanbar"></div>
-        <div class="scanlabel">NDVI pass</div>
+        <div class="scanlabel">{{ t('landing.scan_label') }}</div>
         <div class="scrim"></div>
       </div>
 
@@ -84,43 +84,43 @@
 
       <div class="landing-hero-content">
         <div class="landing-eyebrow mono">
-          Satellite field intelligence · live over Battambang
+          {{ t('landing.eyebrow') }}
         </div>
         <h1 class="landing-title">
-          See your rice field the way a
-          <span class="landing-title-accent">satellite</span> sees it.
+          {{ t('landing.title_a') }}
+          <span class="landing-title-accent">{{ t('landing.title_accent') }}</span>
+          {{ t('landing.title_b') }}
         </h1>
         <p class="landing-subtitle">
-          Sentinel-2 vegetation data, growth-stage alerts, and rainfall watch —
-          explained in plain language, before stress shows on the ground.
+          {{ t('landing.subtitle') }}
         </p>
 
         <div class="landing-cta-row">
           <button class="landing-cta primary" @click="enter">
-            <i class="ti ti-brand-google"></i> Sign in with Google
+            <i class="ti ti-brand-google"></i> {{ t('landing.cta_primary') }}
           </button>
           <button class="landing-cta ghost" @click="scrollTo('#landing-how')">
-            See how it works
+            {{ t('landing.cta_secondary') }}
           </button>
         </div>
 
         <div class="landing-stats">
           <div class="landing-stat">
             <span class="landing-stat-num">5</span>
-            <span class="landing-stat-lbl">Saved areas per account</span>
+            <span class="landing-stat-lbl">{{ t('landing.stat_fields') }}</span>
           </div>
           <div class="landing-stat">
             <span class="landing-stat-num">14</span>
-            <span class="landing-stat-lbl">Months of satellite history</span>
+            <span class="landing-stat-lbl">{{ t('landing.stat_weather') }}</span>
           </div>
           <div class="landing-stat">
             <span class="landing-stat-num">3</span>
-            <span class="landing-stat-lbl">Vegetation indices tracked</span>
+            <span class="landing-stat-lbl">{{ t('landing.stat_alerts') }}</span>
           </div>
         </div>
       </div>
 
-      <div class="scroll-cue">Scroll<span class="bar"></span></div>
+      <div class="scroll-cue">{{ t('landing.scroll') }}<span class="bar"></span></div>
     </section>
 
     <section
@@ -128,47 +128,41 @@
       class="landing-section landing-problem-grid reveal"
     >
       <div class="problem-copy">
-        <div class="landing-eyebrow mono">Why it exists</div>
+        <div class="landing-eyebrow mono">{{ t('landing.problem_kicker') }}</div>
         <h2 class="landing-h2 align-left">
-          Clouds don't stop at the field edge.
+          {{ t('landing.problem_title') }}
         </h2>
         <p class="landing-lead align-left">
-          Optical satellites go blind under monsoon cloud cover. Walking every
-          paddy takes days a busy season doesn't have. Most dashboards show a
-          number without saying whether it can be trusted.
+          {{ t('landing.problem_desc') }}
         </p>
       </div>
       <div class="problem-cards">
         <div class="landing-card stacked">
-          <span class="tag tag-red">Signal lost</span>
+          <span class="tag tag-red">{{ t('landing.problem_1_tag') }}</span>
           <p>
-            A cloud-covered month with no explanation looks identical to a
-            genuinely stressed field — until someone checks by hand.
+            {{ t('landing.problem_1_text') }}
           </p>
         </div>
         <div class="landing-card stacked">
-          <span class="tag tag-gold">Growth stage ignored</span>
+          <span class="tag tag-gold">{{ t('landing.problem_2_tag') }}</span>
           <p>
-            A young paddy naturally reads low on NDVI. Judged against a fixed
-            threshold, it looks stressed when it's simply new.
+            {{ t('landing.problem_2_text') }}
           </p>
         </div>
         <div class="landing-card stacked">
-          <span class="tag tag-green">Two languages, one field</span>
+          <span class="tag tag-green">{{ t('landing.problem_3_tag') }}</span>
           <p>
-            Farm data tools rarely speak Khmer. Findings from space are only
-            useful if the person holding the sickle can read them.
+            {{ t('landing.problem_3_text') }}
           </p>
         </div>
       </div>
     </section>
 
     <section id="landing-how" class="landing-section reveal">
-      <div class="landing-eyebrow mono center">The workflow</div>
-      <h2 class="landing-h2">From sign-in to field report, in five steps.</h2>
+      <div class="landing-eyebrow mono center">{{ t('landing.how_kicker') }}</div>
+      <h2 class="landing-h2">{{ t('landing.how_title') }}</h2>
       <p class="landing-lead">
-        Each step mirrors what actually happens inside the app — nothing
-        skipped, nothing simplified away.
+        {{ t('landing.how_desc') }}
       </p>
 
       <div class="landing-steps-media">
@@ -178,15 +172,13 @@
               src="https://commons.wikimedia.org/wiki/Special:FilePath/Rice%20fields%20around%20Angkor%20Thom%20-%20Cambodia%20-%20panoramio.jpg"
               alt="Aerial view of rice fields near Angkor Thom, Cambodia"
             />
-            <div class="cap">Rice fields near Angkor Thom, Cambodia</div>
+            <div class="cap">{{ t('landing.how_1_cap') }}</div>
           </div>
           <div class="step-text">
             <span class="landing-step-num mono">01 / 05</span>
-            <h3>Sign in with Google</h3>
+            <h3>{{ t('landing.how_1_title') }}</h3>
             <p>
-              Google sign-in authenticates with Earth Engine to unlock live
-              imagery, and syncs your saved fields through Supabase across
-              devices.
+              {{ t('landing.how_1_text') }}
             </p>
           </div>
         </div>
@@ -197,14 +189,13 @@
               src="https://www.nasa.gov/wp-content/uploads/2023/03/applied_geosolutions_1.png"
               alt="Satellite data over the Mekong Delta rice region, NASA"
             />
-            <div class="cap">Satellite data over the Mekong Delta — NASA</div>
+            <div class="cap">{{ t('landing.how_2_cap') }}</div>
           </div>
           <div class="step-text">
             <span class="landing-step-num mono">02 / 05</span>
-            <h3>Draw or search an area</h3>
+            <h3>{{ t('landing.how_2_title') }}</h3>
             <p>
-              Search a place, drag a box on the map, or reuse a saved field
-              boundary. Up to five areas per account, synced across devices.
+              {{ t('landing.how_2_text') }}
             </p>
           </div>
         </div>
@@ -215,14 +206,13 @@
               src="https://commons.wikimedia.org/wiki/Special:FilePath/Rice%20paddy%20with%20water%20buffalo%20(26446016828).jpg"
               alt="Farmer with water buffalo in a rice paddy"
             />
-            <div class="cap">Ground truth: a working paddy field</div>
+            <div class="cap">{{ t('landing.how_3_cap') }}</div>
           </div>
           <div class="step-text">
             <span class="landing-step-num mono">03 / 05</span>
-            <h3>Read NDVI, NDWI and LSWI</h3>
+            <h3>{{ t('landing.how_3_title') }}</h3>
             <p>
-              Switch between vegetation, water and true-color views, and scrub a
-              time slider through the last fourteen months of composites.
+              {{ t('landing.how_3_text') }}
             </p>
           </div>
         </div>
@@ -233,15 +223,13 @@
               src="https://commons.wikimedia.org/wiki/Special:FilePath/Sc%C3%A8nes%20de%20repiquage%20dans%20une%20rizi%C3%A8re%20cambodgienne.jpg"
               alt="Farmers transplanting rice seedlings in Cambodia"
             />
-            <div class="cap">Transplanting season, Cambodia</div>
+            <div class="cap">{{ t('landing.how_4_cap') }}</div>
           </div>
           <div class="step-text">
             <span class="landing-step-num mono">04 / 05</span>
-            <h3>Set a planting date, track a field</h3>
+            <h3>{{ t('landing.how_4_title') }}</h3>
             <p>
-              Draw a paddy boundary and set when it was planted. NDVI is then
-              compared against the expected range for that growth stage — not a
-              flat number.
+              {{ t('landing.how_4_text') }}
             </p>
           </div>
         </div>
@@ -252,14 +240,13 @@
               src="https://commons.wikimedia.org/wiki/Special:FilePath/Cambodia%20Rice%20Fields%20(9728041389).jpg"
               alt="Rice fields in Cambodia at sunset"
             />
-            <div class="cap">Field report, ready to export</div>
+            <div class="cap">{{ t('landing.how_5_cap') }}</div>
           </div>
           <div class="step-text">
             <span class="landing-step-num mono">05 / 05</span>
-            <h3>Get alerts, export a report</h3>
+            <h3>{{ t('landing.how_5_title') }}</h3>
             <p>
-              Link Telegram to hear about stress the night it's detected, or
-              export a PDF with the trend chart, field info and health summary.
+              {{ t('landing.how_5_text') }}
             </p>
           </div>
         </div>
@@ -267,73 +254,63 @@
     </section>
 
     <section id="landing-features" class="landing-section reveal">
-      <div class="landing-eyebrow mono center">What's inside</div>
+      <div class="landing-eyebrow mono center">{{ t('landing.features_kicker') }}</div>
       <h2 class="landing-h2">
-        Built around one question: can this reading be trusted?
+        {{ t('landing.features_title') }}
       </h2>
       <div class="landing-grid">
         <div class="landing-card tilt">
           <div class="landing-card-icon"><i class="ti ti-chart-line"></i></div>
-          <h3>Three ways to read a field</h3>
+          <h3>{{ t('landing.feat_1_title') }}</h3>
           <p>
-            NDVI for biomass, NDWI for standing water, LSWI for canopy and soil
-            moisture — plus the true-color photo underneath every reading.
+            {{ t('landing.feat_1_text') }}
           </p>
         </div>
         <div class="landing-card tilt">
           <div class="landing-card-icon"><i class="ti ti-sprout"></i></div>
-          <h3>Growth-stage aware</h3>
+          <h3>{{ t('landing.feat_2_title') }}</h3>
           <p>
-            Germination through harvest each has its own expected NDVI range, so
-            a young paddy isn't mistaken for a stressed one.
+            {{ t('landing.feat_2_text') }}
           </p>
         </div>
         <div class="landing-card tilt">
           <div class="landing-card-icon"><i class="ti ti-cloud-off"></i></div>
-          <h3>Cloud-blocked fallback</h3>
+          <h3>{{ t('landing.feat_3_title') }}</h3>
           <p>
-            Cloud-covered months show a true-color photo and a note explaining
-            why. If optical is fully blocked, radar (RVI) steps in — clearly
-            labeled as a different signal.
+            {{ t('landing.feat_3_text') }}
           </p>
         </div>
         <div class="landing-card tilt">
           <div class="landing-card-icon"><i class="ti ti-cloud-rain"></i></div>
-          <h3>Rainfall watch</h3>
+          <h3>{{ t('landing.feat_4_title') }}</h3>
           <p>
-            A 21-day cumulative CHIRPS rainfall reading sits alongside every
-            field, for context that vegetation index alone can't give.
+            {{ t('landing.feat_4_text') }}
           </p>
         </div>
         <div class="landing-card tilt">
           <div class="landing-card-icon"><i class="ti ti-robot"></i></div>
-          <h3>AI agronomist, bilingual</h3>
+          <h3>{{ t('landing.feat_5_title') }}</h3>
           <p>
-            Ask a field a question and get a plain-language interpretation of
-            its health, in Khmer or English.
+            {{ t('landing.feat_5_text') }}
           </p>
         </div>
         <div class="landing-card tilt">
           <div class="landing-card-icon">
             <i class="ti ti-brand-telegram"></i>
           </div>
-          <h3>Telegram alerts & photos</h3>
+          <h3>{{ t('landing.feat_6_title') }}</h3>
           <p>
-            Link your account to receive a stress alert the moment a field
-            crosses its threshold, and upload ground photos straight from the
-            chat.
+            {{ t('landing.feat_6_text') }}
           </p>
         </div>
       </div>
     </section>
 
     <section id="landing-indices" class="landing-section reveal">
-      <div class="landing-eyebrow mono center">Read them yourself</div>
-      <h2 class="landing-h2">Six ways to read a rice field.</h2>
+      <div class="landing-eyebrow mono center">{{ t('landing.indices_kicker') }}</div>
+      <h2 class="landing-h2">{{ t('landing.indices_title') }}</h2>
       <p class="landing-lead">
-        Every pair below is the same Sentinel-2 scene — the raw field photo on
-        the left, the index that interprets it on the right. Drag the handle to
-        compare.
+        {{ t('landing.indices_desc') }}
       </p>
       <IndexSection
         v-for="item in landingIndices"
@@ -346,15 +323,13 @@
       <div class="mock-wrap">
         <div class="lang-copy">
           <div class="landing-eyebrow mono">
-            Built for the person in the field
+            {{ t('landing.lang_kicker') }}
           </div>
           <h2 class="landing-h2 align-left">
-            Every screen, plain and readable.
+            {{ t('landing.lang_title') }}
           </h2>
           <p class="landing-lead align-left">
-            Not a translated menu bar — growth-stage names, alert text and the
-            AI agronomist's answers all switch fully, so the person reading the
-            field report and the person walking it can be the same person.
+            {{ t('landing.lang_desc') }}
           </p>
           <div class="lang-switch">
             <button
@@ -375,7 +350,7 @@
         <div class="mock-panel">
           <div class="mock-topbar">
             <div class="mock-dots"><span></span><span></span><span></span></div>
-            <span class="mock-badge">NDVI · Aug</span>
+            <span class="mock-badge">{{ t('landing.mock_badge') }}</span>
           </div>
           <div class="mock-map">
             <svg viewBox="0 0 400 200" preserveAspectRatio="none">
@@ -412,78 +387,73 @@
             </div>
           </div>
           <div class="mock-row">
-            <b>Plot 4 — Sangkae</b>
-            <span class="pill healthy">Healthy</span>
+            <b>{{ t('landing.mock_plot') }}</b>
+            <span class="pill healthy">{{ t('landing.mock_healthy') }}</span>
           </div>
           <div class="mock-row">
-            <b>Growth stage</b>
-            <span>Reproductive · day 61</span>
+            <b>{{ t('landing.mock_growth_label') }}</b>
+            <span>{{ t('landing.mock_growth_value') }}</span>
           </div>
           <div class="mock-row">
-            <b>Plot 2 — Ta Kream</b>
-            <span class="pill moderate">Moderate</span>
+            <b>{{ t('landing.mock_plot2') }}</b>
+            <span class="pill moderate">{{ t('landing.mock_moderate') }}</span>
           </div>
           <div class="mock-row">
-            <b>21-day rainfall</b>
-            <span>62 mm</span>
+            <b>{{ t('landing.mock_rain_label') }}</b>
+            <span>{{ t('landing.mock_rain_value') }}</span>
           </div>
         </div>
       </div>
     </section>
 
     <section id="landing-trust" class="landing-section reveal">
-      <div class="landing-eyebrow mono">Where the data comes from</div>
+      <div class="landing-eyebrow mono">{{ t('landing.trust_kicker') }}</div>
       <h2 class="landing-h2 small align-left">
-        Public earth-observation data, processed server-side.
+        {{ t('landing.trust_title') }}
       </h2>
       <div class="landing-trust-strip">
-        <span class="trust-chip"><i></i>Sentinel-2 (ESA / Copernicus)</span>
-        <span class="trust-chip"><i></i>Sentinel-1 radar (RVI fallback)</span>
-        <span class="trust-chip"><i></i>CHIRPS rainfall</span>
-        <span class="trust-chip"><i></i>Google Earth Engine</span>
-        <span class="trust-chip"><i></i>Nominatim / OSM place search</span>
+        <span class="trust-chip"><i></i>{{ t('landing.trust_s2') }}</span>
+        <span class="trust-chip"><i></i>{{ t('landing.trust_s1') }}</span>
+        <span class="trust-chip"><i></i>{{ t('landing.trust_chirps') }}</span>
+        <span class="trust-chip"><i></i>{{ t('landing.trust_gee') }}</span>
+        <span class="trust-chip"><i></i>{{ t('landing.trust_nominatim') }}</span>
       </div>
     </section>
 
     <section id="landing-pricing" class="landing-section reveal">
-      <div class="landing-eyebrow mono center">Plans &amp; pricing</div>
-      <h2 class="landing-h2">Choose a plan that grows with your farm.</h2>
+      <div class="landing-eyebrow mono center">{{ t('landing.pricing_kicker') }}</div>
+      <h2 class="landing-h2">{{ t('landing.pricing_title') }}</h2>
       <p class="landing-lead">
-        Start free with one monitoring area. Upgrade for more areas, more
-        hectare capacity, and Consult AI.
+        {{ t('landing.pricing_desc') }}
       </p>
       <PricingCards />
     </section>
 
     <section class="landing-cta-section">
       <h2 class="landing-cta-title">
-        Your next rice cycle, watched from above.
+        {{ t('landing.cta_title') }}
       </h2>
       <p class="landing-cta-sub">
-        Sign in, draw your first field, and see its growth stage before the
-        season is over.
+        {{ t('landing.cta_sub') }}
       </p>
       <div class="landing-cta-row inline">
         <button class="landing-cta primary" @click="enter">
-          <i class="ti ti-brand-google"></i> Sign in with Google
+          <i class="ti ti-brand-google"></i> {{ t('landing.cta_primary') }}
         </button>
         <button class="landing-cta ghost" @click="enter">
-          <i class="ti ti-brand-telegram"></i> Open on Telegram
+          <i class="ti ti-brand-telegram"></i> {{ t('landing.cta_telegram') }}
         </button>
       </div>
     </section>
 
     <footer class="landing-footer">
       <span class="footer-credit"
-        >Imagery: rice-field photographs via Wikimedia Commons contributors;
-        Mekong Delta satellite composite courtesy of NASA / Applied
-        GeoSolutions. Vegetation data: Copernicus Sentinel-2 &amp; Sentinel-1,
-        processed via Google Earth Engine. Rainfall: CHIRPS.</span
+        >{{ t('landing.footer_credit') }}</span
       >
       <div class="footer-links">
-        <button @click="scrollTo('#landing-how')">How it works</button>
-        <button @click="scrollTo('#landing-features')">Features</button>
-        <button @click="enter">Sign in</button>
+        <button @click="scrollTo('#landing-how')">{{ t('landing.footer_how') }}</button>
+        <button @click="scrollTo('#landing-features')">{{ t('landing.footer_features') }}</button>
+        <button @click="enter">{{ t('landing.footer_signin') }}</button>
       </div>
     </footer>
   </div>
@@ -500,7 +470,9 @@ import logo1 from "../assets/logos-icons/logo1.png";
 import IndexSection from "../components/landing-page/IndexSection.vue";
 import PricingCards from "../components/PricingCards.vue";
 import { promptInstall } from "../services/pwa.js";
+import { useI18n } from "../i18n";
 
+const { t } = useI18n();
 const leaving = ref(false);
 
 const heroSection = ref(null);

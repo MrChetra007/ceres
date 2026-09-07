@@ -2,9 +2,9 @@
   <section class="landing-section reveal">
     <div class="landing-eyebrow mono center">{{ index.key }}</div>
     <h2 class="landing-h2">
-      {{ index.name }} <span class="idx-em">—</span> {{ index.fullName }}
+      {{ index.name }} <span class="idx-em">—</span> {{ t('landing.idx.' + index.key + '.full') }}
     </h2>
-    <p class="landing-lead">{{ index.description }}</p>
+    <p class="landing-lead">{{ t('landing.idx.' + index.key + '.desc') }}</p>
 
     <div class="idx-formula mono">{{ index.formula }}</div>
 
@@ -22,8 +22,8 @@
         <span>−1</span><span>0</span><span>+1</span>
       </div>
       <div class="idx-scale-labels">
-        <span>{{ index.scaleLow }}</span>
-        <span>{{ index.scaleHigh }}</span>
+        <span>{{ t('landing.idx.' + index.key + '.low') }}</span>
+        <span>{{ t('landing.idx.' + index.key + '.high') }}</span>
       </div>
     </div>
   </section>
@@ -32,7 +32,9 @@
 <script setup>
 import { computed } from "vue";
 import CompareSlider from "./CompareSlider.vue";
+import { useI18n } from "../../i18n";
 
+const { t } = useI18n();
 const props = defineProps({
   index: {
     type: Object,
