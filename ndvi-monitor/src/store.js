@@ -54,6 +54,24 @@ export const mapReg = {
 
 
 // ---------------------------------------------------------------------------
+// Language preference. Persisted locally so the UI language sticks even for
+// users who haven't signed in; the DB value (if logged in) overrides on load.
+// ---------------------------------------------------------------------------
+const LANG_KEY = 'ndvi_lang'
+
+function readPrefLang() {
+  try {
+    const v = localStorage.getItem(LANG_KEY)
+    if (v === 'en' || v === 'km') return v
+  } catch (e) {}
+  return 'km'
+}
+
+function writePrefLang(lang) {
+  try { localStorage.setItem(LANG_KEY, lang === 'en' ? 'en' : 'km') } catch (e) {}
+}
+
+// ---------------------------------------------------------------------------
 // Shared state
 // ---------------------------------------------------------------------------
 export const state = reactive({
@@ -142,7 +160,7 @@ export const state = reactive({
   telegramChatId: null,
   telegramModalVisible: false,
   telegramLinking: false,
-  preferredLanguage: 'km',
+  preferredLanguage: readPrefLang(),
   settingsVisible: false,
   // Current user's subscription/limits, loaded from profiles. Defaults mirror
   // the Free tier so limit checks work before the profile fetch resolves.
@@ -647,18 +665,24 @@ export async function loadTelegramChatId() {
   try {
     const profile = await supabase.getMyProfile()
     state.telegramChatId = profile?.telegram_chat_id || null
-    state.preferredLanguage = profile?.preferred_language || 'km'
+    state.preferredLanguage = profile?.preferred_language || readPrefLang()
+    writePrefLang(state.preferredLanguage)
   } catch (err) {
     state.telegramChatId = null
   }
 }
 
 export async function setLanguage(lang) {
-  if (!state.supabaseUser) { showToast('Sign in to change language'); return false }
+  const next = lang === 'en' ? 'en' : 'km'
+  state.preferredLanguage = next
+  writePrefLang(next)
+  if (!state.supabaseUser) {
+    showToast('Language set to ' + (next === 'km' ? 'Khmer' : 'English'))
+    return true
+  }
   try {
-    await supabase.setPreferredLanguage(lang)
-    state.preferredLanguage = lang
-    showToast('Language set to ' + (lang === 'km' ? 'Khmer' : 'English'))
+    await supabase.setPreferredLanguage(next)
+    showToast('Language set to ' + (next === 'km' ? 'Khmer' : 'English'))
     return true
   } catch (err) {
     showToast('Failed to update language: ' + err.message)

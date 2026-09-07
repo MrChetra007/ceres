@@ -10,8 +10,8 @@
       </div>
       <div class="pp-nav-right">
         <div class="lang-seg">
-          <button :class="{ on: state.preferredLanguage === 'en' }" @click="state.preferredLanguage = 'en'">EN</button>
-          <button :class="{ on: state.preferredLanguage === 'km' }" @click="state.preferredLanguage = 'km'">ខ្មែរ</button>
+          <button :class="{ on: state.preferredLanguage === 'en' }" @click="store.setLanguage('en')">EN</button>
+          <button :class="{ on: state.preferredLanguage === 'km' }" @click="store.setLanguage('km')">ខ្មែរ</button>
         </div>
         <button v-if="state.supabaseUser" class="pp-btn" @click="go('/map')">
           <i class="ti ti-arrow-left"></i>{{ t('pricing.back_to_app') }}
@@ -34,6 +34,7 @@
 
 <script setup>
 import { state } from '../store'
+import * as store from '../store'
 import PricingCards from '../components/PricingCards.vue'
 import { useI18n } from '../i18n'
 import logo1 from '../assets/logos-icons/logo1.png'

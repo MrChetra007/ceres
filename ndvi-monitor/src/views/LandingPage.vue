@@ -488,7 +488,7 @@ let orbitMouseHandler = null;
 let tiltCleanups = [];
 
 function setLang(lang) {
-  state.preferredLanguage = lang;
+  store.setLanguage(lang);
 }
 
 function toggleLang() {
