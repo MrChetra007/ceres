@@ -45,16 +45,27 @@ export const CLOUD_RESILIENCE = {
 export function addCloudProbability(collection, ee) {
     const s2c = ee.ImageCollection("COPERNICUS/S2_CLOUD_PROBABILITY");
     const withProb = collection.map((img) => {
-        // Reduce the (possibly empty) filtered lookup with a LINEAR reducer: sum()
-        // returns an image of zeros when the matching s2cloudless granule is
-        // missing, whereas .first() would resolve to a server-side null and make
-        // Image.select throw "Parameter 'input' may not be null" inside this map
-        // (S2_CLOUD_PROBABILITY has gaps for recent granules). We rely on the SCL
-        // mask (below) to flag clouds that s2cloudless missed.
-        const cloudProb = s2c
+        // Reduce the (possibly empty) filtered s2cloudless lookup to a single image.
+        // Two traps this guards against:
+        //   1) .sum() over an EMPTY selected collection yields an image with NO
+        //      bands, so addBands() silently drops it and the later
+        //      scene.select("probability") in validPixelMask throws "Band pattern
+        //      'probability' did not match any bands" (recent S2 scenes whose
+        //      s2cloudless granule hasn't landed yet — e.g. 20250821T184919_..._T10SFH).
+        //   2) merging a plain ee.Image(0) fallback ({Short<0,255>}) with the real
+        //      band ({MaskOnly}) makes .sum() throw "Expected a homogeneous image
+        //      collection ... Mismatched type".
+        // Fix: cast EVERYTHING to Float32 and merge() in a constant 0 so the sum
+        // always carries a homogeneous "probability" band — a missing granule gets
+        // all-zeros (the intended behaviour), a present granule keeps real 0..100.
+        const lookup = s2c
             .filter(ee.Filter.eq("system:index", img.get("system:index")))
             .select("probability")
-            .sum();
+            .map((b) => b.toFloat());
+        const guaranteed = ee
+            .ImageCollection([ee.Image(0).toFloat().rename("probability")])
+            .merge(lookup);
+        const cloudProb = guaranteed.sum();
         return img.addBands(cloudProb);
     });
     return withProb;
