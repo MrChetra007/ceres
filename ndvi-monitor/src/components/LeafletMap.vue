@@ -74,6 +74,43 @@ function baseTileConfig() {
   }
 }
 
+const LONG_PRESS_MS = 600
+const LONG_PRESS_MOVE_TOLERANCE = 8
+let pressTimer = null
+let pressStart = null
+let pressLatLng = null
+
+function cancelLongPress() {
+  if (pressTimer) { clearTimeout(pressTimer); pressTimer = null }
+  pressStart = null
+  pressLatLng = null
+}
+
+function onMapPointerDown(map, e) {
+  if (e.pointerType === 'mouse' && e.button !== 0) return
+  if (state.isDrawing || state.isAoiDraw || state.aoiEditMode) return
+  if (e.target && e.target.closest && e.target.closest('.leaflet-control')) return
+  cancelLongPress()
+  const pt = map.mouseEventToContainerPoint(e)
+  pressStart = pt
+  pressLatLng = map.containerPointToLatLng(pt)
+  pressTimer = setTimeout(() => {
+    pressTimer = null
+    const ll = pressLatLng
+    pressStart = null
+    pressLatLng = null
+    onMapClick(ll.lat, ll.lng)
+  }, LONG_PRESS_MS)
+}
+
+function onMapPointerMove(map, e) {
+  if (!pressTimer || !pressStart) return
+  const pt = map.mouseEventToContainerPoint(e)
+  if (Math.hypot(pt.x - pressStart.x, pt.y - pressStart.y) > LONG_PRESS_MOVE_TOLERANCE) {
+    cancelLongPress()
+  }
+}
+
 function makeMainMap() {
   const map = L.map(mapEl.value, { center: MAP_CENTER, zoom: MAP_ZOOM })
   const baseConfig = baseTileConfig()
@@ -97,7 +134,12 @@ function makeMainMap() {
   })
   map.addControl(drawControl)
 
-  map.on('click', (e) => onMapClick(e.latlng.lat, e.latlng.lng))
+  const mapContainer = map.getContainer()
+  mapContainer.addEventListener('pointerdown', (e) => onMapPointerDown(map, e))
+  mapContainer.addEventListener('pointermove', (e) => onMapPointerMove(map, e))
+  mapContainer.addEventListener('pointerup', cancelLongPress)
+  mapContainer.addEventListener('pointercancel', cancelLongPress)
+  mapContainer.addEventListener('pointerleave', cancelLongPress)
   map.on(L.Draw.Event.CREATED, (e) => {
     // A rectangle drawn in AOI-draw mode defines the analysis area, not a
     // saved field — route it to the AOI handler instead of the field flow.

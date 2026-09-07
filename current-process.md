@@ -138,6 +138,21 @@ or reducing them.
 
 ---
 
+## 4b. Map probe interaction — long-press (UI, working tree)
+
+Changed: the main map no longer point-probes on a plain click. `LeafletMap.vue` removed
+`map.on('click', ...)` and now listens for a **long-press** (hold ~600 ms with < 8 px travel)
+via pointer events on the map container:
+- Same probe flow (`store.js: onMapClick`) once the hold completes.
+- Cancels on move > 8 px (map drag), on pointerup/cancel/leave (accidental tap does NOTHING now).
+- Left mouse button / touch only; presses on `.leaflet-control` (zoom/draw/attribution) ignored.
+- Disabled while `state.isDrawing || state.isAoiDraw || state.aoiEditMode`.
+- `vite build` passes.
+
+Impact to verify on device: users must hold to probe a point; a stray click no longer deselects
+the field or pops the detail drawer. Dragging to pan is unaffected. If discoverability is a
+concern later, add a "long-press to probe" hint.
+
 ## 5. Bookkeeping + gotchas
 
 - Local branch is currently in sync with `origin/main` for pushed commits; the 2.3 fix is
