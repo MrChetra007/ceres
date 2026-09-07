@@ -331,6 +331,59 @@ function geometryHash(geojson: any): string {
   return (h >>> 0).toString(16).padStart(8, "0");
 }
 
+// ── DEBUG-RVI helpers ─────────────────────────────────────────────────────
+function countGeoVertices(geojson: any): number {
+  try {
+    const g =
+      geojson && geojson.type === "Feature" ? geojson.geometry : geojson;
+    if (!g || !g.coordinates) return 0;
+    let n = 0;
+    const walk = (c: any) => {
+      if (Array.isArray(c)) {
+        if (c.length && Array.isArray(c[0]) && typeof c[0][0] === "number")
+          n += c.length;
+        else c.forEach(walk);
+      }
+    };
+    walk(g.coordinates);
+    return n;
+  } catch (e) {
+    return -1;
+  }
+}
+
+function geoBBox(geojson: any): any {
+  try {
+    const g =
+      geojson && geojson.type === "Feature" ? geojson.geometry : geojson;
+    if (!g || !g.coordinates) return null;
+    let minx = Infinity,
+      miny = Infinity,
+      maxx = -Infinity,
+      maxy = -Infinity;
+    const walk = (c: any) => {
+      if (Array.isArray(c)) {
+        if (c.length && Array.isArray(c[0]) && typeof c[0][0] === "number") {
+          for (const p of c) {
+            if (p[0] < minx) minx = p[0];
+            if (p[0] > maxx) maxx = p[0];
+            if (p[1] < miny) miny = p[1];
+            if (p[1] > maxy) maxy = p[1];
+          }
+        } else {
+          c.forEach(walk);
+        }
+      }
+    };
+    walk(g.coordinates);
+    if (!isFinite(minx)) return null;
+    return { west: minx, south: miny, east: maxx, north: maxy };
+  } catch (e) {
+    return null;
+  }
+}
+// ── END DEBUG-RVI helpers ─────────────────────────────────────────────────
+
 function tileIsClosed(year: number, month: number): boolean {
   // Month has fully elapsed once the first day of the *next* month has passed.
   // Date.UTC is 0-indexed, so Date.UTC(year, month, 1) is the next real month.
@@ -490,6 +543,19 @@ function stageNameAsOf(
 }
 
 async function actionGetIndexTile(payload: any) {
+  try {
+    console.log("[DEBUG-RVI] actionGetIndexTile payload geometry", {
+      geometry: payload.geometry,
+      index: payload.index,
+      year: payload.year,
+      month: payload.month,
+      sceneDate: payload.sceneDate,
+      geomVertexCount: countGeoVertices(payload.geometry),
+      bbox: geoBBox(payload.geometry),
+    });
+  } catch (e) {
+    console.log("[DEBUG-RVI] actionGetIndexTile geometry log failed", e);
+  }
   // RVI is deliberately resolved BEFORE the BANDS gate: it has no optical band
   // pair, and selecting it means "show me the radar view", not "fall back to
   // NDVI silently". Unlike the automatic radar_fallback (used when optical is
@@ -663,14 +729,26 @@ async function actionGetIndexTile(payload: any) {
     // Scene-level pre-filter is non-binding: even a scene with high overall
     // cloud may have clear pixels over THIS field, so the pixel-level mask
     // decides. Use the masked single-day composite; only use it if it actually
-    // has valid pixels over the geometry.
+    // has valid pixels over the geometry AND clears the field-level coverage
+    // threshold (a scene can report "clear" pixels while still leaving most
+    // of the field cloud-shadowed).
     const masked = await buildMaskedComposite(
       geom,
       day,
       day.advance(1, "day"),
       index,
     );
-    if (masked.clearSceneCount > 0 && masked.img) {
+    console.log("[DEBUG-RVI] step0-scene coverage check", {
+      clearSceneCount: masked.clearSceneCount,
+      validFraction: masked.validFraction,
+      threshold: CLOUD_RESILIENCE.MIN_VALID_PIXEL_FRACTION,
+    });
+    if (
+      masked.clearSceneCount > 0 &&
+      masked.img &&
+      masked.validFraction != null &&
+      masked.validFraction >= CLOUD_RESILIENCE.MIN_VALID_PIXEL_FRACTION
+    ) {
       const img = masked.img.clip(geom);
       const url = await getMapUrl(img, vis);
       return {
@@ -685,11 +763,11 @@ async function actionGetIndexTile(payload: any) {
       };
     }
 
-    // No clean optical scene on that exact date (no capture, or the only
-    // same-day scenes are cloud-blocked). Try radar centered on THAT date so
-    // the clicked date stays meaningful. Capture the cloud % of the least
-    // cloudy optical scene (if any) so the UI can tell the user why optical
-    // was skipped.
+    // No clean optical scene on that exact date (no capture, all same-day
+    // scenes cloud-blocked, or insufficient field coverage). Try radar
+    // centered on THAT date so the clicked date stays meaningful. Capture the
+    // cloud % of the least cloudy optical scene (if any) so the UI can tell
+    // the user why optical was skipped.
     let sceneCloudPct: number | null = null;
     if (dayCount > 0) {
       try {
@@ -738,10 +816,25 @@ async function actionGetIndexTile(payload: any) {
   //    cloud-edge buffer, see _shared/cloudMask.ts), so only valid surface
   //    pixels compose the median and no cloud pixel is ever colored. The
   //    metadata (clearSceneCount, validFraction, actual window) is returned so
-  //    the UI can label confidence honestly.
+  //    the UI can label confidence honestly. A scene can pass the scene-level
+  //    CLOUDY_PIXEL_PERCENTAGE filter while still leaving most of THIS field's
+  //    pixels cloud/shadow-masked, so validFraction is also checked before the
+  //    composite is accepted — otherwise a near-fully-clouded field would
+  //    still be labeled "optical" with an all-transparent tile instead of
+  //    correctly falling through to the radar fallback below.
   const masked = await buildMaskedComposite(geom, start, end, index);
   const clearSceneCount = masked.clearSceneCount;
-  if (clearSceneCount > 0 && masked.img) {
+  console.log("[DEBUG-RVI] step1 coverage check", {
+    clearSceneCount,
+    validFraction: masked.validFraction,
+    threshold: CLOUD_RESILIENCE.MIN_VALID_PIXEL_FRACTION,
+  });
+  if (
+    clearSceneCount > 0 &&
+    masked.img &&
+    masked.validFraction != null &&
+    masked.validFraction >= CLOUD_RESILIENCE.MIN_VALID_PIXEL_FRACTION
+  ) {
     const composite = masked.img.clip(geom);
     const url = await getMapUrl(composite, vis);
     result = {
@@ -771,19 +864,43 @@ async function actionGetIndexTile(payload: any) {
     return result;
   }
 
-  // 2. No clean scene THIS month (either none captured yet, or all too
-  //    cloudy) — try Sentinel-1 radar, but only as a proxy for NDVI. Radar
-  //    substitution is NDVI-only (it estimates canopy vigor); NDWI/LSWI/etc.
-  //    are water/moisture or untested bands with no radar equivalent, so their
+  // 2. No clean scene THIS month (either none captured yet, all too cloudy,
+  //    or the only scene found didn't clear the field-coverage threshold) —
+  //    try Sentinel-1 radar, but only as a proxy for NDVI. Radar substitution
+  //    is NDVI-only (it estimates canopy vigor); NDWI/LSWI/etc. are
+  //    water/moisture or untested bands with no radar equivalent, so their
   //    blocked month falls through to the true-color cloud view below instead
   //    of silently showing a radar tile under the wrong index.
+  console.log(
+    "[DEBUG-RVI] step1 done clearSceneCount=",
+    clearSceneCount,
+    "-> entering step2 radar. geomVertexCount=",
+    countGeoVertices(payload.geometry),
+    "bbox=",
+    JSON.stringify(geoBBox(payload.geometry)),
+  );
   if (index === "ndvi") {
     try {
+      const radarWindowStart = start.advance(-45, "day");
+      console.log("[DEBUG-RVI] step2 calling getRadarVegetationIndex", {
+        index,
+        radarWindowStart: radarWindowStart.toISOString
+          ? radarWindowStart.toISOString()
+          : String(radarWindowStart),
+        radarWindowEnd: start.toISOString ? start.toISOString() : String(start),
+        monthStart: start.toISOString ? start.toISOString() : String(start),
+        monthEnd: end.toISOString ? end.toISOString() : String(end),
+      });
       const radar = await getRadarVegetationIndex(
         geom,
         start.advance(-45, "day"), // backward-only, was ±15 days
         start, // no forward reach past the period start
       );
+      console.log("[DEBUG-RVI] step2 radar result:", {
+        count: radar.count,
+        url: radar.url ? "present(" + radar.url.slice(0, 40) + "...)" : null,
+        radarDate: radar.radarDate,
+      });
       if (radar.count > 0 && radar.url) {
         result = {
           mode: "radar_fallback",
@@ -806,9 +923,17 @@ async function actionGetIndexTile(payload: any) {
         return result;
       }
     } catch (e) {
-      console.error("radar fallback failed:", e);
+      console.error(
+        "[DEBUG-RVI] radar fallback THREW (step2 caught):",
+        JSON.stringify(e, Object.getOwnPropertyNames(e || {})),
+      );
+      console.error("[DEBUG-RVI] radar fallback error raw:", e);
     }
   }
+  console.log(
+    "[DEBUG-RVI] step2 did NOT return radar_fallback -> reaching step3 (90-day true-color widen). geomVertexCount=",
+    countGeoVertices(payload.geometry),
+  );
 
   // 3. No radar either — widen the OPTICAL search backward up to 90 days,
   //    not bound to the calendar month, and show the least-cloudy scene

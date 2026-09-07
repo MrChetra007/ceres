@@ -6,6 +6,12 @@ import { generateExplanation, languageLine } from "../_shared/llm.ts";
 import { statusFromNdvi } from "../_shared/growthStage.ts";
 import { getWeatherContext } from "../_shared/weather.ts";
 import type { WeatherContext } from "../_shared/weather.ts";
+import {
+  addCloudProbability,
+  validPixelMask,
+  validPixelFraction,
+  CLOUD_RESILIENCE,
+} from "../_shared/cloudMask.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
 const SERVICE_ROLE = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
@@ -44,6 +50,35 @@ function toEeGeometry(geojson: any) {
 // window has zero clean scenes at all (this is what the wide window is
 // legitimately for: coverage during a cloudy stretch, not "current status").
 
+// ── Cloud-masked NDVI over a window ──────────────────────────────────────
+// Applies per-pixel cloud masking (s2cloudless probability, matching the
+// standard approach used across the app) before compositing, then checks
+// what fraction of the field actually has valid (unmasked) pixels. A scene
+// can pass the 40% scene-level CLOUDY_PIXEL_PERCENTAGE filter while still
+// being mostly cloud-covered over this specific field — the coverage check
+// catches that case and returns null (same as "no clean scene"), which
+// correctly triggers the existing 90-day widen / radar fallback chain in
+// getFieldReading().
+// Small promisified wrapper so validPixelFraction (which expects an
+// `evaluate` callback-style function, matching ee-data's usage) works here
+// too, since this worker otherwise uses raw ee .evaluate() callbacks.
+function eeEvaluate(obj: any): Promise<any> {
+  return new Promise((resolve, reject) => {
+    obj.evaluate((result: any, err: string) => {
+      if (err) reject(new Error(err));
+      else resolve(result);
+    });
+  });
+}
+
+// ── NDVI: tight-window-first, widen-on-empty ────────────────────────────
+// Now uses the SAME per-pixel cloud mask as ee-data's map-tile pipeline
+// (_shared/cloudMask.ts) instead of raw unmasked reflectance, plus a
+// field-coverage check (CLOUD_RESILIENCE.MIN_VALID_PIXEL_FRACTION) so a
+// scene that passes the scene-level CLOUDY_PIXEL_PERCENTAGE filter but is
+// still mostly cloud-covered over THIS field returns null — which
+// getFieldReading() already treats as "try the next fallback" (90-day
+// window, then radar).
 function computeNdviOverWindow(
   geom: any,
   days: number,
@@ -51,26 +86,63 @@ function computeNdviOverWindow(
   return new Promise((resolve, reject) => {
     const end = ee.Date(Date.now());
     const start = end.advance(-days, "day");
-    const collection = ee
+
+    const s2Raw = ee
       .ImageCollection("COPERNICUS/S2_SR_HARMONIZED")
       .filterBounds(geom)
       .filterDate(start, end)
       .filter(ee.Filter.lt("CLOUDY_PIXEL_PERCENTAGE", 40));
-    collection.size().evaluate((count: number, err: string) => {
+
+    const s2WithProb = addCloudProbability(s2Raw, ee);
+
+    const masked = s2WithProb.map((img: any) => {
+      const mask = validPixelMask(img, ee);
+      return img.updateMask(mask);
+    });
+
+    masked.size().evaluate(async (count: number, err: string) => {
       if (err) return reject(new Error(err));
       if (!count) return resolve(null);
-      const img = collection.median().normalizedDifference(["B8", "B4"]);
-      img
-        .reduceRegion({
-          reducer: ee.Reducer.mean(),
-          geometry: geom,
-          scale: 10,
-          maxPixels: 1e9,
-        })
-        .evaluate((result: any, e: string) => {
-          if (e) reject(new Error(e));
-          else resolve(result?.nd ?? 0);
-        });
+
+      try {
+        const composite = masked.median();
+        const ndviImg = composite
+          .normalizedDifference(["B8", "B4"])
+          .rename("nd");
+
+        const validFraction = await validPixelFraction(
+          ndviImg,
+          "nd",
+          geom,
+          10,
+          ee,
+          eeEvaluate,
+        );
+
+        if (
+          validFraction == null ||
+          validFraction < CLOUD_RESILIENCE.MIN_VALID_PIXEL_FRACTION
+        ) {
+          console.log(
+            `[DEBUG-RVI] computeNdviOverWindow low coverage: validFraction=${validFraction}, days=${days}, threshold=${CLOUD_RESILIENCE.MIN_VALID_PIXEL_FRACTION}`,
+          );
+          return resolve(null);
+        }
+
+        ndviImg
+          .reduceRegion({
+            reducer: ee.Reducer.mean(),
+            geometry: geom,
+            scale: 10,
+            maxPixels: 1e9,
+          })
+          .evaluate((result: any, e: string) => {
+            if (e) reject(new Error(e));
+            else resolve(result?.nd ?? 0);
+          });
+      } catch (e) {
+        reject(e instanceof Error ? e : new Error(String(e)));
+      }
     });
   });
 }

@@ -218,10 +218,24 @@ let cloudToastShown = false
 // Helpers
 // ---------------------------------------------------------------------------
 function getGeometry() {
-  if (currentGeometry.value) return currentGeometry.value
+  if (currentGeometry.value) {
+    console.log("[DEBUG-RVI] getGeometry -> currentGeometry.value", {
+      coordsLen: currentGeometry.value && currentGeometry.value.coordinates ? currentGeometry.value.coordinates.length : null,
+      fieldId: state.currentFieldId,
+    })
+    return currentGeometry.value
+  }
   if (state.aoiPolygon && state.aoiPolygon.length >= 3) {
+    console.log("[DEBUG-RVI] getGeometry -> state.aoiPolygon", {
+      points: state.aoiPolygon.length,
+      fieldId: state.currentFieldId,
+    })
     return polygonGeometry([[...state.aoiPolygon, state.aoiPolygon[0]]])
   }
+  console.log("[DEBUG-RVI] getGeometry -> default state.aoiCoords rect", {
+    aoiCoords: state.aoiCoords,
+    fieldId: state.currentFieldId,
+  })
   return rectGeometry(state.aoiCoords)
 }
 
@@ -955,6 +969,19 @@ export function loadIndexForMonth(idx, geometry, silent) {
   state.opticalMeta.main = null
   beginLoading()
   const geom = geometry || getGeometry()
+  console.log("[DEBUG-RVI] loadIndexForMonth top", {
+    idx,
+    geometryParamProvided: !!geometry,
+    geometryParamCoordsLen: geometry && geometry.coordinates ? geometry.coordinates.length : null,
+    geomCoordsLen: geom && geom.coordinates ? geom.coordinates.length : null,
+    geomType: geom && geom.type ? geom.type : null,
+    currentFieldId: state.currentFieldId,
+    currentFieldName: state.currentFieldName,
+    selectedAoiId: state.selectedAoiId,
+    aoiPolygonLen: state.aoiPolygon ? state.aoiPolygon.length : null,
+    currentIndex: state.currentIndex,
+    selectedObservationDate: state.selectedObservationDate,
+  })
   if (state.currentIndex === 'truecolor') {
     loadTrueColor(m, geom, state.trueColorDate, (res) => {
       endLoading()
@@ -995,6 +1022,7 @@ export function loadIndexForMonth(idx, geometry, silent) {
   // is the bug we're fixing.
   const sceneDate = state.currentIndex !== 'truecolor' ? state.selectedObservationDate : null
   ee.loadIndexTile(m, state.currentIndex, geom, (res) => {
+    console.log("[DEBUG-RVI] loadIndexTile callback raw res", { res, currentFieldId: state.currentFieldId })
     state.sceneCount.main = res.count
     state.opticalMeta.main = null // set only by the clear-optical branch below
     if (res.mode === 'error') {
@@ -1006,9 +1034,11 @@ export function loadIndexForMonth(idx, geometry, silent) {
     }
     if (res.mode === 'radar_fallback') {
       endLoading()
+      console.log("[DEBUG-RVI] ENTERED radar_fallback branch", { currentFieldId: state.currentFieldId, res })
       if (res.url) mapReg.ndviLayer = applyTileLayer(mapReg.map, mapReg.ndviLayer, res.url, 1)
       else if (mapReg.ndviLayer) { mapReg.map.removeLayer(mapReg.ndviLayer); mapReg.ndviLayer = null }
       state.radarFallback.main = { month: m.label, indexUsed: res.indexUsed || 'RVI' }
+      console.log("[DEBUG-RVI] radar_fallback set state.radarFallback.main =", state.radarFallback.main)
       setStatus('ready', 'Radar view (RVI) for ' + m.label + ' \u2014 clouds blocked optical view')
       return
     }
@@ -1060,6 +1090,7 @@ export function loadIndexForMonth(idx, geometry, silent) {
     }
     if (res.mode === 'cloud_blocked') {
       endLoading()
+      console.log("[DEBUG-RVI] ENTERED cloud_blocked branch", { currentFieldId: state.currentFieldId, res })
       if (res.url) mapReg.ndviLayer = applyTileLayer(mapReg.map, mapReg.ndviLayer, res.url, 1)
       else if (mapReg.ndviLayer) { mapReg.map.removeLayer(mapReg.ndviLayer); mapReg.ndviLayer = null }
 
@@ -1074,6 +1105,7 @@ export function loadIndexForMonth(idx, geometry, silent) {
         lastValidDate: res.lastValidDate,
         sameMonth,
       }
+      console.log("[DEBUG-RVI] cloud_blocked set state.cloudBlock.main =", state.cloudBlock.main)
       if (!silent && !cloudToastShown) {
         cloudToastShown = true
         if (sameMonth) {
