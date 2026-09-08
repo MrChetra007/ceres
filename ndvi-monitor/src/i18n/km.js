@@ -169,6 +169,7 @@ export default {
   "field.crop_placeholder": "ឧ. ស្រូវ, ស្វាយ, rice...",
   "field.planting_date": "កាលបរិច្ឆេទដាំ",
   "field.date_label": "កាលបរិច្ឆេទដាំ:",
+  "field.date_help": "តើវាលនេះត្រូវបានដាំនៅពេលណា?",
   "field.area": "ផ្ទៃដី",
   "field.added": "បានបន្ថែម",
   "field.photos": "រូបថតវាល",
@@ -217,6 +218,21 @@ export default {
   "field.cancel_edits": "បោះបង់ការផ្លាស់ប្តូរ និងបញ្ឈប់ការកែ",
   "field.radar_map_note":
     "ផែនទីបង្ហាញសញ្ញារ៉ាដាពី Sentinel-1 (RVI)។ នេះវាស់វែងខុសពីតម្លៃ NDVI និងមិនអាចប្រៀបធៀបដោយផ្ទាល់បាន។",
+
+  // Field form modal (new-field save flow)
+  "field_form.new_field": "វាលថ្មី",
+  "field_form.hint": "បន្ថែមព័ត៌មានវាលរបស់អ្នក — ឈ្មោះ កាលបរិច្ឆេទដាំ និងដំណាំ។",
+  "field_form.name_label": "ឈ្មោះវាល",
+  "field_form.name_placeholder": "ឧ. ស្រែខាងជើង — ស្វាយជាល",
+  "field_form.name_required": "សូមបញ្ចូលឈ្មោះវាល។",
+  "field_form.date_label": "កាលបរិច្ឆេទដាំ",
+  "field_form.crop_label": "ដំណាំ",
+  "field_form.crop_custom": "វាយបញ្ចូលដំណាំណាមួយ — នឹងត្រូវបានរក្សាទុកដូចដែលបានវាយ។",
+
+  // Date picker calendar
+  "date.prev_month": "ខែមុន",
+  "date.next_month": "ខែបន្ទាប់",
+  "date.selected": "បានជ្រើសរើស",
 
   // Health zones
   "hz.title": "តំបន់សុខភាពដំណាំ",

@@ -222,11 +222,13 @@ function invalidateChartCacheForField(fieldId) {
 }
 export const datePicker = reactive({ visible: false, currentDate: null })
 export const cropPicker = reactive({ visible: false, currentValue: null })
+export const fieldModal = reactive({ visible: false, currentName: null, currentDate: null, currentCrop: null })
 let infoChart = null
 let loadingCount = 0
 const toastTimers = new Map()
 let pendingDateCallback = null
 let pendingCropCallback = null
+let pendingFieldFormGeojson = null
 // Only surface the cloud-blocked toast ONCE per session (then rely on the
 // persistent "☁️ cloud-blocked" pill + its tooltip). Prevents toast spam when
 // the user scrubs across several cloud-heavy months.
@@ -2600,20 +2602,36 @@ export function cancelDraw() {
 
 
 export function promptSaveField(geojson) {
-  const name = window.prompt('Name this field (e.g. "North paddy \u2014 Svay Cheat"):')
-  if (!name) {
-    const layers = mapReg.drawnItems.getLayers()
-    mapReg.drawnItems.removeLayer(layers[layers.length - 1])
-    updateDrawEditVisibility()
-    return
-  }
-  promptDate(null, (date) => {
-    if (date === undefined) date = null
-    promptCrop(null, (cropRaw) => {
-      if (cropRaw === undefined) cropRaw = null
-      saveField(name, geojson, date, cropRaw).then((saved) => { if (saved) loadField(saved) })
-    })
+  pendingFieldFormGeojson = geojson
+  fieldModal.currentName = null
+  fieldModal.currentDate = null
+  fieldModal.currentCrop = null
+  fieldModal.visible = true
+}
+
+export function submitFieldForm(name, plantingDate, cropRaw) {
+  fieldModal.visible = false
+  const geojson = pendingFieldFormGeojson
+  pendingFieldFormGeojson = null
+  if (!geojson) return
+  saveField(name, plantingDate || null, cropRaw || null).then((saved) => {
+    if (saved) loadField(saved)
   })
+}
+
+export function cancelFieldForm() {
+  fieldModal.visible = false
+  const geojson = pendingFieldFormGeojson
+  pendingFieldFormGeojson = null
+  if (geojson) {
+    // Removing the just-drawn shape mirrors the old window.prompt cancel
+    // behavior (name blanked = discard the new boundary).
+    const layers = mapReg.drawnItems.getLayers()
+    if (layers.length) {
+      mapReg.drawnItems.removeLayer(layers[layers.length - 1])
+      updateDrawEditVisibility()
+    }
+  }
 }
 
 export function promptDate(currentDate, onResult) {

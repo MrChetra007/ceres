@@ -156,6 +156,7 @@ export default {
   'field.crop_placeholder': 'e.g. rice, mango, ស្រូវ...',
   'field.planting_date': 'Planting date',
   'field.date_label': 'Planting date:',
+  'field.date_help': 'When was the field planted?',
   'field.area': 'Area',
   'field.added': 'Added',
   'field.photos': 'Field photos',
@@ -193,6 +194,21 @@ export default {
   'field.save_edits': 'Save the reshaped field boundary',
   'field.cancel_edits': 'Discard changes and stop editing',
   'field.radar_map_note': 'Map showing satellite radar signal (RVI) — a different measurement from the NDVI value above, not directly comparable.',
+
+  // Field form modal (new-field save flow)
+  'field_form.new_field': 'New field',
+  'field_form.hint': 'Add your field details — name, planting date and crop.',
+  'field_form.name_label': 'Field name',
+  'field_form.name_placeholder': 'e.g. North paddy — Svay Cheat',
+  'field_form.name_required': 'Please enter a field name.',
+  'field_form.date_label': 'Planting date',
+  'field_form.crop_label': 'Crop',
+  'field_form.crop_custom': 'Type any crop — it will be saved as-is.',
+
+  // Date picker calendar
+  'date.prev_month': 'Previous month',
+  'date.next_month': 'Next month',
+  'date.selected': 'Selected',
 
   // Health zones
   'hz.title': 'Health zones',

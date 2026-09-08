@@ -10,6 +10,7 @@
 @import './styles/telegram.css';
 @import './styles/help.css';
 @import './styles/date-picker.css';
+@import './styles/date-picker-rich.css';
 @import './styles/auth-forms.css';
 @import './styles/legacy-user-menu.css';
 @import './styles/legacy-responsive.css';

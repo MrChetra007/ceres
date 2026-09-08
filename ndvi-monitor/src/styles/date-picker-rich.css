@@ -1,0 +1,283 @@
+/* ---- Rich date picker + field form (dark design system) ---- */
+
+/* Modal header (shared by date / crop / field-form modals) */
+.dpm-head {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding-bottom: 0.85rem;
+  border-bottom: 0.5px solid var(--panel-border);
+}
+
+.dpm-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: var(--radius-md);
+  background: var(--accent-dim);
+  color: var(--accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.15rem;
+  flex-shrink: 0;
+}
+
+.dpm-title {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.dpm-sub {
+  margin: 2px 0 0;
+  font-size: 0.78rem;
+  color: var(--text-faint);
+}
+
+.dpm-close {
+  margin-left: auto;
+  background: rgba(255, 255, 255, 0.05);
+  border: none;
+  border-radius: 50%;
+  width: 28px;
+  height: 28px;
+  color: var(--text-dim);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.95rem;
+  transition: background 0.15s;
+}
+
+.dpm-close:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--text);
+}
+
+/* Selected-date summary strip */
+.dpm-selected {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  color: var(--text-dim);
+  background: var(--panel-2);
+  border: 0.5px solid var(--panel-border);
+  border-radius: var(--radius-sm);
+  padding: 0.55rem 0.7rem;
+}
+
+.dpm-selected i { color: var(--accent); }
+.dpm-selected strong { color: var(--text); font-weight: 600; }
+.dpm-selected--empty { color: var(--text-faint); }
+.dpm-selected--empty i { color: var(--text-faint); }
+
+/* ---- Calendar grid ---- */
+.dpc {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.dpc-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.dpc-nav {
+  width: 30px;
+  height: 30px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-dim);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1rem;
+  transition: background 0.15s, color 0.15s;
+}
+
+.dpc-nav:hover { background: rgba(255, 255, 255, 0.12); color: var(--text); }
+
+.dpc-title {
+  display: flex;
+  align-items: baseline;
+  gap: 0.35rem;
+}
+
+.dpc-month { font-size: 0.9rem; font-weight: 700; color: var(--text); }
+.dpc-year { font-size: 0.8rem; color: var(--text-faint); }
+
+.dpc-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+}
+
+.dpc-weekdays span {
+  text-align: center;
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: var(--text-faint);
+  padding: 0.25rem 0;
+}
+
+.dpc-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 2px;
+}
+
+.dpc-day {
+  aspect-ratio: 1 / 1;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text);
+  font-size: 0.8rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.12s, color 0.12s;
+}
+
+.dpc-day:hover:not(:disabled) { background: rgba(34, 201, 142, 0.18); }
+
+.dpc-day.is-today { color: var(--accent); font-weight: 700; box-shadow: inset 0 0 0 1px var(--accent); }
+
+.dpc-day.is-selected { background: var(--accent); color: #0b0f14; font-weight: 700; }
+
+.dpc-day.is-selected:hover { background: #1bb37d; color: #0b0f14; }
+
+.dpc-day.is-future,
+.dpc-day.is-past { color: var(--text-faint); opacity: 0.5; }
+
+.dpc-day:disabled {
+  cursor: default;
+}
+
+.dpc-quick { display: flex; }
+
+.dpc-quick-btn {
+  border: none;
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-dim);
+  padding: 0.4rem 0.7rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border 0.15s;
+}
+
+.dpc-quick-btn:hover { background: rgba(255, 255, 255, 0.1); color: var(--text); }
+.dpc-quick-btn.active {
+  background: var(--accent-dim);
+  color: var(--accent);
+  border: 0.5px solid var(--accent);
+}
+
+/* Preview line below the calendar */
+.dpc-preview {
+  font-size: 0.8rem;
+  color: var(--accent);
+  text-align: center;
+  font-weight: 600;
+}
+
+/* ---- Field form body ---- */
+.ff-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.ff-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.ff-label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-dim);
+}
+
+/* The legacy .date-picker-modal label rule (0,1,1) would beat a bare .ff-label
+   (0,1,0); keep the dim/dark label styling by scoping under the modal. */
+.date-picker-modal .ff-label {
+  color: var(--text-dim);
+}
+
+.ff-input {
+  background: rgba(255, 255, 255, 0.05);
+  border: 0.5px solid var(--panel-border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  padding: 0.55rem 0.7rem;
+  font-size: 0.85rem;
+  font-family: var(--font-ui);
+  outline: none;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.ff-input:focus { border-color: var(--accent); background: rgba(255, 255, 255, 0.07); }
+.ff-input::placeholder { color: var(--text-faint); }
+
+.ff-group.has-error .ff-input { border-color: var(--red); }
+
+.ff-error {
+  margin: 0;
+  font-size: 0.72rem;
+  color: var(--red);
+}
+
+/* Known-crop suggestion chips */
+.ff-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.ff-chip {
+  border: 0.5px solid var(--panel-border);
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-dim);
+  border-radius: 999px;
+  padding: 0.3rem 0.7rem;
+  font-size: 0.75rem;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.ff-chip:hover { background: rgba(255, 255, 255, 0.1); color: var(--text); }
+
+.ff-chip.active {
+  background: var(--accent-dim);
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.ff-crop-tip {
+  margin: 0;
+  font-size: 0.72rem;
+  color: var(--text-faint);
+}
+
+/* Field form modal needs a wider panel to fit the calendar + fields */
+.date-picker-modal--field,
+.date-picker-modal--crop,
+.date-picker-modal--rich {
+  min-width: 320px;
+  max-width: 380px;
+  width: calc(100vw - 2rem);
+  max-height: calc(100vh - 2rem);
+  overflow-y: auto;
+}

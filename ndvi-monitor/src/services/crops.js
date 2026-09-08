@@ -41,3 +41,33 @@ export function normalizeCrop(raw) {
 export function isRiceCrop(english) {
   return !english || english === 'rice'
 }
+
+// Known crops for the FieldFormModal autocomplete chips. `en` is the English
+// key used for crop_english; the optional `km` is the Khmer display name shown
+// alongside it (the app stores whatever the user types in `crop_name`).
+export const KNOWN_CROPS = [
+  { en: 'rice', km: 'ស្រូវ' },
+  { en: 'mango', km: 'ស្វាយ' },
+  { en: 'cashew', km: 'ស្វាយចន្ទី' },
+  { en: 'cassava', km: 'ដំឡូងមី' },
+  { en: 'potato', km: 'ដំឡូង' },
+  { en: 'maize', km: 'ពោត' },
+  { en: 'banana', km: 'ចេក' },
+  { en: 'pepper', km: 'ម្រេច' },
+  { en: 'rubber', km: 'កៅស៊ូ' },
+  { en: 'coconut', km: 'ដូង' },
+  { en: 'tobacco', km: 'ថ្នាំជក់' },
+  { en: 'vegetables', km: 'បន្លែ' },
+  { en: 'cabbage', km: 'ស្ពៃ' },
+  { en: 'cucumber', km: 'ត្រសក់' },
+  { en: 'watermelon', km: 'ឪឡឹក' },
+  { en: 'beans', km: 'គ្រាប់សណ្តែក' },
+  { en: 'sugarcane', km: 'អំពៅ' },
+  { en: 'soybean', km: 'សណ្តែកសៀង' },
+  { en: 'pineapple', km: 'ម្នាស់' },
+  { en: 'water spinach', km: 'ត្របែកទឹក' },
+  { en: 'corn', km: 'ពោតលឿង' },
+  { en: 'lotus', km: 'ផ្កាឈូក' },
+  { en: 'sesame', km: 'ល្ង' },
+  { en: 'sweet potato', km: 'ដំឡូងជ្វា' },
+]
