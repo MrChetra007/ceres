@@ -165,7 +165,9 @@ async function buildMaskedComposite(
   const count = await evaluate(maskedIndices.size());
   console.log("[DEBUG-RVI] buildMaskedComposite scene count", {
     index,
-    requestedStart: await evaluate(start.format ? start.format("YYYY-MM-dd") : null),
+    requestedStart: await evaluate(
+      start.format ? start.format("YYYY-MM-dd") : null,
+    ),
     rawSceneCount: count,
   });
   if (!count || count === 0) {
@@ -744,7 +746,9 @@ async function actionGetIndexTile(payload: any) {
       index,
     );
     const dayStartISO = await evaluate(day.format("YYYY-MM-dd"));
-    const dayEndISO = await evaluate(day.advance(1, "day").format("YYYY-MM-dd"));
+    const dayEndISO = await evaluate(
+      day.advance(1, "day").format("YYYY-MM-dd"),
+    );
     console.log("[DEBUG-RVI] step0-scene coverage check", {
       index,
       sceneDate: payload.sceneDate,
@@ -773,13 +777,16 @@ async function actionGetIndexTile(payload: any) {
         compositeStart: masked.compositeStart,
         compositeEnd: masked.compositeEnd,
       };
-      console.log("[DEBUG-RVI] per-scene optical RESULT returned in HTTP body", {
-        index,
-        sceneDate: payload.sceneDate,
-        mode: perSceneOpticalResult.mode,
-        validFraction: perSceneOpticalResult.validFraction,
-        clearSceneCount: perSceneOpticalResult.clearSceneCount,
-      });
+      console.log(
+        "[DEBUG-RVI] per-scene optical RESULT returned in HTTP body",
+        {
+          index,
+          sceneDate: payload.sceneDate,
+          mode: perSceneOpticalResult.mode,
+          validFraction: perSceneOpticalResult.validFraction,
+          clearSceneCount: perSceneOpticalResult.clearSceneCount,
+        },
+      );
       return perSceneOpticalResult;
     }
 
@@ -1791,32 +1798,49 @@ async function actionGetRecentIndexValue(payload: any) {
   return { count, value, date, cloudBlocked, ...band };
 }
 
-// ── getRainfall ────────────────────────────────────────────────────────────
-// Port of getRainfallMm(): CHIRPS cumulative precipitation over a trailing
-// window (default 21 days). Also returns a 3-bucket weekly breakdown so callers
-// can reason about the rain PATTERN (was it all early, or still falling?) —
-// not just the total.
+// GPM IMERG half-hourly precipitation (near-real-time, V07). Each granule's
+// precipitation band is a RATE in mm/hr over its 30-min window, so summing N
+// granules and multiplying by 0.5 (hours/granule) converts the rate series
+// into accumulated mm over the period. Early/Late runs land within ~4-14h of
+// observation time.
+//
+// NOTE: CHIRPS Daily (UCSB-CHG/CHIRPS/DAILY) is deliberately NOT used here.
+// It's the "Final" product and currently lags real time by roughly 1-2
+// months, so a trailing "last N days ending now" window against it is always
+// empty — that was the root cause of "Data unavailable" always firing.
+// CHIRPS stays correct for getDryMonths, which only ever queries fully
+// elapsed past calendar months (safely behind the lag).
+async function computeImergTotalMm(
+  geom: any,
+  start: any,
+  end: any,
+): Promise<number | null> {
+  const collection = ee
+    .ImageCollection("NASA/GPM_L3/IMERG_V07")
+    .filterDate(start, end)
+    .filterBounds(geom)
+    .select("precipitation"); // confirm this exact band name in the EE Code Editor before deploying
+  const count = await evaluate(collection.size());
+  if (!count) return null;
+  const totalImg = collection.sum().multiply(0.5);
+  const result = await evaluate(
+    totalImg.reduceRegion({
+      reducer: ee.Reducer.mean(),
+      geometry: geom,
+      scale: 10000, // IMERG native grid is ~0.1° (~10km)
+      maxPixels: 1e9,
+    }),
+  );
+  return result && result.precipitation != null ? result.precipitation : null;
+}
+
 async function actionGetRainfall(payload: any) {
   const geom = toEeGeometry(payload.geometry);
   const daysBack = payload.daysBack || 21;
   const end = ee.Date(Date.now());
   const start = end.advance(-daysBack, "day");
-  const total = await evaluate(
-    ee
-      .ImageCollection("UCSB-CHG/CHIRPS/DAILY")
-      .filterDate(start, end)
-      .filterBounds(geom)
-      .sum()
-      .reduceRegion({
-        reducer: ee.Reducer.mean(),
-        geometry: geom,
-        scale: 5000,
-        maxPixels: 1e9,
-      }),
-  );
-  // 3 buckets over the trailing window (oldest → newest): 21 days → 7 each.
-  // Window edges are computed in plain JS (never ee.Date.millis(), which is a
-  // computed object and breaks new Date()).
+  const mm = await computeImergTotalMm(geom, start, end);
+
   const dayMs = 86400000;
   const stepDays = Math.max(1, Math.ceil(daysBack / 3));
   const nowTs = Date.now();
@@ -1825,25 +1849,17 @@ async function actionGetRainfall(payload: any) {
   for (let i = 0; i < 3; i++) {
     const bsMs = startTs + i * stepDays * dayMs;
     const beMs = bsMs + stepDays * dayMs;
-    const r = await evaluate(
-      ee
-        .ImageCollection("UCSB-CHG/CHIRPS/DAILY")
-        .filterDate(ee.Date(bsMs), ee.Date(beMs))
-        .filterBounds(geom)
-        .sum()
-        .reduceRegion({
-          reducer: ee.Reducer.mean(),
-          geometry: geom,
-          scale: 5000,
-          maxPixels: 1e9,
-        }),
+    const bucketMm = await computeImergTotalMm(
+      geom,
+      ee.Date(bsMs),
+      ee.Date(beMs),
     );
     buckets.push({
       start: new Date(bsMs).toISOString().slice(0, 10),
-      mm: (r && r.precipitation) ?? null,
+      mm: bucketMm,
     });
   }
-  return { mm: (total && total.precipitation) ?? null, buckets };
+  return { mm, buckets };
 }
 
 // ── getObservations ────────────────────────────────────────────────────────
