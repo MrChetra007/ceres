@@ -2,3 +2,8 @@
 .env.*
 *.local
 node_modules
+
+# local secrets / service-account keys (never commit)
+oauth-client_secret_*.json
+old-project-worker-*.json
+*-ee-worker-key.json

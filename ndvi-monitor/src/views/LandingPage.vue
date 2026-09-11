@@ -41,12 +41,12 @@
       <div class="hero-bg" ref="heroBg" style="--wipe: 38%">
         <img
           class="layer truecolor"
-          src="https://commons.wikimedia.org/wiki/Special:FilePath/Cambodia%20Rice%20Fields%20(9728041389).jpg"
+          src="/landing-assets/hero-rice-fields.jpg"
           alt="Rice fields in Cambodia, true color"
         />
         <img
           class="layer ndvi"
-          src="https://commons.wikimedia.org/wiki/Special:FilePath/Cambodia%20Rice%20Fields%20(9728041389).jpg"
+          src="/landing-assets/hero-rice-fields.jpg"
           alt=""
         />
         <div class="ndvi-tint"></div>
@@ -97,7 +97,8 @@
 
         <div class="landing-cta-row">
           <button class="landing-cta primary" @click="enter">
-            <i class="ti ti-brand-google"></i> {{ t('landing.cta_primary') }}
+            <!-- Google sign-in disabled; kept as a neutral CTA -->
+            <!-- <i class="ti ti-brand-google"></i> --> {{ t('landing.cta_primary') }}
           </button>
           <button class="landing-cta ghost" @click="scrollTo('#landing-how')">
             {{ t('landing.cta_secondary') }}
@@ -169,7 +170,7 @@
         <div class="step-row reveal">
           <div class="step-media">
             <img
-              src="https://commons.wikimedia.org/wiki/Special:FilePath/Rice%20fields%20around%20Angkor%20Thom%20-%20Cambodia%20-%20panoramio.jpg"
+              src="/landing-assets/step-angkor-thom.jpg"
               alt="Aerial view of rice fields near Angkor Thom, Cambodia"
             />
             <div class="cap">{{ t('landing.how_1_cap') }}</div>
@@ -186,7 +187,7 @@
         <div class="step-row rev reveal">
           <div class="step-media">
             <img
-              src="https://www.nasa.gov/wp-content/uploads/2023/03/applied_geosolutions_1.png"
+              src="/landing-assets/step-nasa-mekong.jpg"
               alt="Satellite data over the Mekong Delta rice region, NASA"
             />
             <div class="cap">{{ t('landing.how_2_cap') }}</div>
@@ -203,7 +204,7 @@
         <div class="step-row reveal">
           <div class="step-media">
             <img
-              src="https://commons.wikimedia.org/wiki/Special:FilePath/Rice%20paddy%20with%20water%20buffalo%20(26446016828).jpg"
+              src="/landing-assets/step-water-buffalo.jpg"
               alt="Farmer with water buffalo in a rice paddy"
             />
             <div class="cap">{{ t('landing.how_3_cap') }}</div>
@@ -220,7 +221,7 @@
         <div class="step-row rev reveal">
           <div class="step-media">
             <img
-              src="https://commons.wikimedia.org/wiki/Special:FilePath/Sc%C3%A8nes%20de%20repiquage%20dans%20une%20rizi%C3%A8re%20cambodgienne.jpg"
+              src="/landing-assets/step-transplanting.jpg"
               alt="Farmers transplanting rice seedlings in Cambodia"
             />
             <div class="cap">{{ t('landing.how_4_cap') }}</div>
@@ -237,7 +238,7 @@
         <div class="step-row reveal">
           <div class="step-media">
             <img
-              src="https://commons.wikimedia.org/wiki/Special:FilePath/Cambodia%20Rice%20Fields%20(9728041389).jpg"
+              src="/landing-assets/hero-rice-fields.jpg"
               alt="Rice fields in Cambodia at sunset"
             />
             <div class="cap">{{ t('landing.how_5_cap') }}</div>
@@ -438,7 +439,8 @@
       </p>
       <div class="landing-cta-row inline">
         <button class="landing-cta primary" @click="enter">
-          <i class="ti ti-brand-google"></i> {{ t('landing.cta_primary') }}
+          <!-- Google sign-in disabled; kept as a neutral CTA -->
+          <!-- <i class="ti ti-brand-google"></i> --> {{ t('landing.cta_primary') }}
         </button>
         <button class="landing-cta ghost" @click="enter">
           <i class="ti ti-brand-telegram"></i> {{ t('landing.cta_telegram') }}
