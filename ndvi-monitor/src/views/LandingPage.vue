@@ -22,6 +22,7 @@
           <i class="ti ti-world"></i>
           {{ state.preferredLanguage === 'en' ? 'EN' : 'ខ្មែរ' }}
         </button>
+        <!-- PWA install button disabled while diagnosing production loading.
         <button
           class="landing-cta ghost small download-btn"
           :aria-label="t('landing.download')"
@@ -31,6 +32,7 @@
           <i class="ti ti-device-mobile-down"></i>
           <span>{{ t('landing.download') }}</span>
         </button>
+        -->
         <button class="landing-cta primary small" @click="enter">
           {{ t('landing.sign_in') }}
         </button>
@@ -471,7 +473,7 @@ import { landingIndices } from "../data/landing-indices.js";
 import logo1 from "../assets/logos-icons/logo1.png";
 import IndexSection from "../components/landing-page/IndexSection.vue";
 import PricingCards from "../components/PricingCards.vue";
-import { promptInstall } from "../services/pwa.js";
+// import { promptInstall } from "../services/pwa"; // disabled while diagnosing production loading
 import { useI18n } from "../i18n";
 
 const { t } = useI18n();

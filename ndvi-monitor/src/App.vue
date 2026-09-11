@@ -25,10 +25,11 @@
 import { onMounted } from 'vue'
 import CheckoutModal from './components/CheckoutModal.vue'
 import { state, dismissToast } from './store'
-import { maybeShowInstallInvite } from './services/pwa'
+// import { maybeShowInstallInvite } from './services/pwa'
 
 onMounted(() => {
+  // PWA install invite disabled while diagnosing production loading.
   // Let beforeinstallprompt (if any) arrive before deciding the invite copy.
-  setTimeout(() => maybeShowInstallInvite(), 1600)
+  // setTimeout(() => maybeShowInstallInvite(), 1600)
 })
 </script>
