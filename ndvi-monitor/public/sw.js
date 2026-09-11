@@ -14,7 +14,6 @@ const PRECACHE_URLS = [
   '/icons/icon-512x512.png',
   'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js',
   'https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js',
-  'https://unpkg.com/three@0.160.0/build/three.min.js',
 ]
 
 /* Tabler icons webfont + fonts are used by the UI; cache them too so icons

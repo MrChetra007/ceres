@@ -11,29 +11,56 @@
     <meta name="apple-mobile-web-app-title" content="NDVI Rice" />
     <meta name="theme-color" content="#0b1410" />
     <title>NDVI Rice Crop Health Monitor Battambang</title>
+    <!-- Stylesheets are load-async (media="print" + onload swap) so a slow or
+         blocked CDN never blocks first paint: the landing text/UI renders with
+         fallback styling immediately and finishes upgrading when the CSS lands. -->
     <link
       rel="stylesheet"
       href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      media="print"
+      onload="this.media='all'"
     />
     <link
       rel="stylesheet"
       href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css"
+      media="print"
+      onload="this.media='all'"
     />
     <link
       rel="stylesheet"
       href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.30.0/dist/tabler-icons.min.css"
+      media="print"
+      onload="this.media='all'"
     />
+    <noscript>
+      <link
+        rel="stylesheet"
+        href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      />
+      <link
+        rel="stylesheet"
+        href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css"
+      />
+      <link
+        rel="stylesheet"
+        href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.30.0/dist/tabler-icons.min.css"
+      />
+    </noscript>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
       href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&family=Kantumruy+Pro:wght@400;500;600;700&family=Noto+Sans+Khmer:wght@400;500;600;700&display=swap"
       rel="stylesheet"
+      media="print"
+      onload="this.media='all'"
     />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
       href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Instrument+Serif:ital@0;1&display=swap"
       rel="stylesheet"
+      media="print"
+      onload="this.media='all'"
     />
   </head>
   <body>
@@ -45,15 +72,17 @@
     Earth Engine is no longer loaded client-side — all EE calls go through
     the `ee-data` Supabase Edge Function (service-account auth server-side).
     Everything else (Vue, Chart.js, turf, jsPDF, supabase-js) is bundled by Vite.
+    Both scripts are deferred so a slow/blocked CDN can't block first paint:
+    the landing page renders before they arrive, and the map waits for `window.L`.
   -->
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
-    <!--
-    Three.js (classic build exposes window.THREE) — used only by the marketing
-    landing page's hero globe. Loaded as a CDN global, same pattern as Leaflet:
-    the webgl/UMD style is not bundled by Vite.
-    -->
-    <script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
+    <script
+      src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+      defer
+    ></script>
+    <script
+      src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"
+      defer
+    ></script>
     <script type="module" src="/src/main.js"></script>
   </body>
 </html>
