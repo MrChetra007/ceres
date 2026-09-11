@@ -185,9 +185,11 @@ export async function deleteAoi(id) {
   if (error) throw error
 }
 
-export async function signInWithGoogle() {
-  return sb.auth.signInWithOAuth({ provider: 'google' })
-}
+// Google OAuth sign-in is disabled until the provider is configured (see the
+// commented-out button in AuthOverlay.vue). Re-enable by restoring this.
+// export async function signInWithGoogle() {
+//   return sb.auth.signInWithOAuth({ provider: 'google' })
+// }
 
 export async function signInWithEmailPassword(email, password) {
   return sb.auth.signInWithPassword({ email, password })

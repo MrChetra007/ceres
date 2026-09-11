@@ -18,7 +18,7 @@
         </button>
         <template v-else>
           <button class="pp-btn ghost" @click="go('/')">{{ t('pricing.back_home') }}</button>
-          <button class="pp-btn primary" @click="go('/map')">{{ t('auth.google') }}</button>
+          <button class="pp-btn primary" @click="go('/map')">{{ t('auth.tab_sign_in') }}</button>
         </template>
       </div>
     </header>

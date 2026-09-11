@@ -1980,9 +1980,12 @@ export function dismissLanding() {
   try { localStorage.setItem('ndvi_landing_done', '1') } catch {}
 }
 
-export async function signInWithSupabaseGoogle() {
-  return supabase.signInWithGoogle()
-}
+// Google OAuth sign-in is disabled until configured (see services/supabase.js
+// signInWithGoogle). Re-enable by uncommenting both this function and its
+// service layer, then restoring the button in AuthOverlay.vue.
+// export async function signInWithSupabaseGoogle() {
+//   return supabase.signInWithGoogle()
+// }
 
 // Email/password auth (Phase: add-email-password-auth). Both wrap the same
 // supabase-js calls used by Google auth — the existing `onAuthStateChange`

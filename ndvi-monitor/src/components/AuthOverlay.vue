@@ -11,6 +11,9 @@
       <p class="auth-tagline">{{ t('auth.tagline') }}</p>
 
       <div class="auth-fields">
+        <!-- Google sign-in is disabled until OAuth is configured (see
+             store.signInWithSupabaseGoogle / services/supabase.js
+             signInWithGoogle). Re-enable by uncommenting this block.
         <div v-if="!state.supabaseUser" class="auth-section">
           <button class="auth-google-btn" @click="store.signInWithSupabaseGoogle()">
             <svg class="g-icon" viewBox="0 0 48 48" aria-hidden="true">
@@ -25,6 +28,7 @@
         </div>
 
         <div v-if="!state.supabaseUser" class="auth-divider"><span>{{ t('auth.or_email') }}</span></div>
+        -->
 
         <div v-if="!state.supabaseUser" class="auth-section">
           <div class="auth-tabs" role="tablist">
