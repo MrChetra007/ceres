@@ -8,7 +8,12 @@ const dicts = { en, km }
 export function translate(key, vars) {
   const lang = state.preferredLanguage === 'km' ? 'km' : 'en'
   const dict = dicts[lang] || en
-  let text = dict[key] ?? key
+  let text = dict[key]
+  // Blank or missing entries fall back to the English source text (the Khmer
+  // landing copy is still being written), so an unfilled language never
+  // renders an empty page/screen.
+  if (!text) text = en[key]
+  if (text == null) text = key
   if (vars) {
     text = text.replace(/\{(\w+)\}/g, (m, k) => (vars[k] != null ? vars[k] : m))
   }
