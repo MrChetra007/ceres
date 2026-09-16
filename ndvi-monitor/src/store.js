@@ -36,6 +36,16 @@ function deferIdle(fn) {
   else setTimeout(fn, 50)
 }
 
+// Fold EXACTLY-identical concurrent Earth Engine tile loads into one request.
+// On sign-in the map tiles the default area (beginSessionWork) and then the
+// user's first saved area loads (loadAoisFromSupabase -> applyAoiBounds) with
+// the same index, month, date and geometry — without this the same composite
+// is computed twice back-to-back. The key is released when the shared response
+// arrives (the layer is applied once); any real change makes a different key.
+const inflightTiles = new Map()
+
+let dryMonthsFetchedKey = null
+
 // ---------------------------------------------------------------------------
 // Leaflet map registry (non-reactive — Leaflet instances must not be proxied)
 // ---------------------------------------------------------------------------
@@ -238,24 +248,10 @@ let cloudToastShown = false
 // Helpers
 // ---------------------------------------------------------------------------
 function getGeometry() {
-  if (currentGeometry.value) {
-    console.log("[DEBUG-RVI] getGeometry -> currentGeometry.value", {
-      coordsLen: currentGeometry.value && currentGeometry.value.coordinates ? currentGeometry.value.coordinates.length : null,
-      fieldId: state.currentFieldId,
-    })
-    return currentGeometry.value
-  }
+  if (currentGeometry.value) return currentGeometry.value
   if (state.aoiPolygon && state.aoiPolygon.length >= 3) {
-    console.log("[DEBUG-RVI] getGeometry -> state.aoiPolygon", {
-      points: state.aoiPolygon.length,
-      fieldId: state.currentFieldId,
-    })
     return polygonGeometry([[...state.aoiPolygon, state.aoiPolygon[0]]])
   }
-  console.log("[DEBUG-RVI] getGeometry -> default state.aoiCoords rect", {
-    aoiCoords: state.aoiCoords,
-    fieldId: state.currentFieldId,
-  })
   return rectGeometry(state.aoiCoords)
 }
 
@@ -985,6 +981,11 @@ export function effectiveIndex() {
 export function loadIndexForMonth(idx, geometry, silent) {
   const m = MONTHS[idx]
   if (!m || !state.eeReady) return
+  const geom = geometry || getGeometry()
+  const sceneKey = state.currentIndex === 'truecolor' ? (state.trueColorDate || '') : (state.selectedObservationDate || '')
+  const tileKey = state.currentIndex + '|' + idx + '|' + sceneKey + '|' + JSON.stringify(geom)
+  if (inflightTiles.has(tileKey)) return
+  inflightTiles.set(tileKey, true)
   state.latestView = null
   state.latestViewLoading = false
   const cfg = INDICES[state.currentIndex]
@@ -994,22 +995,9 @@ export function loadIndexForMonth(idx, geometry, silent) {
   state.radarFallback.main = null
   state.opticalMeta.main = null
   beginLoading()
-  const geom = geometry || getGeometry()
-  console.log("[DEBUG-RVI] loadIndexForMonth top", {
-    idx,
-    geometryParamProvided: !!geometry,
-    geometryParamCoordsLen: geometry && geometry.coordinates ? geometry.coordinates.length : null,
-    geomCoordsLen: geom && geom.coordinates ? geom.coordinates.length : null,
-    geomType: geom && geom.type ? geom.type : null,
-    currentFieldId: state.currentFieldId,
-    currentFieldName: state.currentFieldName,
-    selectedAoiId: state.selectedAoiId,
-    aoiPolygonLen: state.aoiPolygon ? state.aoiPolygon.length : null,
-    currentIndex: state.currentIndex,
-    selectedObservationDate: state.selectedObservationDate,
-  })
   if (state.currentIndex === 'truecolor') {
     loadTrueColor(m, geom, state.trueColorDate, (res) => {
+      inflightTiles.delete(tileKey)
       endLoading()
       state.sceneCount.main = res.count
       state.trueColorScenes = res.scenes || []
@@ -1048,7 +1036,7 @@ export function loadIndexForMonth(idx, geometry, silent) {
   // is the bug we're fixing.
   const sceneDate = state.currentIndex !== 'truecolor' ? state.selectedObservationDate : null
   ee.loadIndexTile(m, state.currentIndex, geom, (res) => {
-    console.log("[DEBUG-RVI] loadIndexTile callback raw res", { res, currentFieldId: state.currentFieldId })
+    inflightTiles.delete(tileKey)
     state.sceneCount.main = res.count
     state.opticalMeta.main = null // set only by the clear-optical branch below
     if (res.mode === 'error') {
@@ -1060,11 +1048,9 @@ export function loadIndexForMonth(idx, geometry, silent) {
     }
     if (res.mode === 'radar_fallback') {
       endLoading()
-      console.log("[DEBUG-RVI] ENTERED radar_fallback branch", { currentFieldId: state.currentFieldId, res })
       if (res.url) mapReg.ndviLayer = applyTileLayer(mapReg.map, mapReg.ndviLayer, res.url, 1)
       else if (mapReg.ndviLayer) { mapReg.map.removeLayer(mapReg.ndviLayer); mapReg.ndviLayer = null }
       state.radarFallback.main = { month: m.label, indexUsed: res.indexUsed || 'RVI' }
-      console.log("[DEBUG-RVI] radar_fallback set state.radarFallback.main =", state.radarFallback.main)
       setStatus('ready', 'Radar view (RVI) for ' + m.label + ' \u2014 clouds blocked optical view')
       return
     }
@@ -1116,7 +1102,6 @@ export function loadIndexForMonth(idx, geometry, silent) {
     }
     if (res.mode === 'cloud_blocked') {
       endLoading()
-      console.log("[DEBUG-RVI] ENTERED cloud_blocked branch", { currentFieldId: state.currentFieldId, res })
       if (res.url) mapReg.ndviLayer = applyTileLayer(mapReg.map, mapReg.ndviLayer, res.url, 1)
       else if (mapReg.ndviLayer) { mapReg.map.removeLayer(mapReg.ndviLayer); mapReg.ndviLayer = null }
 
@@ -1131,7 +1116,6 @@ export function loadIndexForMonth(idx, geometry, silent) {
         lastValidDate: res.lastValidDate,
         sameMonth,
       }
-      console.log("[DEBUG-RVI] cloud_blocked set state.cloudBlock.main =", state.cloudBlock.main)
       if (!silent && !cloudToastShown) {
         cloudToastShown = true
         if (sameMonth) {
@@ -1640,6 +1624,9 @@ export function fetchSelectedSceneStatus(dateStr) {
 export function fetchDryMonths() {
   if (!state.eeReady) return
   const geom = getGeometry()
+  const key = JSON.stringify(geom)
+  if (dryMonthsFetchedKey === key) return
+  dryMonthsFetchedKey = key
   ee.getDryMonths(MONTHS, geom, (drySet) => {
     state.dryMonthSet = drySet
   })
@@ -1940,13 +1927,12 @@ export function beginSessionWork() {
     // User-visible map load first — the thing everyone is waiting on.
     setStatus('computing', 'Computing NDVI...')
     loadIndexForMonth(state.mainMonth, null)
-    // Defer the secondary background work (dry-month markers, field statuses,
-    // field trends) so it doesn't compete with the map load. Runs after the
+    // Defer the secondary background work (dry-month markers) so it doesn't
+    // compete with the map load. Field statuses/trends run their own deferred
+    // batch once the fields arrive (loadFieldsFromSupabase). Runs after the
     // current work at idle time.
     deferIdle(() => {
       fetchDryMonths()
-      refreshAllFieldStatuses()
-      refreshAllFieldTrends()
     })
   } else if (state.eeReady) {
     // Map not mounted yet (e.g. user signed in from landing page before
@@ -2123,8 +2109,10 @@ export async function loadFieldsFromSupabase() {
     // session (geometry may have changed). Reset the dedup keys they guard on.
     allStatusSig = null
     allTrendsSig = null
-    refreshAllFieldStatuses()
-    refreshAllFieldTrends()
+    deferIdle(() => {
+      refreshAllFieldStatuses()
+      refreshAllFieldTrends()
+    })
   } catch (err) {
     showToast('Failed to load fields: ' + err.message)
   }

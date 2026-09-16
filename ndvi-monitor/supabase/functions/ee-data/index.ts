@@ -141,6 +141,8 @@ async function buildMaskedComposite(
   start: any,
   end: any,
   index: string,
+  startISO?: string,
+  endISO?: string,
 ): Promise<{
   img: any; // masked index composite (band named index.toUpperCase()), clouds NaN
   clearSceneCount: number;
@@ -163,13 +165,6 @@ async function buildMaskedComposite(
   });
 
   const count = await evaluate(maskedIndices.size());
-  console.log("[DEBUG-RVI] buildMaskedComposite scene count", {
-    index,
-    requestedStart: await evaluate(
-      start.format ? start.format("YYYY-MM-dd") : null,
-    ),
-    rawSceneCount: count,
-  });
   if (!count || count === 0) {
     return Promise.resolve({
       img: null,
@@ -199,8 +194,11 @@ async function buildMaskedComposite(
     if (d && typeof d.getTime === "function") return tsToISO(d.getTime());
     return tsToISO(await evaluate(d.millis()));
   };
-  const compositeStart = await iso(start);
-  const compositeEnd = await iso(end);
+  // Callers that already know the calendar window pass the ISO strings (month
+  // tiles, per-scene requests) so the two evaluate round-trips above are
+  // skipped; only unknown windows fall back to evaluating the ee.Date.
+  const compositeStart = startISO || (await iso(start));
+  const compositeEnd = endISO || (await iso(end));
   return Promise.resolve({
     img: composite,
     clearSceneCount: count,
@@ -337,59 +335,6 @@ function geometryHash(geojson: any): string {
   }
   return (h >>> 0).toString(16).padStart(8, "0");
 }
-
-// ── DEBUG-RVI helpers ─────────────────────────────────────────────────────
-function countGeoVertices(geojson: any): number {
-  try {
-    const g =
-      geojson && geojson.type === "Feature" ? geojson.geometry : geojson;
-    if (!g || !g.coordinates) return 0;
-    let n = 0;
-    const walk = (c: any) => {
-      if (Array.isArray(c)) {
-        if (c.length && Array.isArray(c[0]) && typeof c[0][0] === "number")
-          n += c.length;
-        else c.forEach(walk);
-      }
-    };
-    walk(g.coordinates);
-    return n;
-  } catch (e) {
-    return -1;
-  }
-}
-
-function geoBBox(geojson: any): any {
-  try {
-    const g =
-      geojson && geojson.type === "Feature" ? geojson.geometry : geojson;
-    if (!g || !g.coordinates) return null;
-    let minx = Infinity,
-      miny = Infinity,
-      maxx = -Infinity,
-      maxy = -Infinity;
-    const walk = (c: any) => {
-      if (Array.isArray(c)) {
-        if (c.length && Array.isArray(c[0]) && typeof c[0][0] === "number") {
-          for (const p of c) {
-            if (p[0] < minx) minx = p[0];
-            if (p[0] > maxx) maxx = p[0];
-            if (p[1] < miny) miny = p[1];
-            if (p[1] > maxy) maxy = p[1];
-          }
-        } else {
-          c.forEach(walk);
-        }
-      }
-    };
-    walk(g.coordinates);
-    if (!isFinite(minx)) return null;
-    return { west: minx, south: miny, east: maxx, north: maxy };
-  } catch (e) {
-    return null;
-  }
-}
-// ── END DEBUG-RVI helpers ─────────────────────────────────────────────────
 
 function tileIsClosed(year: number, month: number): boolean {
   // Month has fully elapsed once the first day of the *next* month has passed.
@@ -550,19 +495,6 @@ function stageNameAsOf(
 }
 
 async function actionGetIndexTile(payload: any) {
-  try {
-    console.log("[DEBUG-RVI] actionGetIndexTile payload geometry", {
-      geometry: payload.geometry,
-      index: payload.index,
-      year: payload.year,
-      month: payload.month,
-      sceneDate: payload.sceneDate,
-      geomVertexCount: countGeoVertices(payload.geometry),
-      bbox: geoBBox(payload.geometry),
-    });
-  } catch (e) {
-    console.log("[DEBUG-RVI] actionGetIndexTile geometry log failed", e);
-  }
   // RVI is deliberately resolved BEFORE the BANDS gate: it has no optical band
   // pair, and selecting it means "show me the radar view", not "fall back to
   // NDVI silently". Unlike the automatic radar_fallback (used when optical is
@@ -744,21 +676,13 @@ async function actionGetIndexTile(payload: any) {
       day,
       day.advance(1, "day"),
       index,
+      payload.sceneDate,
+      new Date(
+        new Date(payload.sceneDate + "T00:00:00Z").getTime() + 86400000,
+      )
+        .toISOString()
+        .slice(0, 10),
     );
-    const dayStartISO = await evaluate(day.format("YYYY-MM-dd"));
-    const dayEndISO = await evaluate(
-      day.advance(1, "day").format("YYYY-MM-dd"),
-    );
-    console.log("[DEBUG-RVI] step0-scene coverage check", {
-      index,
-      sceneDate: payload.sceneDate,
-      dayCount,
-      dayStartISO,
-      dayEndISO,
-      clearSceneCount: masked.clearSceneCount,
-      validFraction: masked.validFraction,
-      threshold: CLOUD_RESILIENCE.MIN_VALID_PIXEL_FRACTION,
-    });
     if (
       masked.clearSceneCount > 0 &&
       masked.img &&
@@ -777,16 +701,6 @@ async function actionGetIndexTile(payload: any) {
         compositeStart: masked.compositeStart,
         compositeEnd: masked.compositeEnd,
       };
-      console.log(
-        "[DEBUG-RVI] per-scene optical RESULT returned in HTTP body",
-        {
-          index,
-          sceneDate: payload.sceneDate,
-          mode: perSceneOpticalResult.mode,
-          validFraction: perSceneOpticalResult.validFraction,
-          clearSceneCount: perSceneOpticalResult.clearSceneCount,
-        },
-      );
       return perSceneOpticalResult;
     }
 
@@ -849,13 +763,19 @@ async function actionGetIndexTile(payload: any) {
   //    composite is accepted — otherwise a near-fully-clouded field would
   //    still be labeled "optical" with an all-transparent tile instead of
   //    correctly falling through to the radar fallback below.
-  const masked = await buildMaskedComposite(geom, start, end, index);
+  const monthStartISO = `${payload.year}-${String(payload.month).padStart(2, "0")}-01`;
+  const monthEndISO = new Date(Date.UTC(payload.year, payload.month, 1))
+    .toISOString()
+    .slice(0, 10);
+  const masked = await buildMaskedComposite(
+    geom,
+    start,
+    end,
+    index,
+    monthStartISO,
+    monthEndISO,
+  );
   const clearSceneCount = masked.clearSceneCount;
-  console.log("[DEBUG-RVI] step1 coverage check", {
-    clearSceneCount,
-    validFraction: masked.validFraction,
-    threshold: CLOUD_RESILIENCE.MIN_VALID_PIXEL_FRACTION,
-  });
   if (
     clearSceneCount > 0 &&
     masked.img &&
@@ -898,36 +818,13 @@ async function actionGetIndexTile(payload: any) {
   //    water/moisture or untested bands with no radar equivalent, so their
   //    blocked month falls through to the true-color cloud view below instead
   //    of silently showing a radar tile under the wrong index.
-  console.log(
-    "[DEBUG-RVI] step1 done clearSceneCount=",
-    clearSceneCount,
-    "-> entering step2 radar. geomVertexCount=",
-    countGeoVertices(payload.geometry),
-    "bbox=",
-    JSON.stringify(geoBBox(payload.geometry)),
-  );
   if (index === "ndvi") {
     try {
-      const radarWindowStart = start.advance(-45, "day");
-      console.log("[DEBUG-RVI] step2 calling getRadarVegetationIndex", {
-        index,
-        radarWindowStart: radarWindowStart.toISOString
-          ? radarWindowStart.toISOString()
-          : String(radarWindowStart),
-        radarWindowEnd: start.toISOString ? start.toISOString() : String(start),
-        monthStart: start.toISOString ? start.toISOString() : String(start),
-        monthEnd: end.toISOString ? end.toISOString() : String(end),
-      });
       const radar = await getRadarVegetationIndex(
         geom,
         start.advance(-45, "day"), // backward-only, was ±15 days
         start, // no forward reach past the period start
       );
-      console.log("[DEBUG-RVI] step2 radar result:", {
-        count: radar.count,
-        url: radar.url ? "present(" + radar.url.slice(0, 40) + "...)" : null,
-        radarDate: radar.radarDate,
-      });
       if (radar.count > 0 && radar.url) {
         result = {
           mode: "radar_fallback",
@@ -950,17 +847,9 @@ async function actionGetIndexTile(payload: any) {
         return result;
       }
     } catch (e) {
-      console.error(
-        "[DEBUG-RVI] radar fallback THREW (step2 caught):",
-        JSON.stringify(e, Object.getOwnPropertyNames(e || {})),
-      );
-      console.error("[DEBUG-RVI] radar fallback error raw:", e);
+      console.error("radar fallback failed:", e);
     }
   }
-  console.log(
-    "[DEBUG-RVI] step2 did NOT return radar_fallback -> reaching step3 (90-day true-color widen). geomVertexCount=",
-    countGeoVertices(payload.geometry),
-  );
 
   // 3. No radar either — widen the OPTICAL search backward up to 90 days,
   //    not bound to the calendar month, and show the least-cloudy scene
@@ -1502,6 +1391,12 @@ async function actionGetFieldStatus(payload: any) {
         day,
         day.advance(1, "day"),
         index,
+        sceneDate,
+        new Date(
+          new Date(sceneDate + "T00:00:00Z").getTime() + 86400000,
+        )
+          .toISOString()
+          .slice(0, 10),
       );
       if (masked.clearSceneCount > 0 && masked.img) {
         const result = await evaluate(
@@ -2421,7 +2316,16 @@ async function actionGetFieldBundle(payload: any) {
 
 // ── Router ─────────────────────────────────────────────────────────────────
 type Handler = (payload: any) => Promise<Record<string, unknown>>;
+
+// Keep-alive for the scheduled warm-up ping (migrations/017_ee_data_keep_warm).
+// The serve handler runs ensureEE() before dispatching, so this both refreshes
+// the Earth Engine session (45 min TTL) and confirms the function is healthy.
+async function actionPing(): Promise<Record<string, unknown>> {
+  return { mode: "pong" };
+}
+
 const HANDLERS: Record<string, Handler> = {
+  ping: actionPing,
   getIndexTile: actionGetIndexTile,
   getTrueColorScene: actionGetTrueColorScene,
   getLatestTrueColor: actionGetLatestTrueColor,
