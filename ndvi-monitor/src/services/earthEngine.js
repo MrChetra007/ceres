@@ -34,18 +34,21 @@ async function postEE(action, payload, accessToken) {
 }
 
 async function callEE(action, payload) {
+  const t0 = performance.now()
+  const meta = payload && payload.months ? `${payload.months.length}mo` : ''
+
   let session = await requireSession()
   let res = await postEE(action, payload, session.access_token)
   if (res.status === 401) {
-    // The just-used token was rejected server-side even though the client
-    // considered it valid — the classic stale/racy token captured in the first
-    // moments after sign-in (a manual page refresh implicitly repairs this).
-    // Force a real refresh and retry ONCE before surfacing the error.
     session = await refreshSession()
     res = await postEE(action, payload, session.access_token)
   }
   let body = null
   try { body = await res.json() } catch (e) { /* non-JSON error body */ }
+
+  const ms = Math.round(performance.now() - t0)
+  console.log(`[EE] ${action}${meta ? ' (' + meta + ')' : ''} — ${ms}ms`)
+
   if (!res.ok || !body || body.ok === false) {
     const msg = body && body.error ? String(body.error) : 'ee-data request failed (' + res.status + ')'
     throw new Error(msg)
