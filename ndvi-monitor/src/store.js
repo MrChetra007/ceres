@@ -445,9 +445,30 @@ function applyAoiBounds(bounds, label) {
   if (state.compareMode) loadIndexForMonthRight(state.rightMonth)
 }
 
+// Drop a selected field without repainting the old AOI. Switching areas calls
+// this first so the next tile request uses the NEW area geometry, not the
+// field geometry still held in currentGeometry.
+function detachFieldSelection() {
+  state.currentFieldId = null
+  state.currentFieldName = null
+  state.editingFieldId = null
+  currentGeometry.value = null
+  state.rainfallMm = null
+  state.infoPanelVisible = false
+  state.selectedObservationDate = null
+  state.displayedObservationDate = null
+  state.trueColorDate = null
+  state.selectedSceneStatus = null
+  if (mapReg.drawnItems) mapReg.drawnItems.clearLayers()
+  updateDrawEditVisibility()
+  setBaseLayer(state.currentBase)
+  updateAoiRectangle()
+}
+
 export function selectAoi(id) {
   const aoi = state.aois.find((a) => a.id === id)
   if (!aoi) return
+  detachFieldSelection()
   state.selectedAoiId = id
   applyAoiBounds(aoi.bounds, aoi.name)
 }
@@ -515,7 +536,10 @@ export async function updateAoi(id, patch) {
     if (aoi) {
       if ('name' in patch) aoi.name = patch.name
       if ('bounds' in patch) aoi.bounds = patch.bounds
-      if (id === state.selectedAoiId) applyAoiBounds(aoi.bounds, aoi.name)
+      if (id === state.selectedAoiId) {
+        detachFieldSelection()
+        applyAoiBounds(aoi.bounds, aoi.name)
+      }
     }
     return true
   } catch (err) {
@@ -2532,20 +2556,7 @@ function finishFieldEdit() {
 }
 
 export function clearFieldSelection() {
-  state.currentFieldId = null
-  state.currentFieldName = null
-  state.editingFieldId = null
-  currentGeometry.value = null
-  state.rainfallMm = null
-  state.infoPanelVisible = false
-  state.selectedObservationDate = null
-  state.displayedObservationDate = null
-  state.trueColorDate = null
-  state.selectedSceneStatus = null
-  mapReg.drawnItems.clearLayers()
-  updateDrawEditVisibility()
-  setBaseLayer(state.currentBase)
-  updateAoiRectangle()
+  detachFieldSelection()
   loadIndexForMonth(state.mainMonth, null)
   if (state.compareMode) loadIndexForMonthRight(state.rightMonth)
   setStatus('ready', 'Field deselected \u2014 showing full AOI')
