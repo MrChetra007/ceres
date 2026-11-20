@@ -223,13 +223,14 @@ export async function getMyProfile() {
   const { data, error } = await sb
     .from('profiles')
     .select(
-      'telegram_chat_id, preferred_language, subscription_tier, subscription_status, subscription_source, subscription_renews_at, max_aois, max_hectares, consult_ai_enabled'
+      'telegram_chat_id, preferred_language, role, subscription_tier, subscription_status, subscription_source, subscription_renews_at, max_aois, max_hectares, consult_ai_enabled'
     )
     .maybeSingle()
   if (error) throw error
   return data || {
     telegram_chat_id: null,
     preferred_language: 'en',
+    role: 'farmer',
     subscription_tier: 'free',
     subscription_status: 'active',
     subscription_source: 'none',

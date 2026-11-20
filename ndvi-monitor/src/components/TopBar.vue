@@ -62,6 +62,9 @@
               <i class="ti ti-crown"></i>{{ t('subs.plan_and_billing') }}
               <span class="tier-badge">{{ tierLabel }}</span>
             </button>
+            <button v-if="state.role === 'extension_viewer'" class="settings-item" @click="openGovernment">
+              <i class="ti ti-building-community"></i>{{ t('topbar.government') }}
+            </button>
             <button class="settings-item" @click="chooseExport('png')"><i class="ti ti-photo"></i>{{ t('topbar.export_png') }}</button>
             <button class="settings-item" @click="chooseExport('pdf')"><i class="ti ti-file-text"></i>{{ t('topbar.export_pdf') }}</button>
             <button class="settings-item" :class="{ on: state.telegramChatId }" @click="openTelegram">
@@ -136,6 +139,9 @@
           <button class="settings-item" @click="openPlanBilling">
             <i class="ti ti-crown"></i>{{ t('subs.plan_and_billing') }}
             <span class="tier-badge">{{ tierLabel }}</span>
+          </button>
+          <button v-if="state.role === 'extension_viewer'" class="settings-item" @click="openGovernment">
+            <i class="ti ti-building-community"></i>{{ t('topbar.government') }}
           </button>
           <button
             class="settings-item"
@@ -294,6 +300,13 @@ function brandMenuClick() {
 function openFields() {
   hamburgerOpen.value = false
   emit('menu')
+}
+
+function openGovernment() {
+  settingsOpen.value = false
+  hamburgerOpen.value = false
+  userMenuOpen.value = false
+  store.goToGovernment()
 }
 
 function goCurrentLocation() {

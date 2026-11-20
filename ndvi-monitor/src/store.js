@@ -135,6 +135,8 @@ export const state = reactive({
   stressAlert: null,
   fields: [],
   supabaseUser: null,
+  role: 'farmer',
+  roleLoaded: false,
   authOverlayVisible: true,
   helpVisible: false,
   presetEditorVisible: false,
@@ -734,6 +736,8 @@ const FREE_DEFAULTS = {
 export async function loadSubscription() {
   if (!state.supabaseUser) {
     Object.assign(state.subscription, FREE_DEFAULTS)
+    state.role = 'farmer'
+    state.roleLoaded = true
     return
   }
   try {
@@ -747,8 +751,12 @@ export async function loadSubscription() {
       maxHectares: p.max_hectares != null ? p.max_hectares : 10,
       consultAiEnabled: !!p.consult_ai_enabled,
     })
+    state.role = p.role === 'extension_viewer' ? 'extension_viewer' : 'farmer'
+    state.roleLoaded = true
   } catch (err) {
     // Non-fatal — limits fall back to Free-tier defaults.
+    state.role = 'farmer'
+    state.roleLoaded = true
   }
 }
 
@@ -831,7 +839,11 @@ function goToMap() {
   getRouter().then((r) => r.push('/map'))
 }
 
-export { goToPricing, goToMap }
+function goToGovernment() {
+  getRouter().then((r) => r.push('/government'))
+}
+
+export { goToPricing, goToMap, goToGovernment }
 
 function generateLinkCode() {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
@@ -2092,6 +2104,8 @@ sb.auth.onAuthStateChange((event, session) => {
     state.telegramChatId = null
     state.telegramLinking = false
     Object.assign(state.subscription, FREE_DEFAULTS)
+    state.role = 'farmer'
+    state.roleLoaded = false
     state.settingsVisible = false
     state.checkoutTier = null
     state.paywall.visible = false
