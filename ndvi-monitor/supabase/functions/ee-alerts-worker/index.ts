@@ -7,6 +7,10 @@ import { statusFromNdvi } from "../_shared/growthStage.ts";
 import { getWeatherContext } from "../_shared/weather.ts";
 import type { WeatherContext } from "../_shared/weather.ts";
 import {
+  getProvinceWeather,
+  provinceWeatherLine,
+} from "../_shared/dataef.ts";
+import {
   addCloudProbability,
   validPixelMask,
   validPixelFraction,
@@ -458,6 +462,7 @@ async function buildAdvisoryPrompt(
   rainfall: number | null,
   weather: WeatherContext | null,
   lang: string,
+  officialLine = "",
 ): Promise<string> {
   const lswi = await getLswiForGeometry(field.geojson).catch(() => null);
   const pct = await getNdviTrendPct(field.geojson).catch(() => null);
@@ -475,6 +480,7 @@ async function buildAdvisoryPrompt(
   return `You are writing a short Telegram alert for a rice farmer in Battambang, Cambodia, about their field named "${field.name}".
 Satellite data: NDVI ${ndvi.toFixed(2)} (${pctLine}), LSWI (moisture) ${lswi == null ? "n/a" : lswi.toFixed(2)}, rainfall (21 days) ${rainText}, growth stage: ${stageText}, current status: ${statusLabel}.
 ${forecastContextLine(weather)}
+${officialLine ? `${officialLine}\nCurrent conditions describe now, not a prediction; the 5-day forecast above is the only forecast.` : ""}
 
 ${langLine}
 Write 2-3 short sentences. Describe what the numbers suggest about the likely cause of a stress signal (drought vs. flood vs. normal for this growth stage) and give ONE practical, cautious next step. Use the weather forecast to inform this: mention upcoming rain (or its absence) when it is relevant to the field's situation — e.g. warn that rain is expected soon if the field is dry, or note a dry spell ahead if the forecast shows little rain. IMPORTANT: this is guidance to inform the farmer, NOT a diagnosis — never state a cause with certainty. Always hedge with words like "likely" / "could be". Do not repeat the technical index names (NDVI, LSWI) in the reply itself.`;
@@ -484,10 +490,30 @@ Deno.serve(async (_req) => {
   try {
     await eeInit();
 
+    // Official admin names for the DataEF weather lookup. Loaded once per run;
+    // the table is tiny and this avoids a query per field.
+    const provinceNames = new Map<string, string>();
+    try {
+      const { data: provinces } = await supabase
+        .from("admin_provinces")
+        .select("code, name_en");
+      for (const p of provinces || []) {
+        if (p?.code && p?.name_en) {
+          provinceNames.set(String(p.code), String(p.name_en));
+        }
+      }
+    } catch (e) {
+      console.warn(
+        `[dataef] province name load failed: ${
+          e instanceof Error ? e.message : String(e)
+        }`,
+      );
+    }
+
     const { data: fields, error } = await supabase
       .from("fields")
       .select(
-        "id, name, geojson, planting_date, crop_english, centroid_lat, centroid_lng, owner_id, profiles!inner(telegram_chat_id, preferred_language)",
+        "id, name, geojson, planting_date, crop_english, centroid_lat, centroid_lng, province_code, owner_id, profiles!inner(telegram_chat_id, preferred_language)",
       )
       .not("profiles.telegram_chat_id", "is", null);
 
@@ -612,6 +638,28 @@ Deno.serve(async (_req) => {
             } — continuing with stress data only`,
           );
         }
+        // Official current province conditions. Never blocks the alert: no
+        // province, missing admin row, or DataEF failure simply means the
+        // advisory runs without the official line.
+        let officialLine = "";
+        const provinceCode = (field as any).province_code;
+        const provinceName = provinceCode
+          ? provinceNames.get(String(provinceCode))
+          : null;
+        if (provinceName) {
+          try {
+            officialLine = provinceWeatherLine(
+              await getProvinceWeather(provinceName),
+            );
+          } catch (e) {
+            console.warn(
+              `[dataef] weather failed for ${provinceName}: ${
+                e instanceof Error ? e.message : String(e)
+              }`,
+            );
+          }
+        }
+
         const prompt = await buildAdvisoryPrompt(
           field,
           ndvi,
@@ -620,6 +668,7 @@ Deno.serve(async (_req) => {
           rainfall,
           weather,
           lang,
+          officialLine,
         );
         const result = await generateExplanation(prompt);
 

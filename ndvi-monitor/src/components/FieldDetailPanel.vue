@@ -177,6 +177,35 @@
       <div v-else class="forecast-note">{{ t('field.data_unavailable') }}</div>
     </div>
 
+    <div class="detail-section official-card" v-if="currentField && currentField.provinceCode">
+      <p class="detail-card-label">{{ t('field.official_conditions') }}</p>
+      <p class="official-source">{{ t('field.official_source') }}</p>
+      <div v-if="officialLoading" class="forecast-note">{{ t('field.loading') }}</div>
+      <div v-else-if="officialError || !officialWeather" class="forecast-note">{{ t('field.data_unavailable') }}</div>
+      <template v-else>
+        <div class="official-main">
+          <span class="official-temp mono">
+            {{ officialWeather.tempC != null ? Math.round(officialWeather.tempC) + '\u00b0C' : '\u2014' }}
+          </span>
+          <span class="official-cond">{{ officialWeather.condition || t('field.data_unavailable') }}</span>
+        </div>
+        <div class="official-grid">
+          <div>
+            <span>{{ t('field.official_humidity') }}</span>
+            <b class="mono">{{ officialWeather.humidity != null ? Math.round(officialWeather.humidity) + '%' : '\u2014' }}</b>
+          </div>
+          <div>
+            <span>{{ t('field.official_rain_now') }}</span>
+            <b class="mono">{{ officialWeather.precipMm != null ? officialWeather.precipMm + ' mm' : '\u2014' }}</b>
+          </div>
+        </div>
+        <p class="official-updated">
+          {{ t('field.official_updated', { time: officialUpdatedText }) }}
+          <span v-if="officialWeather.stale" class="official-stale">{{ t('field.official_stale') }}</span>
+        </p>
+      </template>
+    </div>
+
     <template v-if="isField">
       <div class="detail-section meta-card">
         <p class="detail-card-label">{{ t('field.metadata') }}</p>
@@ -235,7 +264,8 @@ import { getOrComputeArea, formatHectares } from '../store'
 import ConfidenceBadge from './ConfidenceBadge.vue'
 import IndexLegend from './IndexLegend.vue'
 import FieldLocationModal from './FieldLocationModal.vue'
-import { resolveLocation } from '../services/adminBoundaries'
+import { resolveLocation, getProvinceName } from '../services/adminBoundaries'
+import { getProvinceWeather } from '../services/dataefService'
 import { buildChartConfig } from '../services/chart'
 import { INDICES, MONTHS, CONSULT_AI_URL } from '../config'
 import { sb, requireSession, refreshSession } from '../services/supabase'
@@ -264,6 +294,17 @@ const wxDays = ref([])
 const wxLoading = ref(false)
 const wxError = ref(false)
 let wxReq = 0
+
+// Official DataEF current province conditions (not a forecast).
+const officialWeather = ref(null)
+const officialLoading = ref(false)
+const officialError = ref(false)
+let officialReq = 0
+const officialUpdatedText = computed(() => {
+  const w = officialWeather.value
+  if (!w || !w.lastUpdated) return '\u2014'
+  return String(w.lastUpdated).replace('T', ' ').slice(0, 16)
+})
 
 const currentField = computed(() => state.fields.find((f) => f.id === state.currentFieldId) || null)
 const isField = computed(() => !!currentField.value)
@@ -855,6 +896,39 @@ async function loadWeather() {
   }
 }
 
+async function loadOfficialWeather() {
+  const f = currentField.value
+  if (!f || !f.provinceCode) {
+    officialWeather.value = null
+    officialLoading.value = false
+    officialError.value = false
+    return
+  }
+  const req = ++officialReq
+  officialLoading.value = true
+  officialError.value = false
+  try {
+    const provinceName = await getProvinceName(f.provinceCode, 'en')
+    if (req !== officialReq) return
+    if (!provinceName) {
+      officialWeather.value = null
+      officialLoading.value = false
+      officialError.value = true
+      return
+    }
+    const weather = await getProvinceWeather(provinceName)
+    if (req !== officialReq) return
+    officialWeather.value = weather
+    officialError.value = !weather
+    officialLoading.value = false
+  } catch (e) {
+    if (req !== officialReq) return
+    officialWeather.value = null
+    officialError.value = true
+    officialLoading.value = false
+  }
+}
+
 const plantingText = computed(() => {
   const f = currentField.value
   if (!f || !f.plantingDate) return '\u2014'
@@ -1144,7 +1218,8 @@ watch(() => state.benchmarkValue, () => {
 })
 watch(() => state.mainMonth, () => { updateMarker(); loadAim() })
 watch(() => state.currentFieldId, () => { aiExplanation.value = ''; aiTruncated.value = false; photos.value = []; state.photosLightboxIndex = null; loadPhotos(); aim.value = null; aimDetailsOpen.value = false; loadAim() })
-watch(() => currentField.value && currentField.value.id, () => { loadWeather(); loadAim() })
+watch(() => currentField.value && currentField.value.id, () => { loadWeather(); loadAim(); loadOfficialWeather() })
+watch(() => currentField.value && currentField.value.provinceCode, () => loadOfficialWeather())
 watch(() => state.infoPanelVisible, async (open) => {
   if (open && currentField.value) {
     loadPhotos()

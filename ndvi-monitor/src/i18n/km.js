@@ -162,6 +162,12 @@ export default {
   "field.forecast_rain_tip": "ប្រូបាប៊ីលីតេនៃទឹកភ្លៀង",
   "field.forecast_hint":
     "ការព្យាករណ៍ Open-Meteo សម្រាប់ទីតាំងវាល សម្រាប់បង្ហាញតែប៉ុណ្ណោះ។",
+  "field.official_conditions": "លក្ខខណ្ឌបច្ចុប្បន្នផ្លូវការ",
+  "field.official_source": "DataEF · ក្រសួងសេដ្ឋកិច្ច និងហិរញ្ញវត្ថុ",
+  "field.official_humidity": "សំណើម",
+  "field.official_rain_now": "ទឹកភ្លៀងឥឡូវ",
+  "field.official_updated": "ធ្វើបច្ចុប្បន្នភាព {time}",
+  "field.official_stale": "ទិន្នន័យចាស់",
   "field.metadata": "ព័ត៌មានវាល",
   "field.crop": "ដំណាំ",
   "field.no_crop": "មិនទាន់កំណត់",

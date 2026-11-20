@@ -1,6 +1,6 @@
 // Official Cambodia administrative lists (DataEF 2025), seeded into Supabase
-// by scripts/seed-admin-boundaries.mjs. Codes are TEXT and must keep leading
-// zeros, so never pass them through Number().
+// by migrations/seed/*.sql. Codes are TEXT and must keep leading zeros, so
+// never pass them through Number().
 
 import { sb } from './supabase'
 
