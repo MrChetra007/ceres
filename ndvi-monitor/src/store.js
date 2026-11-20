@@ -2189,7 +2189,19 @@ export async function importLocalFieldsIfAny() {
   loadFieldsFromSupabase()
 }
 
-export async function saveField(name, geojson, plantingDate, cropRaw) {
+function normalizeFieldLocation(location) {
+  const commune = location?.commune_code || null
+  return {
+    province_code: location?.province_code || null,
+    district_code: location?.district_code || null,
+    commune_code: commune,
+    village_code: location?.village_code || null,
+    // Consent only exists at commune level. Clearing the commune clears it.
+    share_with_authorities: !!(commune && location?.share_with_authorities),
+  }
+}
+
+export async function saveField(name, geojson, plantingDate, cropRaw, location) {
   if (!state.supabaseUser) { showToast('Sign in to save fields'); return null }
   const area = getFieldAreaHectares(geojson)
   // UI-only hectare cap (TODO(backend): enforce server-side too — see
@@ -2224,6 +2236,7 @@ export async function saveField(name, geojson, plantingDate, cropRaw) {
       planting_date_source,
       crop_name: crop.typed || null,
       crop_english: crop.english || null,
+      ...normalizeFieldLocation(location),
     })
     state.fields.push(field)
     if (planting_date_source === 'estimated' && planting_date) {
@@ -2262,9 +2275,35 @@ export async function updateField(id, patch) {
       if ('name' in patch) state.fields[idx].name = patch.name
       if ('crop_name' in patch) state.fields[idx].cropName = patch.crop_name
       if ('crop_english' in patch) state.fields[idx].cropEnglish = patch.crop_english
+      if ('province_code' in patch) state.fields[idx].provinceCode = patch.province_code
+      if ('district_code' in patch) state.fields[idx].districtCode = patch.district_code
+      if ('commune_code' in patch) state.fields[idx].communeCode = patch.commune_code
+      if ('village_code' in patch) state.fields[idx].villageCode = patch.village_code
+      if ('share_with_authorities' in patch) state.fields[idx].shareWithAuthorities = patch.share_with_authorities
     }
   } catch (err) {
     showToast('Failed to update field: ' + err.message)
+  }
+}
+
+export async function updateFieldLocation(id, location) {
+  if (!state.supabaseUser) { showToast('Sign in to update field location'); return false }
+  const patch = normalizeFieldLocation(location)
+  try {
+    await supabase.updateField(id, patch)
+    const idx = state.fields.findIndex((f) => f.id === id)
+    if (idx >= 0) {
+      state.fields[idx].provinceCode = patch.province_code
+      state.fields[idx].districtCode = patch.district_code
+      state.fields[idx].communeCode = patch.commune_code
+      state.fields[idx].villageCode = patch.village_code
+      state.fields[idx].shareWithAuthorities = patch.share_with_authorities
+    }
+    return true
+  } catch (err) {
+    if (handleAuthError(err)) return false
+    showToast('Failed to update location: ' + err.message)
+    return false
   }
 }
 
@@ -2630,12 +2669,12 @@ export function promptSaveField(geojson) {
   fieldModal.visible = true
 }
 
-export function submitFieldForm(name, plantingDate, cropRaw) {
+export function submitFieldForm(name, plantingDate, cropRaw, location) {
   fieldModal.visible = false
   const geojson = pendingFieldFormGeojson
   pendingFieldFormGeojson = null
   if (!geojson) return
-  saveField(name, geojson, plantingDate || null, cropRaw || null).then((saved) => {
+  saveField(name, geojson, plantingDate || null, cropRaw || null, location).then((saved) => {
     if (saved) loadField(saved)
   })
 }

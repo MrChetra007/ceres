@@ -89,7 +89,7 @@ Base: `https://data.mef.gov.kh/api/v1`
 | File | Target path |
 |---|---|
 | `017_admin_boundaries.sql` | `ndvi-monitor/migrations/` (renumber if needed) |
-| `seed-admin-boundaries.mjs` | `ndvi-monitor/scripts/seed-admin-boundaries.mjs` |
+| `migrations/seed/*.sql` | `ndvi-monitor/migrations/seed/` |
 | `dataef.ts` | `ndvi-monitor/supabase/functions/_shared/dataef.ts` |
 | `dataef-weather-index.ts` | `ndvi-monitor/supabase/functions/dataef-weather/index.ts` |
 
@@ -113,8 +113,8 @@ Review these files once. If you find a real bug, report it and propose the fix; 
 
 ### Phase 1 — Data layer
 
-1. Apply `017_admin_boundaries.sql`.
-2. Run the seed script (Tra runs it; you only help debug). Expected: provinces ≈ 25, districts 210, communes ≈ 1,6xx, villages 14,576. Province→weather name check prints OK/FAIL for each province. If any FAIL, build a small alias map `province_en → name DataEF accepts` in `_shared/dataef.ts` (`PROVINCE_WEATHER_ALIASES`) and use it inside `getProvinceWeather`.
+1. Apply `018_admin_boundaries.sql`.
+2. Run the files in `migrations/seed/` in numeric order (001 provinces, 002 districts, 003 communes 01-04, 004 villages 01-30) in the Supabase SQL editor. Expected: provinces 25, districts 210, communes 1,661, villages 14,512. The source has 14,576 village rows, but 54 duplicate codes, one malformed code (`0506140-`), and 9 villages under missing commune `120913` mean the usable total is 14,512. The seed files are data-only; province→weather name matching is validated in Phase 3 through `_shared/dataef.ts` (`PROVINCE_WEATHER_ALIASES`).
 3. Deploy `dataef-weather`.
 
 ### Phase 2 — Field location picker + consent (frontend)
@@ -293,7 +293,7 @@ grant execute on function public.get_commune_stress_summary(text) to authenticat
 
 ## 6. Acceptance checks (run or describe how to verify)
 
-1. Seeded counts: provinces ≈ 25, districts = 210, villages = 14,576; codes keep leading zeros.
+1. Seeded counts: provinces = 25, districts = 210, communes = 1,661, villages = 14,512 (DataEF source has 54 duplicate village codes, 1 malformed code, and 9 orphan villages under missing commune `120913`); codes keep leading zeros.
 2. New field with Battambang → … → village saves all 4 codes; `share_with_authorities` is false unless the box is ticked and a commune is set.
 3. A field can be saved with no location (old flow still works). Existing fields can have a location added via Edit location.
 4. Field panel shows Open-Meteo 5-day forecast **and** the DataEF official-conditions card; with DataEF blocked, the app still works.

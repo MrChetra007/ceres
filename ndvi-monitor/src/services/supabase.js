@@ -16,6 +16,11 @@ export function mapRowToField(row) {
     plantingDateSource: row.planting_date_source || 'manual',
     cropName: row.crop_name ?? null,
     cropEnglish: row.crop_english ?? null,
+    provinceCode: row.province_code ?? null,
+    districtCode: row.district_code ?? null,
+    communeCode: row.commune_code ?? null,
+    villageCode: row.village_code ?? null,
+    shareWithAuthorities: !!row.share_with_authorities,
     centroidLat: row.centroid_lat ?? null,
     centroidLng: row.centroid_lng ?? null,
     notes: row.notes,
@@ -117,7 +122,10 @@ export function fieldCentroid(geojson) {
   }
 }
 
-export async function insertField({ name, geojson, area_ha, planting_date, planting_date_source, crop_name, crop_english }) {
+export async function insertField({
+  name, geojson, area_ha, planting_date, planting_date_source, crop_name, crop_english,
+  province_code, district_code, commune_code, village_code, share_with_authorities,
+}) {
   const session = await requireSession()
   const centroid = fieldCentroid(geojson)
   const { data, error } = await sb
@@ -127,6 +135,11 @@ export async function insertField({ name, geojson, area_ha, planting_date, plant
       planting_date_source: planting_date_source || 'manual',
       crop_name: crop_name || null,
       crop_english: crop_english || null,
+      province_code: province_code || null,
+      district_code: district_code || null,
+      commune_code: commune_code || null,
+      village_code: village_code || null,
+      share_with_authorities: !!share_with_authorities,
       owner_id: session.user.id,
       ...centroid,
     })

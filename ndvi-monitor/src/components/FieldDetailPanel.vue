@@ -186,6 +186,15 @@
         <div class="meta-row"><span>{{ t('field.added') }}</span><b class="mono">{{ addedText }}</b></div>
       </div>
 
+      <div class="detail-section location-card">
+        <p class="detail-card-label">{{ t('location.title') }}</p>
+        <p class="location-text">{{ locationText }}</p>
+        <button type="button" class="location-edit-btn" @click="locationModalOpen = true">
+          <i class="ti ti-map-pin"></i>
+          {{ t('location.edit') }}
+        </button>
+      </div>
+
       <div class="detail-section photo-card" v-if="currentField">
         <p class="detail-card-label">{{ t('field.photos') }} <span v-if="photos.length" class="mono">{{ photos.length }}</span></p>
         <div class="photo-strip" v-if="photos.length">
@@ -207,6 +216,13 @@
       <img :src="photos[state.photosLightboxIndex].url" :alt="t('field.photo')" />
       <button class="lightbox-close" @click="closePhoto">&times;</button>
     </div>
+
+    <FieldLocationModal
+      :visible="locationModalOpen"
+      :field="currentField"
+      @close="locationModalOpen = false"
+      @saved="loadLocationNames"
+    />
   </div>
 </template>
 
@@ -218,6 +234,8 @@ import * as store from '../store'
 import { getOrComputeArea, formatHectares } from '../store'
 import ConfidenceBadge from './ConfidenceBadge.vue'
 import IndexLegend from './IndexLegend.vue'
+import FieldLocationModal from './FieldLocationModal.vue'
+import { resolveLocation } from '../services/adminBoundaries'
 import { buildChartConfig } from '../services/chart'
 import { INDICES, MONTHS, CONSULT_AI_URL } from '../config'
 import { sb, requireSession, refreshSession } from '../services/supabase'
@@ -249,7 +267,62 @@ let wxReq = 0
 
 const currentField = computed(() => state.fields.find((f) => f.id === state.currentFieldId) || null)
 const isField = computed(() => !!currentField.value)
-const { km, t } = useI18n()
+const { km, t, lang } = useI18n()
+
+const locationModalOpen = ref(false)
+const locationNames = ref(null)
+const locationError = ref(false)
+const locationText = computed(() => {
+  const f = currentField.value
+  if (!f) return ''
+  const hasCodes = !!(f.provinceCode || f.districtCode || f.communeCode || f.villageCode)
+  if (!hasCodes) return t('location.not_set')
+  if (!locationNames.value) {
+    return locationError.value ? t('location.unavailable') : t('location.loading')
+  }
+  const n = locationNames.value
+  const parts = [n.village, n.commune, n.district, n.province].filter(Boolean)
+  return parts.length ? parts.join(', ') : t('location.not_set')
+})
+
+let locationReq = 0
+async function loadLocationNames() {
+  const f = currentField.value
+  if (!f || (!f.provinceCode && !f.districtCode && !f.communeCode && !f.villageCode)) {
+    locationNames.value = null
+    locationError.value = false
+    return
+  }
+  const req = ++locationReq
+  locationError.value = false
+  try {
+    const names = await resolveLocation({
+      province_code: f.provinceCode,
+      district_code: f.districtCode,
+      commune_code: f.communeCode,
+      village_code: f.villageCode,
+    }, lang.value)
+    if (req === locationReq) locationNames.value = names
+  } catch (e) {
+    if (req === locationReq) {
+      locationNames.value = null
+      locationError.value = true
+    }
+  }
+}
+
+watch(
+  () => [
+    currentField.value && currentField.value.id,
+    currentField.value && currentField.value.provinceCode,
+    currentField.value && currentField.value.districtCode,
+    currentField.value && currentField.value.communeCode,
+    currentField.value && currentField.value.villageCode,
+    lang.value,
+  ],
+  () => loadLocationNames(),
+  { immediate: true },
+)
 
 // ── AIM composite health score card ─────────────────────────────────────────
 // One 0-100 score + a plain-language verdict from ee-data getFieldHealthScore.
