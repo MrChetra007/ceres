@@ -17,7 +17,15 @@ const FETCH_TIMEOUT_MS = 8000;
 
 // DataEF's province spellings are not guaranteed to match every 2025 admin
 // list spelling. Add aliases here if a province returns 400/404.
-export const PROVINCE_WEATHER_ALIASES: Record<string, string> = {};
+// Verified against the 2025 admin-list spellings. DataEF accepts these
+// shorter/common spellings instead. "Stung Treng" has no working spelling in
+// the weather endpoint at audit time; it degrades to no official card.
+export const PROVINCE_WEATHER_ALIASES: Record<string, string> = {
+  "Mondul Kiri": "Mondulkiri",
+  "Ratanak Kiri": "Ratanakiri",
+  "Siemreap": "Siem Reap",
+  "Otdar Meanchey": "Oddar Meanchey",
+};
 
 export interface DataefWeather {
   name: string;
