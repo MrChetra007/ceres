@@ -1,3 +1,5 @@
+# Fix: Scene-aware RVI tab + real hero RVI value
+
 Task: Make the RVI tab scene-aware — clicking a specific Browse Observations date while on RVI should show that exact date's radar reading (±15-day window centered on it), not always the same month-level composite. Also fix the hero value to compute a real RVI number instead of silently reusing the optical NDVI reading.
 
 Root cause confirmed: In ee-data's actionGetIndexTile, the per-scene branch explicitly excludes RVI:

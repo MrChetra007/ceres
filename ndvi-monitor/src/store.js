@@ -2605,7 +2605,7 @@ export function submitFieldForm(name, plantingDate, cropRaw) {
   const geojson = pendingFieldFormGeojson
   pendingFieldFormGeojson = null
   if (!geojson) return
-  saveField(name, plantingDate || null, cropRaw || null).then((saved) => {
+  saveField(name, geojson, plantingDate || null, cropRaw || null).then((saved) => {
     if (saved) loadField(saved)
   })
 }

@@ -82,5 +82,7 @@ across the repo root, now grouped by purpose.
 - `code_base.md` — technical reference (frontend + Edge Functions)
 - `design.md` — design system spec
 - `PROCESS.md` — build process / phase log
+- `current-process.md` — dated debugging/deploy log (cloud-resilience fixes)
+- `codebase-audit.md` — full read-only audit (weather, fields, alerts, auth, API, frontend, env)
 - `aim-index-understanding-guide.md` — field index understanding implementation
 - `phase-86-validation.md` — Phase 8.6 end-to-end dedup validation

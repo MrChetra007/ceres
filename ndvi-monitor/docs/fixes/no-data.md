@@ -1,3 +1,5 @@
+# Fix: Scope per-scene RVI substitution to NDVI only
+
 Task: Scope the automatic per-scene radar (RVI) substitution to NDVI only. Every other optical index (NDWI, LSWI, SAVI, EVI, GNDVI) returns an honest no_data_for_scene on a cloud-blocked clicked date — no substitution attempted.
 
 Why: RVI is a defensible stand-in for NDVI specifically (both are canopy-vigor proxies, one optical one radar). It is not a defensible stand-in for NDWI/LSWI (water/moisture indices — different physical quantity) or SAVI/EVI/GNDVI (untested assumption, same risk class as NDVI's, but not validated and not worth extending this week). Showing RVI under any of those labels risks a genuinely wrong reading, not just an approximate one.
