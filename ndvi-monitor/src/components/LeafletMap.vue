@@ -14,17 +14,19 @@
 </template>
 
 <script setup>
-import { ref, onMounted, watch, nextTick } from 'vue'
+import { ref, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import {
   state, mapReg, onMapClick, onFieldCreated, onFieldEdited,
   onAoiRectangleCreated,
   loadIndexForMonthRight, setBaseLayer, updateAoiRectangle,
+  loadFieldById,
   showToast,
 } from '../store'
 import { MAP_CENTER, MAP_ZOOM } from '../config'
 import { useI18n } from '../i18n'
 
-const L = window.L
+let L = null
+let disposed = false
 const { t } = useI18n()
 
 // --- Mobile polygon-close patch for leaflet-draw 1.0.4 ---
@@ -38,25 +40,49 @@ const { t } = useI18n()
 // close radius for touch/pointer input. Desktop behavior is unchanged: it
 // still closes only via the first-vertex marker click / double-click, since
 // the proximity-finish branch below only ever fires for touch input.
-const TOUCH_CLOSE_PX = 28
-if (L.Draw && L.Draw.Polyline && typeof L.Draw.Polyline.prototype._endPoint === 'function') {
-  L.Draw.Polyline.prototype._endPoint = function (clientX, clientY, e) {
-    if (!this._mouseDownOrigin) return
-    const dragCheckDistance = L.point(clientX, clientY).distanceTo(this._mouseDownOrigin)
-    const lastPtDistance = this._calculateFinishDistance(e.latlng)
-    const isTouch = L.Browser.touch ||
-      (e.originalEvent && (e.originalEvent.pointerType === 'touch' || e.originalEvent.touches != null))
-    if (this.options.maxPoints > 1 && this.options.maxPoints === this._markers.length + 1) {
-      this.addVertex(e.latlng)
-      this._finishShape()
-    } else if (isTouch && lastPtDistance < TOUCH_CLOSE_PX) {
-      this._finishShape()
-    } else if (Math.abs(dragCheckDistance) < 9 * (window.devicePixelRatio || 1)) {
-      this.addVertex(e.latlng)
+function applyMobileDrawPatch() {
+  const TOUCH_CLOSE_PX = 28
+  if (L.Draw && L.Draw.Polyline && typeof L.Draw.Polyline.prototype._endPoint === 'function') {
+    L.Draw.Polyline.prototype._endPoint = function (clientX, clientY, e) {
+      if (!this._mouseDownOrigin) return
+      const dragCheckDistance = L.point(clientX, clientY).distanceTo(this._mouseDownOrigin)
+      const lastPtDistance = this._calculateFinishDistance(e.latlng)
+      const isTouch = L.Browser.touch ||
+        (e.originalEvent && (e.originalEvent.pointerType === 'touch' || e.originalEvent.touches != null))
+      if (this.options.maxPoints > 1 && this.options.maxPoints === this._markers.length + 1) {
+        this.addVertex(e.latlng)
+        this._finishShape()
+      } else if (isTouch && lastPtDistance < TOUCH_CLOSE_PX) {
+        this._finishShape()
+      } else if (Math.abs(dragCheckDistance) < 9 * (window.devicePixelRatio || 1)) {
+        this.addVertex(e.latlng)
+      }
+      this._enableNewMarkers()
+      this._mouseDownOrigin = null
     }
-    this._enableNewMarkers()
-    this._mouseDownOrigin = null
   }
+}
+
+// Leaflet + leaflet-draw load from deferred CDN <script> tags. A module entry
+// can execute before those finish, so window.L (and L.Draw) may still be
+// undefined during setup. Wait for both instead of crashing on L.Draw.
+function whenLeafletReady(cb) {
+  let tries = 0
+  const poll = () => {
+    if (disposed) return
+    if (window.L && window.L.Draw) {
+      L = window.L
+      applyMobileDrawPatch()
+      cb()
+      return
+    }
+    if (++tries >= 200) {
+      showToast('Map libraries failed to load \u2014 check your connection')
+      return
+    }
+    setTimeout(poll, 50)
+  }
+  poll()
 }
 const mapEl = ref(null)
 const mapRightEl = ref(null)
@@ -112,6 +138,7 @@ function onMapPointerMove(map, e) {
 }
 
 function makeMainMap() {
+  if (!L || !mapEl.value) return
   const map = L.map(mapEl.value, { center: MAP_CENTER, zoom: MAP_ZOOM })
   const baseConfig = baseTileConfig()
   const baseLayer = L.tileLayer(baseConfig.url, {
@@ -161,6 +188,8 @@ function makeMainMap() {
   mapReg.drawnItems = drawnItems
   mapReg.drawControl = drawControl
   updateAoiRectangle()
+  // A field may have been selected while Leaflet was still loading.
+  if (state.currentFieldId) loadFieldById(state.currentFieldId)
   if (state.eeReady) {
     map.invalidateSize()
     map.setView(MAP_CENTER, MAP_ZOOM)
@@ -168,6 +197,7 @@ function makeMainMap() {
 }
 
 function makeRightMap() {
+  if (!L || !mapRightEl.value) return
   if (mapReg.mapRight) return
   const mapRight = L.map(mapRightEl.value, { center: MAP_CENTER, zoom: MAP_ZOOM })
   const baseConfig = baseTileConfig()
@@ -229,7 +259,9 @@ function resetSplit() {
 watch(() => state.compareMode, (on) => {
   if (on) {
     nextTick(() => {
+      if (!mapReg.map) return
       makeRightMap()
+      if (!mapReg.mapRight) return
       mapReg.mapRight.setView(mapReg.map.getCenter(), mapReg.map.getZoom())
       mapReg.mapRight.invalidateSize()
       mapReg.map.invalidateSize()
@@ -246,6 +278,10 @@ watch(() => state.compareMode, (on) => {
 watch(() => state.currentBase, (type) => setBaseLayer(type))
 
 onMounted(() => {
-  makeMainMap()
+  whenLeafletReady(() => makeMainMap())
+})
+
+onUnmounted(() => {
+  disposed = true
 })
 </script>

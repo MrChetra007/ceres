@@ -935,6 +935,10 @@ export function updateSceneCount(count, isRight) {
 }
 
 function applyTileLayer(map, layer, url, opacity) {
+  // The Leaflet map can still be waiting on its deferred CDN scripts when an
+  // ee-data response lands. Nothing to attach to yet; the map-ready path will
+  // request the current month again.
+  if (!map) return layer
   const opts = { opacity: opacity || 0.8, zIndex: 950 }
   // Reuse the existing overlay layer where possible: swapping the URL with
   // setUrl() avoids Leaflet tearing down and re-creating the whole tile pane on
@@ -954,6 +958,7 @@ function applyTileLayer(map, layer, url, opacity) {
 // True Color photo layers are fully-opaque (a real photograph, not a
 // semi-transparent index overlay) and must stay above the basemap.
 function applyTrueColorLayer(map, layer, url) {
+  if (!map) return layer
   const opts = { opacity: 1, zIndex: 951 }
   if (layer && layer.setUrl) {
     layer.setUrl(url)
@@ -981,6 +986,9 @@ export function effectiveIndex() {
 export function loadIndexForMonth(idx, geometry, silent) {
   const m = MONTHS[idx]
   if (!m || !state.eeReady) return
+  // beginSessionWork() retries once the map exists, so an early AOI load that
+  // races the deferred Leaflet scripts can safely be skipped here.
+  if (!mapReg.map) return
   const geom = geometry || getGeometry()
   const sceneKey = state.currentIndex === 'truecolor' ? (state.trueColorDate || '') : (state.selectedObservationDate || '')
   const tileKey = state.currentIndex + '|' + idx + '|' + sceneKey + '|' + JSON.stringify(geom)
@@ -2325,6 +2333,9 @@ export function loadField(field) {
   state.displayedObservationDate = null
   state.ndviChartData = null // new subject — the old field's anchor no longer applies
   state.selectedSceneStatus = null // stale per-scene answer for the old field
+  // If Leaflet is still loading, remember the selection and let the map-ready
+  // path reload it instead of crashing on a null drawnItems group.
+  if (!mapReg.map || !mapReg.drawnItems) return
   mapReg.drawnItems.clearLayers()
   const geo = window.L.geoJSON(field.geojson)
   geo.eachLayer((l) => {

@@ -60,6 +60,7 @@ across the repo root, now grouped by purpose.
 - `build-vegetation-index-sections.md` — landing page index sections
 - `ceres-add-indices-weather.md` — SAVI/EVI/GNDVI + weather forecast panel
 - `ceres-weather-telegram-integration.md` — centroid + weather in advisories
+- `camdx-slide-deck-prompt.md` — CamDX hackathon presentation deck prompt pack
 - `consult-ai-prompt.md` — AI Agronomist feature
 - `multi-provider-ai-prompt.md` — Gemini → DeepSeek → Qwen fallback
 - `ndvi-ui-fix-prompts.md` — ordered UI fix prompts
