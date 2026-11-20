@@ -167,7 +167,7 @@ Review these files once. If you find a real bug, report it and propose the fix; 
 
 ### Phase 4 — Roles + privacy-safe aggregation (database)
 
-Create a new migration (next free number, e.g. `018_roles_and_commune_summary.sql`) containing exactly the following. Review it carefully before applying; fix real errors but keep the privacy properties.
+Create `019_roles_and_commune_summary.sql` containing the following. Review it carefully before applying; fix real errors but keep the privacy properties. (`018` is already used by the admin-boundaries migration.)
 
 ```sql
 -- 1. Role on profiles
@@ -209,7 +209,8 @@ returns table (
   radar_flag_count integer,
   no_data_count integer,
   last_alert_at timestamptz,
-  suppressed boolean
+  suppressed boolean,
+  includes_demo boolean
 )
 language plpgsql
 security definer
@@ -229,7 +230,7 @@ begin
     order by a.field_id, a.sent_at desc
   ),
   shared as (
-    select f.commune_code as ccode, l.status, l.sent_at
+    select f.commune_code as ccode, f.name as field_name, l.status, l.sent_at
     from fields f
     left join latest l on l.field_id = f.id
     where f.share_with_authorities = true
@@ -244,7 +245,8 @@ begin
            count(*) filter (where s.status = 'stressed')::int as stressed,
            count(*) filter (where s.status = 'radar_flag')::int as radar_flag,
            count(*) filter (where s.status is null or s.status = 'no_data')::int as no_data,
-           max(s.sent_at) as last_alert
+           max(s.sent_at) as last_alert,
+           bool_or(s.field_name like '[DEMO]%') as includes_demo
     from shared s
     group by s.ccode
   )
@@ -256,7 +258,8 @@ begin
          case when a.n >= 3 then a.radar_flag end,
          case when a.n >= 3 then a.no_data end,
          case when a.n >= 3 then a.last_alert end,
-         (a.n < 3)
+         (a.n < 3),
+         coalesce(a.includes_demo, false)
   from agg a
   join admin_communes c on c.code = a.ccode
   order by c.province_code, c.district_code, c.code;
@@ -269,7 +272,7 @@ grant execute on function public.get_commune_stress_summary(text) to authenticat
 
 **Notes you must honor:**
 - Granting the role is manual (SQL editor, as postgres): `update profiles set role = 'extension_viewer' where id = '<user uuid>';`. There is no self-serve upgrade path. Do not build one.
-- **Limitation:** statuses come from `alerts_log`, which only has rows for fields whose owner linked Telegram. Fields without alert rows count as `no_data`. For the demo, create a clearly-labelled **demo seed** (`scripts/seed-demo-shared-fields.sql`): ~12 fake fields across 3–4 communes (≥3 per commune) with `share_with_authorities = true` and matching `alerts_log` rows, using a dedicated demo owner profile. Mark every demo row (e.g. field name prefix `[DEMO]`) so it can be deleted with one statement. In the UI, show a visible "Includes demo data" notice whenever any `[DEMO]` field exists in the viewer's results — this requires NOT exposing names; instead, derive the notice from a separate boolean returned by the function or a config flag. Propose the simplest honest approach to Tra before implementing.
+- **Limitation:** statuses come from `alerts_log`, which only has rows for fields whose owner linked Telegram. Fields without alert rows count as `no_data`. For the demo, use `migrations/seed/demo_shared_fields.sql`: 12 fake fields across 4 communes (3 per commune) with `share_with_authorities = true` and matching `alerts_log` rows, owned by the first `extension_viewer` profile. Every demo row uses the `[DEMO]` name prefix, so it can be deleted with one statement. The summary function returns `includes_demo` (derived inside the security-definer function from the name prefix), never the names themselves; the `/government` UI uses that boolean for the “Includes demo data” notice.
 - Report (do not fix) that `profiles` RLS "update own profile" also lets users edit their own `subscription_*`, `max_aois`, `max_hectares` columns. Out of scope here, but Tra should know.
 
 ### Phase 5 — `/government` view (frontend)
