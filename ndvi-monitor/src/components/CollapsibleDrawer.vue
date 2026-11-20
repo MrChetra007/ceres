@@ -123,7 +123,7 @@ defineExpose({ open: isOpen, close, toggle })
   color: var(--text);
   cursor: pointer;
   font-size: 16px;
-  transition: background 0.15s, border-color 0.15s, box-shadow 0.15s;
+  transition: background 0.15s, border-color 0.15s, box-shadow 0.15s, opacity 0.15s;
   z-index: 10;
 }
 
@@ -228,7 +228,8 @@ defineExpose({ open: isOpen, close, toggle })
 .drawer-slide-left-leave-active,
 .drawer-slide-right-enter-active,
 .drawer-slide-right-leave-active {
-  transition: transform 0.25s ease;
+  transition: transform 0.2s cubic-bezier(0.22, 0.61, 0.36, 1);
+  will-change: transform;
 }
 
 .drawer-slide-left-enter-from,
@@ -246,11 +247,35 @@ defineExpose({ open: isOpen, close, toggle })
   .collapsible-drawer {
     top: var(--topbar-height, 56px);
   }
+  .drawer-panel {
+    /* Never let a fixed 360px drawer overflow a narrow phone. */
+    width: min(var(--drawer-width, 300px), calc(100vw - 12px));
+  }
+  .drawer-body {
+    padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  }
+  /* Opened drawers already have a close button; hide the edge tab so it does
+     not sit on top of content. */
+  .collapsible-drawer.open .drawer-tab {
+    opacity: 0;
+    pointer-events: none;
+  }
   .drawer-tab {
     width: 44px;
     height: 44px;
   }
   .collapsible-drawer.left .drawer-tab { left: 4px; }
   .collapsible-drawer.right .drawer-tab { right: 4px; }
+}
+
+@media (max-width: 480px) {
+  .drawer-panel {
+    width: 100vw;
+    max-width: 100vw;
+  }
+  .collapsible-drawer.left .drawer-panel,
+  .collapsible-drawer.right .drawer-panel {
+    border-radius: 0;
+  }
 }
 </style>

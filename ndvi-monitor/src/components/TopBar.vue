@@ -201,7 +201,7 @@ import { useI18n } from '../i18n'
 import logo1 from '../assets/logos-icons/logo1.png'
 // import { installApp as pwaInstallApp, showInstallHint } from '../services/pwa' // PWA disabled
 
-defineEmits(['menu'])
+const emit = defineEmits(['menu'])
 
 const { t } = useI18n()
 
@@ -293,7 +293,7 @@ function brandMenuClick() {
 
 function openFields() {
   hamburgerOpen.value = false
-  $emit('menu')
+  emit('menu')
 }
 
 function goCurrentLocation() {

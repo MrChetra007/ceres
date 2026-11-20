@@ -110,6 +110,24 @@ function openDashboard() {
 
 watch(leftDrawerOpen, (v) => {
   document.body.style.overflow = v ? 'hidden' : ''
+  if (v && store.isMobileViewport()) {
+    state.observationsVisible = false
+    state.infoPanelVisible = false
+  }
+})
+
+// Phones only show one surface at a time. Picking a field from the fields
+// drawer closes that drawer so the detail drawer is the single thing on top.
+watch(() => state.currentFieldId, (id) => {
+  if (id && store.isMobileViewport()) leftDrawerOpen.value = false
+})
+
+// Opening the observations sheet closes the drawers underneath it.
+watch(() => state.observationsVisible, (v) => {
+  if (v && store.isMobileViewport()) {
+    leftDrawerOpen.value = false
+    state.infoPanelVisible = false
+  }
 })
 
 // Each statusText update restarts the window, so the LAST message of a rapid
@@ -131,6 +149,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   destroySatAnim()
+  document.body.style.overflow = ''
 })
 
 watch(

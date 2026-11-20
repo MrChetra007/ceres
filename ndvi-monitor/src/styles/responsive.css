@@ -117,6 +117,10 @@
 }
 
 @media (max-width: 480px) {
+  /* Keep every fixed panel (drawers, detail panel) aligned to the 48px topbar
+     instead of the desktop 56px fallback. */
+  :root { --topbar-height: 48px; }
+
   /* Compact single-row header: icon-only logo (opens the drawer) + search
      (dominant) + hamburger. App name / BATTAMBANG rows move into the drawer. */
   .topbar {

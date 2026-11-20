@@ -36,6 +36,12 @@ function deferIdle(fn) {
   else setTimeout(fn, 50)
 }
 
+// One-surface-at-a-time rule for phones. Desktop can keep the fields drawer,
+// detail drawer and observations sheet open together; a 360px viewport cannot.
+export function isMobileViewport() {
+  return typeof window !== 'undefined' && window.matchMedia('(max-width: 780px)').matches
+}
+
 // Fold EXACTLY-identical concurrent Earth Engine tile loads into one request.
 // On sign-in the map tiles the default area (beginSessionWork) and then the
 // user's first saved area loads (loadAoisFromSupabase -> applyAoiBounds) with
@@ -1858,6 +1864,7 @@ export function onMapClick(lat, lng) {
   state.lastClickPoint = { lat, lng }
   state.chartSubtitle = lat.toFixed(4) + ', ' + lng.toFixed(4)
   state.infoPanelVisible = true
+  if (isMobileViewport()) state.observationsVisible = false
   if (!state.eeReady) {
     setStatus('error', 'Sign in to load ' + INDICES[state.currentIndex].name + ' trends')
     return
@@ -2360,8 +2367,9 @@ export function loadField(field) {
   // Surface the observations day-strip automatically: selecting a field is
   // what makes the slider's blue observation bands appear, and this strip is
   // what explains them. Deselecting does NOT force it closed — the user's
-  // last manual toggle wins there.
-  state.observationsVisible = true
+  // last manual toggle wins there. On phones the detail drawer already covers
+  // the map, so keep the sheet closed and let the user open it from its tab.
+  state.observationsVisible = !isMobileViewport()
   state.chartSubtitle = field.name
 
   // Compare mode's right-panel tile still needs its own request (different

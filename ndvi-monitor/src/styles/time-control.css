@@ -376,6 +376,12 @@
   .range-input { max-width: 110px; }
 }
 
+@media (max-width: 480px) {
+  /* The flood/drought/dry-rain key is explanatory, not interactive; on a
+     phone the markers + month label are enough and the map needs the space. */
+  .event-legend { display: none; }
+}
+
 .scrubber-wrap { overflow: hidden; display: grid; grid-template-rows: 1fr; transition: grid-template-rows 0.3s ease; }
 .time-panel.collapsed .scrubber-wrap { grid-template-rows: 0fr; }
 .scrubber-wrap > * { min-height: 0; }

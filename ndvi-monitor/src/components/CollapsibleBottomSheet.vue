@@ -71,7 +71,7 @@ defineExpose({ open: isOpen, close, toggle })
 <style scoped>
 .collapsible-bottom-sheet {
   position: fixed;
-  bottom: 12px;
+  bottom: calc(12px + env(safe-area-inset-bottom, 0px));
   left: 50%;
   transform: translateX(-50%);
   width: auto;
@@ -168,13 +168,15 @@ defineExpose({ open: isOpen, close, toggle })
 /* Slide transition */
 .sheet-slide-enter-active,
 .sheet-slide-leave-active {
-  transition: transform 0.3s ease, opacity 0.2s ease;
+  /* Transform-only: opacity on a full-width sheet forces an extra paint pass
+     every frame and is the main source of visible stutter on mobile. */
+  transition: transform 0.22s cubic-bezier(0.22, 0.61, 0.36, 1);
+  will-change: transform;
 }
 
 .sheet-slide-enter-from,
 .sheet-slide-leave-to {
   transform: translateY(100%);
-  opacity: 0;
 }
 
 /* When open, the tab stays visible as a handle */
@@ -192,20 +194,24 @@ defineExpose({ open: isOpen, close, toggle })
     width: 100%;
     left: 0;
     transform: none;
+    bottom: calc(8px + env(safe-area-inset-bottom, 0px));
   }
   .sheet-tab {
     padding: 10px 16px 14px;
   }
   .sheet-panel {
-    max-height: calc(100vh - 220px) !important;
+    max-height: 55dvh !important;
+  }
+  .sheet-content {
+    padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px));
   }
 }
 @media (max-width: 480px) {
   .collapsible-bottom-sheet {
-    bottom: 8px;
+    bottom: calc(6px + env(safe-area-inset-bottom, 0px));
   }
   .sheet-panel {
-    max-height: calc(100vh - 260px) !important;
+    max-height: 55dvh !important;
   }
 }
 </style>

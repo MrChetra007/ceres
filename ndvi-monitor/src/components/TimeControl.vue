@@ -262,14 +262,15 @@ import { formatMonthYear } from "../services/format";
 
 const { t } = useI18n();
 const playing = ref(false);
-// The panel starts expanded by default on every viewport; the user's own
-// collapse/expand choice is still persisted so it survives reloads.
+// Desktop starts expanded. Phones start with the slim bar so the map is not
+// squeezed by the scrubber, event legend and tick row; the user's own choice
+// is still persisted so it survives reloads.
 const isMobile = ref(window.matchMedia("(max-width: 780px)").matches);
 const TC_KEY = "ndvi-tc-collapsed-v2";
 let savedCollapsed = null;
 try { savedCollapsed = localStorage.getItem(TC_KEY); } catch (e) {}
 const collapsed = ref(
-  savedCollapsed !== null ? savedCollapsed === "1" : false,
+  savedCollapsed !== null ? savedCollapsed === "1" : isMobile.value,
 );
 let playTimer = null;
 let debounceTimer = null;
