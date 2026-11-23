@@ -9,8 +9,9 @@
 const OPEN_METEO_URL = 'https://api.open-meteo.com/v1/forecast'
 const FORECAST_DAYS = 5
 const CACHE_TTL_MS = 15 * 60 * 1000
-// TEST FLAG: cache disabled globally — every field open refetches the forecast.
-const USE_CACHE = false
+// Per-browser cache, keyed by centroid. Forecast is location-based (not
+// geometry), so this never goes stale from a field boundary edit.
+const USE_CACHE = true
 const cache = new Map()
 
 function cacheKey(lat, lng) {

@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js'
-import { centroid as turfCentroid } from '@turf/turf'
+import turfCentroid from '@turf/centroid'
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from '../config'
 
 export const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {

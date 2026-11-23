@@ -1,20 +1,17 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { state, loadSubscription } from '../store'
 import LandingPage from '../views/LandingPage.vue'
-import MapView from '../views/MapView.vue'
-import PricingPage from '../views/PricingPage.vue'
-import BillingRedirect from '../views/BillingRedirect.vue'
 
 const routes = [
   { path: '/', name: 'landing', component: LandingPage },
-  { path: '/map', name: 'map', component: MapView },
+  { path: '/map', name: 'map', component: () => import('../views/MapView.vue') },
   {
     path: '/government',
     name: 'government',
     component: () => import('../views/GovernmentDashboard.vue'),
   },
-  { path: '/pricing', name: 'pricing', component: PricingPage },
-  { path: '/billing', name: 'billing', component: BillingRedirect },
+  { path: '/pricing', name: 'pricing', component: () => import('../views/PricingPage.vue') },
+  { path: '/billing', name: 'billing', component: () => import('../views/BillingRedirect.vue') },
 ]
 
 const router = createRouter({

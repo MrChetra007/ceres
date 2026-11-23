@@ -8,13 +8,13 @@
     @pointercancel="onPointerUp"
   >
     <div class="cmp-layer cmp-before">
-      <img :src="beforeSrc" :alt="beforeLabel" draggable="false" />
+      <img :src="beforeSrc" :alt="beforeLabel" draggable="false" loading="lazy" decoding="async" />
     </div>
     <div
       class="cmp-layer cmp-after"
       :style="{ clipPath: 'inset(0 0 0 ' + split + '%)' }"
     >
-      <img :src="afterSrc" :alt="afterLabel" draggable="false" />
+      <img :src="afterSrc" :alt="afterLabel" draggable="false" loading="lazy" decoding="async" />
     </div>
     <div class="cmp-handle" :style="{ left: split + '%' }">
       <div class="cmp-grip"></div>

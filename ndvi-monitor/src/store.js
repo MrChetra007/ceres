@@ -1,6 +1,5 @@
 import { reactive, shallowRef } from 'vue'
-import { area as turfArea } from '@turf/turf'
-import { jsPDF } from 'jspdf'
+import turfArea from '@turf/area'
 import {
   MONTHS, DEFAULT_AOI, DEFAULT_PRESETS,
   RICE_GROWTH_STAGES, GENERIC_GROWTH_STAGES, EVENTS, EVENT_COLORS, INDICES, TRUE_COLOR, MAP_CENTER, MAP_ZOOM,
@@ -224,9 +223,9 @@ export const fieldTrends = reactive({})
 // fieldTrends (that one is NDVI+fields-only for dashboard sparklines).
 const chartCache = new Map()
 const CHART_CACHE_TTL_MS = 15 * 60 * 1000
-// TEST FLAG: chartCache is unused while this flag is off, so every index/range
-// toggle refetches fresh from the server. Flip back to true to restore caching.
-const USE_CHART_CACHE = false
+// Enabled: safe because invalidateChartCacheForField() clears a field's entries
+// on every boundary edit, so a reshaped field never reads old-geometry series.
+const USE_CHART_CACHE = true
 
 // A field edit reshapes its geometry, so every cached series for that field
 // (all indices, all ranges) describes the old boundary. Planting-date edits do
@@ -3073,8 +3072,9 @@ export function exportChart() {
   link.click()
 }
 
-export function exportPdf() {
+export async function exportPdf() {
   if (!infoChart) { showToast('Click a location on the map first'); return }
+  const { jsPDF } = await import('jspdf')
   const doc = new jsPDF('p', 'mm', 'a4')
   const pw = doc.internal.pageSize.getWidth()
   let y = 20

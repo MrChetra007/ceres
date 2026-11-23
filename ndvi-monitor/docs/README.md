@@ -3,6 +3,10 @@
 Internal project docs for the NDVI Rice Monitor (Ceres). Previously scattered
 across the repo root, now grouped by purpose.
 
+## Start Here
+
+- `PROJECT_CONTEXT.md` — compact handoff for a new AI/developer: product, architecture, current state, gotchas, commands.
+
 ## Roadmaps & Planning
 
 `roadmaps/` — long-range plans, phase scopes, build guides.

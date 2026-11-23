@@ -174,6 +174,8 @@
             <img
               src="/landing-assets/step-angkor-thom.jpg"
               alt="Aerial view of rice fields near Angkor Thom, Cambodia"
+              loading="lazy"
+              decoding="async"
             />
             <div class="cap">{{ t('landing.how_1_cap') }}</div>
           </div>
@@ -191,6 +193,8 @@
             <img
               src="/landing-assets/step-nasa-mekong.jpg"
               alt="Satellite data over the Mekong Delta rice region, NASA"
+              loading="lazy"
+              decoding="async"
             />
             <div class="cap">{{ t('landing.how_2_cap') }}</div>
           </div>
@@ -208,6 +212,8 @@
             <img
               src="/landing-assets/step-water-buffalo.jpg"
               alt="Farmer with water buffalo in a rice paddy"
+              loading="lazy"
+              decoding="async"
             />
             <div class="cap">{{ t('landing.how_3_cap') }}</div>
           </div>
@@ -225,6 +231,8 @@
             <img
               src="/landing-assets/step-transplanting.jpg"
               alt="Farmers transplanting rice seedlings in Cambodia"
+              loading="lazy"
+              decoding="async"
             />
             <div class="cap">{{ t('landing.how_4_cap') }}</div>
           </div>
@@ -242,6 +250,8 @@
             <img
               src="/landing-assets/hero-rice-fields.jpg"
               alt="Rice fields in Cambodia at sunset"
+              loading="lazy"
+              decoding="async"
             />
             <div class="cap">{{ t('landing.how_5_cap') }}</div>
           </div>
@@ -470,7 +480,7 @@ import { state } from "../store.js";
 import * as store from "../store.js";
 import { sb } from "../services/supabase.js";
 import { landingIndices } from "../data/landing-indices.js";
-import logo1 from "../assets/logos-icons/logo1.png";
+import logo1 from "../assets/logos-icons/logo1-opt.png";
 import IndexSection from "../components/landing-page/IndexSection.vue";
 import PricingCards from "../components/PricingCards.vue";
 // import { promptInstall } from "../services/pwa"; // disabled while diagnosing production loading

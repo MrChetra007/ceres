@@ -15,9 +15,10 @@
 
 export const AIM_CACHE_TTL_MS = 5 * 24 * 60 * 60 * 1000 // 5 days
 
-// TEST FLAG: AIM score cache disabled globally — every field reopen recomputes
-// the composite score fresh. Flip back to true to restore the 5-day reuse.
-const USE_AIM_CACHE = false
+// Enabled. The cache key includes a hash of the field geometry, so a boundary
+// edit reliably produces a new key and can never read a score computed for the
+// old polygon.
+const USE_AIM_CACHE = true
 
 const aimCache = new Map()
 
@@ -33,10 +34,23 @@ export function setAimCache(field, snapshot, month) {
   if (USE_AIM_CACHE) aimCache.set(cacheKey(field, month), { snapshot, fetchedAt: Date.now() })
 }
 
+// FNV-1a hash of the field geometry so any boundary change yields a new key.
+function geometrySignature(field) {
+  const g = field.geojson && (field.geojson.geometry || field.geojson)
+  if (!g) return ''
+  const s = JSON.stringify(g)
+  let h = 0x811c9dc5
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i)
+    h = Math.imul(h, 0x01000193)
+  }
+  return (h >>> 0).toString(16)
+}
+
 function cacheKey(field, month) {
   const mKey =
     month && month.year != null && month.month != null
       ? month.year + '-' + month.month
       : ''
-  return field.id + '|' + (field.plantingDate || '') + '|' + mKey
+  return field.id + '|' + (field.plantingDate || '') + '|' + geometrySignature(field) + '|' + mKey
 }

@@ -94,7 +94,7 @@ import { ref } from 'vue'
 import { state } from '../store'
 import * as store from '../store'
 import { useI18n } from '../i18n'
-import logo1 from '../assets/logos-icons/logo1.png'
+import logo1 from '../assets/logos-icons/logo1-opt.png'
 
 const { t } = useI18n()
 
