@@ -103,6 +103,16 @@
         <p class="stage-days mono">{{ stageDaysText }}</p>
       </div>
 
+      <!-- Seasonal timing nudge (Phase 3): stage-timed guidance that does not
+           change the action tier — e.g. top-dressing window or pre-harvest drain. -->
+      <div v-if="season" class="detail-section season-card">
+        <div class="season-head">
+          <p class="detail-card-label">{{ t('season.heading') }}</p>
+          <span class="season-window">{{ t(season.windowKey) }}</span>
+        </div>
+        <p class="season-tip">{{ t(season.tipKey) }}</p>
+      </div>
+
       <!-- Decision card (Phase 1): one deterministic "what to do" — tier,
            action window, next steps and what to verify. Built by the shared
            decision engine so the UI and Telegram always agree. -->
@@ -425,6 +435,7 @@ import { getRecentIndexValue, getRainfallDetail, getFieldHealthScore, polygonGeo
 import { getWeatherContext } from '../services/weatherService'
 import { getAimCache, setAimCache } from '../services/aimScoreCache'
 import { buildDecision, localizeDecision } from '../services/decision'
+import { seasonNudge } from '../services/season'
 import turfCentroid from '@turf/centroid'
 import { formatMonthYear, stageName as stageNameKm, daySinceLabel, formatDate, isSameMonth as isSameMonthDates, toKhmerDigits, confReason } from '../services/format'
 import { useI18n } from '../i18n'
@@ -1013,6 +1024,16 @@ const stressMsg = computed(() => {
   if (cls === 'stressed') return t('field.stress_high')
   if (cls === 'moderate') return t('field.stress_moderate')
   return t('field.stress_healthy')
+})
+
+// Seasonal timing nudge (Phase 3) — stage-based, independent of the band tab.
+const season = computed(() => {
+  if (!isField.value || prePlanting.value) return null
+  const f = currentField.value
+  if (!f) return null
+  const days = growthStageDays.value
+  const stage = days != null && days >= 0 ? store.getGrowthStage(days, f).stage : null
+  return seasonNudge({ stage, cropEnglish: f.cropEnglish || null })
 })
 
 // ── Phase 1 decision card ──────────────────────────────────────────────────

@@ -340,6 +340,24 @@ export default {
   'triage.calm': 'All monitored fields look normal — no action needed today.',
   'triage.loading': 'Checking fields…',
 
+  // Phase 3 — seasonal timing nudge
+  'season.heading': 'Season note',
+  'season.window_establishment': 'Establishment',
+  'season.window_vegetative': 'Top-dressing & weeding',
+  'season.window_reproductive': 'Water-sensitive',
+  'season.window_grainfill': 'Grain fill',
+  'season.window_maturity': 'Pre-harvest',
+  'season.tip_establishment_rice': 'Seedlings are establishing — keep the soil moist but avoid deep water over young plants.',
+  'season.tip_establishment_generic': 'Young plants are establishing — keep the soil consistently moist and check for missing plants.',
+  'season.tip_vegetative_rice': 'This is the usual window for a first top-dressing and weeding; keep shallow water in the paddy.',
+  'season.tip_vegetative_generic': 'This is the usual window to weed and check for pests; keep the soil consistently moist.',
+  'season.tip_reproductive_rice': 'The most water-sensitive weeks — keep shallow water and avoid disturbing the crop; scout for pests.',
+  'season.tip_reproductive_generic': 'The most water-sensitive weeks — keep moisture steady and avoid spraying during flowering.',
+  'season.tip_grainfill_rice': 'Grains are filling — maintain moisture until about two weeks before harvest.',
+  'season.tip_grainfill_generic': 'Fruit and grain are filling — keep moisture steady until close to harvest.',
+  'season.tip_maturity_rice': 'Drain the field about 1–2 weeks before harvest and plan harvest timing.',
+  'season.tip_maturity_generic': 'Ease off watering and prepare for harvest.',
+
   // Field form modal (new-field save flow)
   'field_form.new_field': 'New field',
   'field_form.hint': 'Add your field details — name, planting date and crop.',

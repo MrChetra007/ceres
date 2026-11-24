@@ -975,16 +975,32 @@ export function updateSceneCount(count, isRight) {
   state.sceneCount[isRight ? 'right' : 'main'] = count
 }
 
+// Leaflet's TileLayer default maxZoom is 18, but the basemap is configured for
+// 19. Without matching maxZoom here, the index overlay silently stops
+// requesting tiles at zoom 19 (the basemap keeps zooming, the layer vanishes).
+// maxNativeZoom 18 makes Leaflet upscale the z18 tiles instead of asking Earth
+// Engine for over-zoomed (wasteful) z19 tiles.
+const OVERLAY_MAX_ZOOM = 19
+const OVERLAY_MAX_NATIVE_ZOOM = 18
+
 function applyTileLayer(map, layer, url, opacity) {
   // The Leaflet map can still be waiting on its deferred CDN scripts when an
   // ee-data response lands. Nothing to attach to yet; the map-ready path will
   // request the current month again.
   if (!map) return layer
-  const opts = { opacity: opacity || 0.8, zIndex: 950 }
+  const opts = {
+    opacity: opacity || 0.8,
+    zIndex: 950,
+    maxZoom: OVERLAY_MAX_ZOOM,
+    maxNativeZoom: OVERLAY_MAX_NATIVE_ZOOM,
+  }
   // Reuse the existing overlay layer where possible: swapping the URL with
   // setUrl() avoids Leaflet tearing down and re-creating the whole tile pane on
   // every slider/month change (which re-downloads tiles and causes flicker).
   if (layer && layer.setUrl) {
+    // Keep an overlay created before this option existed consistent too.
+    layer.options.maxZoom = OVERLAY_MAX_ZOOM
+    layer.options.maxNativeZoom = OVERLAY_MAX_NATIVE_ZOOM
     layer.setUrl(url)
     layer.setOpacity(opts.opacity)
     layer.setZIndex(opts.zIndex)
@@ -1000,8 +1016,15 @@ function applyTileLayer(map, layer, url, opacity) {
 // semi-transparent index overlay) and must stay above the basemap.
 function applyTrueColorLayer(map, layer, url) {
   if (!map) return layer
-  const opts = { opacity: 1, zIndex: 951 }
+  const opts = {
+    opacity: 1,
+    zIndex: 951,
+    maxZoom: OVERLAY_MAX_ZOOM,
+    maxNativeZoom: OVERLAY_MAX_NATIVE_ZOOM,
+  }
   if (layer && layer.setUrl) {
+    layer.options.maxZoom = OVERLAY_MAX_ZOOM
+    layer.options.maxNativeZoom = OVERLAY_MAX_NATIVE_ZOOM
     layer.setUrl(url)
     layer.setOpacity(opts.opacity)
     layer.setZIndex(opts.zIndex)

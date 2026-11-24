@@ -854,3 +854,35 @@
   border-radius: 8px;
   border: 0.5px solid var(--panel-border);
 }
+
+/* ---- Seasonal timing nudge (Phase 3) ---- */
+.season-card {
+  border-left: 3px solid var(--blue);
+}
+.season-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.season-head .detail-card-label {
+  margin: 0;
+}
+.season-window {
+  font-size: 9.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: rgba(79, 168, 255, 0.14);
+  color: var(--blue);
+  white-space: nowrap;
+}
+.season-tip {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--text);
+}

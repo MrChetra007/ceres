@@ -11,6 +11,9 @@ import {
   decisionPromptBlock,
   decisionText,
 } from "../_shared/decision.ts";
+// Phase 3 seasonal timing nudge — shared phase rules with the client
+// (src/services/season.js). Timing only; never overrides the decision tier.
+import { seasonNudge, seasonPromptBlock } from "../_shared/season.ts";
 import { getWeatherContext } from "../_shared/weather.ts";
 import type { WeatherContext } from "../_shared/weather.ts";
 import {
@@ -582,6 +585,12 @@ async function buildAdvisoryPrompt(
     cropEnglish: (field as any).crop_english || null,
   });
   const decisionBlock = decisionPromptBlock(decision);
+  const seasonBlock = seasonPromptBlock(
+    seasonNudge({
+      stage,
+      cropEnglish: (field as any).crop_english || null,
+    }),
+  );
 
   const prompt = `You are writing a short Telegram alert for a rice farmer in Battambang, Cambodia, about their field named "${field.name}".
 Satellite data: NDVI ${ndvi.toFixed(2)} (${pctLine}), LSWI (moisture) ${lswi == null ? "n/a" : lswi.toFixed(2)}, rainfall (21 days) ${rainText}, growth stage: ${stageText}, current status: ${statusLabel}.
@@ -589,6 +598,7 @@ ${forecastContextLine(weather)}
 ${officialLine ? `${officialLine}\nCurrent conditions describe now, not a prediction; the 5-day forecast above is the only forecast.` : ""}
 
 ${decisionBlock}
+${seasonBlock ? `\n${seasonBlock}` : ""}
 
 ${langLine}
 Write 2-3 short sentences. Describe what the numbers suggest about the likely cause of a stress signal (drought vs. flood vs. normal for this growth stage) and give ONE practical, cautious next step. Use the weather forecast to inform this: mention upcoming rain (or its absence) when it is relevant to the field's situation — e.g. warn that rain is expected soon if the field is dry, or note a dry spell ahead if the forecast shows little rain. IMPORTANT: this is guidance to inform the farmer, NOT a diagnosis — never state a cause with certainty. Always hedge with words like "likely" / "could be". Do not repeat the technical index names (NDVI, LSWI) in the reply itself. Finish with the recommended next step from the DECISION block, phrased naturally — do NOT change the action tier, urgency or recommended step.`;

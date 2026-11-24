@@ -368,6 +368,24 @@ export default {
   "triage.calm": "វាលទាំងអស់ដែលកំពុងតាមដានមើលទៅធម្មតា — មិនចាំបាច់ធ្វើសកម្មភាពថ្ងៃនេះទេ។",
   "triage.loading": "កំពុងពិនិត្យវាល…",
 
+  // Phase 3 — seasonal timing nudge
+  "season.heading": "ចំណាំតាមរដូវ",
+  "season.window_establishment": "ការតាំងទី",
+  "season.window_vegetative": "ដាក់ជី និងសម្អាតស្មៅ",
+  "season.window_reproductive": "ដំណាក់កាលរសើបទឹក",
+  "season.window_grainfill": "ការបំពេញគ្រាប់",
+  "season.window_maturity": "មុនច្រូត",
+  "season.tip_establishment_rice": "កូនស្លឹកកំពុងតាំងទី — រក្សាដីសើម ប៉ុន្តែកុំឲ្យទឹកជ្រៅលើដំណាំក្មេង។",
+  "season.tip_establishment_generic": "ដំណាំក្មេងកំពុងតាំងទី — រក្សាដីសើមជាប់ ហើយពិនិត្យមើលដំណាំដែលខ្វះ។",
+  "season.tip_vegetative_rice": "នេះជារដូវធម្មតាសម្រាប់ដាក់ជីលើកដំបូង និងសម្អាតស្មៅ; រក្សាទឹករាក់ក្នុងស្រែ។",
+  "season.tip_vegetative_generic": "នេះជារដូវធម្មតាសម្រាប់សម្អាតស្មៅ និងពិនិត្យសត្វល្អិត; រក្សាដីសើមជាប់។",
+  "season.tip_reproductive_rice": "សប្តាហ៍រសើបទឹកបំផុត — រក្សាទឹករាក់ ហើយកុំរំខានដំណាំ; ពិនិត្យសត្វល្អិត។",
+  "season.tip_reproductive_generic": "សប្តាហ៍រសើបទឹកបំផុត — រក្សាសំណើមឲ្យនឹង ហើយកុំបាញ់ថ្នាំពេលផ្កា។",
+  "season.tip_grainfill_rice": "គ្រាប់កំពុងបំពេញ — រក្សាសំណើមរហូតដល់ប្រហែលពីរសប្តាហ៍មុនច្រូត។",
+  "season.tip_grainfill_generic": "ផ្លែ និងគ្រាប់កំពុងបំពេញ — រក្សាសំណើមរហូតជិតច្រូត។",
+  "season.tip_maturity_rice": "សម្ងួតស្រែប្រហែល ១–២ សប្តាហ៍មុនច្រូត ហើយរៀបចំពេលច្រូត។",
+  "season.tip_maturity_generic": "បន្ថយការស្រោចទឹក ហើយរៀបចំសម្រាប់ការច្រូត។",
+
   // Field form modal (new-field save flow)
   "field_form.new_field": "វាលថ្មី",
   "field_form.hint": "បន្ថែមព័ត៌មានវាលរបស់អ្នក — ឈ្មោះ កាលបរិច្ឆេទដាំ និងដំណាំ។",

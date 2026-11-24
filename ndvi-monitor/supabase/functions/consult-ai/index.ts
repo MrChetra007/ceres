@@ -1,6 +1,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { generateExplanation, languageLine } from "../_shared/llm.ts";
 import { buildDecision, decisionPromptBlock } from "../_shared/decision.ts";
+import { seasonNudge, seasonPromptBlock } from "../_shared/season.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
@@ -154,6 +155,12 @@ Deno.serve(async (req) => {
       cropEnglish: typeof cropEnglish === "string" ? cropEnglish : null,
     });
     const decisionBlock = decisionPromptBlock(decision);
+    const seasonBlock = seasonPromptBlock(
+      seasonNudge({
+        stage: typeof growthStage === "string" ? growthStage : null,
+        cropEnglish: typeof cropEnglish === "string" ? cropEnglish : null,
+      }),
+    );
 
     // 1. Check cache — only reuse if the reading + status haven't moved. The
     //    legacy ai_explanations.ndvi_value column stores whichever reading was
@@ -304,6 +311,7 @@ ${cropNote}
 ${sensorNote}
 ${confidenceLine}
 ${decisionBlock}
+${seasonBlock ? `\n${seasonBlock}` : ""}
 ${langLine}
 In plain, easy-to-understand language (a short paragraph is fine, longer if needed): describe what the numbers suggest, name 1-2 possible causes as possibilities to check — never state a single cause as certain — and explain enough that the farmer understands the situation. Finish with the recommended next step from the DECISION block, phrased naturally — do NOT change the action tier, urgency or recommended step. Write the reply directly: never restate these instructions, never list evaluation criteria, never write a checklist or plan. Do not use technical jargon like "NDVI" or "LSWI" in the reply itself.`;
 
@@ -318,6 +326,7 @@ Water need at this stage: ${waterNeed}
 ${lastClearSection === "" ? "" : `Note: ${lastClearSection}`}
 ${confidenceLine === "" ? "" : `Remember: ${confidenceLine}`}
 ${decisionBlock}
+${seasonBlock ? `\n${seasonBlock}` : ""}
 ${langLine}
 Use the recommended next step from the DECISION block unchanged. Write the reply directly — no checklist, no plan, no restating these instructions. Do not mention "NDVI", "LSWI" or any index name.`;
 

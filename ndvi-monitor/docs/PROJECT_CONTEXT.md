@@ -63,7 +63,9 @@ The important product distinction: **Ceres is not just a map viewer.** It is a f
   - ranks by action tier, signal score and hectares, and shows the decision headline
 - Telegram digest (Phase 3 — 2026-11-24, slice 2):
   - `ee-alerts-worker` sends one message per chat instead of one per optical field
-- Seasonal timing nudges are still pending.
+- Seasonal timing nudges (Phase 3 — 2026-11-24, slice 3):
+  - stage-timed "Season note" in the field panel + prompt context for AI/Telegram
+  - timing only — never changes the action tier
 
 ### Decision engine (Phase 1 — 2026-11-24)
 
@@ -122,6 +124,16 @@ Details:
 - Each item is capped at 500 chars, the whole digest at 3,800 (Telegram's limit is 4,096). Overflow becomes `…and N more field(s)`; fields omitted from an over-long digest are logged with `telegram_sent = false` because they were not delivered.
 - `alerts_log` still gets one row per field with that field's **individual** message (per-field history/audit) plus the real delivery flag.
 - `no_data` and radar-only messages still send individually — those branches are separate; the digest currently covers the optical NDVI path.
+
+### Seasonal timing nudges (Phase 3 — slice 3, 2026-11-24)
+
+Stage-based timing guidance shown as a "Season note" card in `FieldDetailPanel.vue` and fed to the AI prompts.
+
+- `src/services/season.js` + `supabase/functions/_shared/season.ts` classify the stage into `establishment` / `vegetative` / `reproductive` / `grainfill` / `maturity`, with rice vs generic wording. Keep the two files in sync.
+- Examples: first top-dressing/weeding window, water-sensitive weeks, maintain moisture during grain fill, drain 1–2 weeks before harvest.
+- `consult-ai` and `ee-alerts-worker` add a `SEASON NOTE` block to the prompt; the model may phrase it but must never let it override the `DECISION` block. The deterministic Telegram fallback does not append it.
+- i18n keys: `season.heading`, `season.window_*`, `season.tip_<phase>_<rice|generic>`.
+- Hidden pre-planting and when there is no planting date (no stage to time).
 
 ### Operational steps still required when testing CamDX
 
@@ -190,6 +202,7 @@ ndvi-monitor/
 │   │   ├── dataefService.js     # DataEF current-conditions proxy client
 │   │   ├── weatherService.js    # Open-Meteo forecast
 │   │   ├── decision.js          # Phase 1 decision engine (client mirror)
+│   │   ├── season.js            # Phase 3 seasonal timing (client mirror)
 │   │   └── geocode.js           # Nominatim reverse geocode
 │   ├── i18n/en.js               # English
 │   ├── i18n/km.js               # Khmer
@@ -201,7 +214,7 @@ ndvi-monitor/
 │   ├── consult-ai/              # AI agronomist
 │   ├── telegram-webhook/        # bot linking/photos
 │   ├── trigger-alerts-worker/   # service-role-only manual trigger
-│   └── _shared/                 # llm, weather, dataef, cloudMask, growthStage, decision
+│   └── _shared/                 # llm, weather, dataef, cloudMask, growthStage, decision, season
 ├── migrations/                  # schema + feature migrations
 │   └── seed/                    # admin data, demo data, verify_seed.sql
 └── docs/                        # project docs
@@ -387,6 +400,7 @@ Do not reintroduce these:
 - **Suppression is by latest acknowledgement:** the worker queries `field_actions` filtered to `done` / `snoozed` / `dismissed`, so a later `rated` row never cancels a snooze. Keep that filter when adding new statuses.
 - **Triage uses cached client state:** `TodayTriage.vue` ranks from `fieldStatus` / `fieldTrends` already loaded and intentionally skips rainfall/forecast to avoid an Earth Engine fan-out, so a field's full decision can differ slightly until opened.
 - **Telegram digest scope:** only the optical NDVI path is digested (one message per chat); `no_data` and radar messages still send individually. Item cap is 500 chars, total 3,800; omitted fields log `telegram_sent = false`.
+- **Season note is timing-only:** `src/services/season.js` and `_shared/season.ts` must stay in sync. It never changes tier/urgency; only the LLM prompts include it, not the deterministic Telegram fallback.
 - **PWA disabled intentionally:** manifest link and `attachPwa()` are commented out. Do not enable without dealing with stale service workers.
 - **Secrets:** do not add service-role keys, bot tokens, or JWTs to code. `testcommand.txt` previously contained a bot token and anon JWT; rotate/delete it if it still exists.
 - **Env mismatch:** `.env` uses `SUPABASE_URL` / `SUPABASE_ANON_KEY` without `VITE_`; `src/config.js` reads `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY`, so hardcoded fallbacks are used.
@@ -470,4 +484,5 @@ After any significant change:
 15. Rate the card (thumbs up/down); confirm the feedback row is stored and does not cancel a snooze.
 16. With 2+ fields, open the sidebar and confirm "Today" lists the top actionable fields; clicking one opens it.
 17. With 2+ optical fields linked to the same Telegram chat, run the worker; confirm one combined digest message instead of one message per field.
+18. Open a field with a planting date; confirm the "Season note" window matches the growth stage (e.g. top-dressing while tillering, pre-harvest drain near maturity).
 ```
