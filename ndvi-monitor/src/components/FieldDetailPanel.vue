@@ -5,7 +5,19 @@
         <p class="detail-title">{{ title }}</p>
         <p class="detail-subtitle mono">{{ state.chartSubtitle }}</p>
       </div>
-      <button class="close-btn" @click="onClose">&times;</button>
+      <div class="detail-header-actions">
+        <button
+          type="button"
+          class="icon-btn"
+          :disabled="exportingField"
+          :title="t('export.field_json')"
+          :aria-label="t('export.field_json')"
+          @click="exportFieldJson"
+        >
+          <i :class="exportingField ? 'ti ti-loader-2 ti-spin' : 'ti ti-file-download'"></i>
+        </button>
+        <button class="close-btn" @click="onClose">&times;</button>
+      </div>
     </div>
 
     <template v-if="isField">
@@ -438,6 +450,7 @@ import { getWeatherContext } from '../services/weatherService'
 import { getAimCache, setAimCache } from '../services/aimScoreCache'
 import { buildDecision, localizeDecision } from '../services/decision'
 import { seasonNudge } from '../services/season'
+import { downloadFieldJson } from '../services/fieldExport'
 import turfCentroid from '@turf/centroid'
 import { formatMonthYear, stageName as stageNameKm, daySinceLabel, formatDate, isSameMonth as isSameMonthDates, toKhmerDigits, confReason } from '../services/format'
 import { useI18n } from '../i18n'
@@ -447,6 +460,7 @@ const consultingAi = ref(false)
 const aiExplanation = ref('')
 const aiTruncated = ref(false)
 const photos = ref([])
+const exportingField = ref(false)
 const obsModalOpen = ref(false)
 const observations = ref([])
 const obsLoading = ref(false)
@@ -1248,6 +1262,38 @@ function onClose() {
   // control and the field's clip stay active. Deselect happens via the card
   // (click again) or the sidebar delete action instead.
   state.infoPanelVisible = false
+}
+
+// Per-field JSON export. Passes the data already on screen (AIM, forecast,
+// official weather, decision/season text) so the file matches the panel.
+async function exportFieldJson() {
+  const f = currentField.value
+  if (!f || exportingField.value) return
+  exportingField.value = true
+  try {
+    await downloadFieldJson(f, {
+      status: heroStatus.value,
+      confidence: conf.value,
+      trend: state.chartData,
+      forecast: wxDays.value,
+      officialWeather: officialWeather.value,
+      observations: observations.value,
+      locationNames: locationNames.value,
+      aim: aim.value,
+      aimPhrase: aimPhrase.value,
+      decision: decision.value,
+      decisionText: decisionLocalized.value,
+      season: season.value,
+      seasonText: season.value
+        ? { window: t(season.value.windowKey), tip: t(season.value.tipKey) }
+        : null,
+    })
+    store.showToast(t('export.field_json_done'))
+  } catch (e) {
+    store.showToast(t('export.field_json_failed'))
+  } finally {
+    exportingField.value = false
+  }
 }
 
 async function loadPhotos() {

@@ -3085,83 +3085,217 @@ export function searchPlace(query) {
 // ---------------------------------------------------------------------------
 // Export
 // ---------------------------------------------------------------------------
+function exportIndex() {
+  if (state.chartIndex && INDICES[state.chartIndex]) return state.chartIndex
+  if (state.currentIndex && INDICES[state.currentIndex]) return state.currentIndex
+  return 'ndvi'
+}
+
+function exportField() {
+  return state.fields.find((f) => f.id === state.currentFieldId) || null
+}
+
+function exportFileSlug(name) {
+  return (
+    String(name || 'field')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 48) || 'field'
+  )
+}
+
+// Prefer the enlarged chart when the modal is open; otherwise the panel chart.
+// Both can be hidden/zero-sized, so validate before exporting.
+function chartSourceCanvas() {
+  const ids = state.chartModalVisible
+    ? ['trend-chart-large', 'trend-chart']
+    : ['trend-chart', 'trend-chart-large']
+  for (const id of ids) {
+    const c = document.getElementById(id)
+    if (c && c.width > 0 && c.height > 0) return c
+  }
+  return null
+}
+
+// Composite the chart onto a white page with a title/subtitle so a standalone
+// PNG is readable (the on-screen chart has a transparent background and dark
+// text, which washes out in image viewers).
+function framedChartPng(src, title, subtitle, footer) {
+  const dpr = Math.max(
+    1,
+    Math.min(3, Math.round(src.width / Math.max(1, src.clientWidth || src.width)) || window.devicePixelRatio || 1),
+  )
+  const pad = Math.round(24 * dpr)
+  const headerH = Math.round(62 * dpr)
+  const footerH = Math.round(26 * dpr)
+  const out = document.createElement('canvas')
+  out.width = src.width + pad * 2
+  out.height = src.height + pad * 2 + headerH + footerH
+  const ctx = out.getContext('2d')
+  ctx.fillStyle = '#ffffff'
+  ctx.fillRect(0, 0, out.width, out.height)
+  ctx.textBaseline = 'top'
+
+  ctx.fillStyle = '#0f172a'
+  ctx.font = `700 ${Math.round(17 * dpr)}px -apple-system, "Segoe UI", Roboto, sans-serif`
+  ctx.fillText(title, pad, pad)
+  ctx.fillStyle = '#64748b'
+  ctx.font = `${Math.round(11 * dpr)}px -apple-system, "Segoe UI", Roboto, sans-serif`
+  ctx.fillText(subtitle, pad, pad + Math.round(26 * dpr))
+
+  ctx.drawImage(src, pad, pad + headerH, src.width, src.height)
+
+  ctx.fillStyle = '#94a3b8'
+  ctx.font = `${Math.round(10 * dpr)}px -apple-system, "Segoe UI", Roboto, sans-serif`
+  ctx.fillText(footer, pad, pad + headerH + src.height + Math.round(8 * dpr))
+  return out
+}
+
 export function exportChart() {
-  if (!infoChart) { showToast('Click a location on the map first'); return }
-  const canvas = document.getElementById('trend-chart')
+  const src = chartSourceCanvas()
+  const data = Array.isArray(state.chartData) ? state.chartData : []
+  if (!src || !data.length) {
+    showToast('Open a field and load its chart first')
+    return
+  }
+  const index = exportIndex()
+  const cfg = INDICES[index] || INDICES.ndvi
+  const field = exportField()
+  const date = new Date().toISOString().slice(0, 10)
+  const title = `${field ? field.name : 'Field trend'} \u2014 ${cfg.name}`
+  const subtitle = `${cfg.full || cfg.name} \u00b7 Ceres \u00b7 ${date}`
+  const footer = 'Data: Sentinel-2 (ESA) via Google Earth Engine'
+  const out = framedChartPng(src, title, subtitle, footer)
   const link = document.createElement('a')
-  const cfg = INDICES[state.currentIndex] || TRUE_COLOR
-  link.download = cfg.name + '_trend_report.png'
-  link.href = canvas.toDataURL('image/png')
+  link.download = `${exportFileSlug(field ? field.name : 'field')}_${String(cfg.name).toLowerCase()}_${date}.png`
+  link.href = out.toDataURL('image/png')
   link.click()
 }
 
 export async function exportPdf() {
-  if (!infoChart) { showToast('Click a location on the map first'); return }
+  const src = chartSourceCanvas()
+  const data = Array.isArray(state.chartData) ? state.chartData : []
+  if (!src || !data.length) {
+    showToast('Open a field and load its chart first')
+    return
+  }
   const { jsPDF } = await import('jspdf')
   const doc = new jsPDF('p', 'mm', 'a4')
   const pw = doc.internal.pageSize.getWidth()
-  let y = 20
-  const expCfgStart = INDICES[state.currentIndex] || TRUE_COLOR
+  const ph = doc.internal.pageSize.getHeight()
+  const margin = 14
+  const contentW = pw - margin * 2
+  const index = exportIndex()
+  const cfg = INDICES[index] || INDICES.ndvi
+  const field = exportField()
+  const date = new Date().toISOString().slice(0, 10)
+  let y = margin
 
-  doc.setFontSize(18)
-  doc.setTextColor(26, 26, 46)
-  doc.text(expCfgStart.name + ' Crop Health Report', pw / 2, y, { align: 'center' })
-  y += 10
+  const ensureSpace = (needed) => {
+    if (y + needed <= ph - 16) return
+    doc.addPage()
+    y = margin
+  }
+  const addWrapped = (text, { size = 10, color = [60, 60, 60], lineH = 4.8, gap = 2 } = {}) => {
+    doc.setFontSize(size)
+    doc.setTextColor(color[0], color[1], color[2])
+    const lines = doc.splitTextToSize(String(text || ''), contentW)
+    for (const line of lines) {
+      ensureSpace(lineH)
+      doc.text(line, margin, y)
+      y += lineH
+    }
+    y += gap
+  }
+  const addKeyValue = (label, value) => {
+    if (value === null || value === undefined || value === '') return
+    ensureSpace(6)
+    doc.setFontSize(9.5)
+    doc.setTextColor(120, 128, 140)
+    doc.text(String(label), margin, y)
+    doc.setTextColor(30, 36, 48)
+    doc.text(doc.splitTextToSize(String(value), contentW - 42)[0] || '', margin + 40, y)
+    y += 5.6
+  }
 
+  // Header
+  doc.setFontSize(17)
+  doc.setTextColor(15, 23, 42)
+  doc.text(field ? field.name : 'Field report', margin, y)
+  y += 7
   doc.setFontSize(10)
-  doc.setTextColor(100, 100, 100)
-  doc.text('Generated: ' + new Date().toLocaleDateString(), pw / 2, y, { align: 'center' })
-  y += 10
+  doc.setTextColor(100, 116, 139)
+  doc.text(`${cfg.name} trend report \u00b7 generated ${date}`, margin, y)
+  y += 3
+  doc.setDrawColor(226, 232, 240)
+  doc.line(margin, y, pw - margin, y)
+  y += 7
 
-  doc.setFontSize(12)
-  doc.setTextColor(50, 50, 50)
-  const location = state.currentFieldName || state.chartSubtitle
-  doc.text('Location: ' + location, 14, y)
-  y += 8
-
-  const pts = infoChart.data.datasets[0].data
-  const lastIdx = pts.length - 1
-  if (lastIdx >= 0) {
-    const lastPoint = pts[lastIdx]
-    const lastVal = lastPoint.y
-    const lastDate = new Date(lastPoint.x).toISOString().slice(0, 10)
-    const cfg = INDICES[state.currentIndex] || INDICES.ndvi
-    const statusText = cfg.name === 'NDVI'
-      ? (lastVal > 0.6 ? 'Healthy' : lastVal > 0.3 ? 'Moderate' : 'Stressed')
-      : 'See chart'
-    doc.setFontSize(12)
-    doc.setTextColor(50, 50, 50)
-    doc.text('Latest ' + cfg.name + ': ' + lastVal.toFixed(3) + ' (' + lastDate + ')', 14, y)
-    y += 7
-    doc.setTextColor(lastVal > 0.6 ? 34 : lastVal > 0.3 ? 180 : 220, lastVal > 0.6 ? 197 : lastVal > 0.3 ? 160 : 38, lastVal > 0.3 ? 94 : 38)
-    doc.text('Crop Health: ' + statusText, 14, y)
-    y += 10
+  // Field details
+  const area = field ? getOrComputeArea(field) : null
+  const centroid =
+    field && field.centroidLat != null && field.centroidLng != null
+      ? `${field.centroidLat.toFixed(5)}, ${field.centroidLng.toFixed(5)}`
+      : state.chartSubtitle || null
+  addKeyValue('Field', field ? field.name : '\u2014')
+  addKeyValue('Crop', field ? field.cropName || field.cropEnglish || '\u2014' : '\u2014')
+  addKeyValue('Area', area != null ? `${area.toFixed(1)} ha` : null)
+  addKeyValue('Planting date', field && field.plantingDate ? field.plantingDate : null)
+  addKeyValue('Location', centroid)
+  if (field && (field.provinceCode || field.communeCode)) {
+    addKeyValue(
+      'Admin codes',
+      [field.provinceCode, field.districtCode, field.communeCode, field.villageCode]
+        .filter(Boolean)
+        .join(' / '),
+    )
   }
 
-  const canvas = document.getElementById('trend-chart')
-  const chartImage = canvas.toDataURL('image/png')
-  doc.addImage(chartImage, 'PNG', 14, y, pw - 28, 65)
-  y += 72
-
-  if (state.stressAlert) {
-    doc.setTextColor(133, 100, 4)
-    doc.setFontSize(10)
-    const lines = doc.splitTextToSize(state.stressAlert, pw - 28)
-    doc.text(lines, 14, y)
-    y += lines.length * 5 + 6
+  // Latest reading + status
+  const latest = data[data.length - 1]
+  if (latest && latest.value != null) {
+    addKeyValue('Latest ' + cfg.name, `${Number(latest.value).toFixed(3)} (${String(latest.date).slice(0, 10)})`)
+    const st = field ? fieldStatus[field.id] : null
+    if (index === 'ndvi' && st) {
+      const label =
+        st.badgeClass === 'stressed'
+          ? 'Stressed'
+          : st.badgeClass === 'moderate'
+            ? 'Below expected'
+            : st.badgeClass === 'healthy'
+              ? 'Healthy'
+              : '\u2014'
+      addKeyValue('Crop status', label)
+      if (st.stageLabel) addKeyValue('Growth stage', st.stageLabel)
+    }
+    const conf = field ? fieldConfidence(field) : null
+    if (conf && conf.tier) addKeyValue('Confidence', conf.tier)
   }
+  if (state.rainfallMm != null) addKeyValue('Rainfall (21d)', `${state.rainfallMm.toFixed(0)} mm`)
 
-  y = Math.max(y, 200)
-  doc.setFontSize(9)
-  doc.setTextColor(120, 120, 120)
-  const expCfg = INDICES[state.currentIndex] || INDICES.ndvi
-  doc.text(expCfg.name + ' (' + expCfg.full + ') \u2014 what the values mean:', 14, y); y += 5
-  const expLines = doc.splitTextToSize(expCfg.explain, pw - 28)
-  doc.text(expLines, 14, y); y += expLines.length * 4 + 4
+  // Chart image
+  const chartImage = src.toDataURL('image/png')
+  let imgH = (src.height / src.width) * contentW
+  imgH = Math.min(imgH, 90)
+  ensureSpace(imgH + 10)
+  doc.addImage(chartImage, 'PNG', margin, y, contentW, imgH)
+  y += imgH + 6
+
+  // What the index means
+  addWrapped(`${cfg.name} (${cfg.full}) \u2014 what the values mean:`, { size: 9.5, color: [30, 36, 48], gap: 1 })
+  addWrapped(cfg.explain, { size: 9, color: [80, 90, 105], lineH: 4.4, gap: 3 })
+
+  // Footer
+  ensureSpace(8)
+  doc.setDrawColor(226, 232, 240)
+  doc.line(margin, y, pw - margin, y)
+  y += 5
   doc.setFontSize(8)
-  doc.text('Data source: Sentinel-2 (ESA) via Google Earth Engine', 14, y + 4)
+  doc.setTextColor(140, 148, 160)
+  doc.text('Data: Sentinel-2 (ESA) via Google Earth Engine \u00b7 Ceres', margin, y)
 
-  doc.save(expCfg.name + '_Report_' + new Date().toISOString().slice(0, 10) + '.pdf')
+  doc.save(`${exportFileSlug(field ? field.name : 'field')}_report_${date}.pdf`)
 }
 
 // ---------------------------------------------------------------------------

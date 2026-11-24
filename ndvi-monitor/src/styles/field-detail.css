@@ -45,6 +45,13 @@
   margin-bottom: 12px;
 }
 
+.detail-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+}
+
 .detail-title {
   margin: 0;
   font-size: 15px;

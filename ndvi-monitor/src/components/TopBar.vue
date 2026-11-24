@@ -67,6 +67,7 @@
             </button>
             <button class="settings-item" @click="chooseExport('png')"><i class="ti ti-photo"></i>{{ t('topbar.export_png') }}</button>
             <button class="settings-item" @click="chooseExport('pdf')"><i class="ti ti-file-text"></i>{{ t('topbar.export_pdf') }}</button>
+            <button v-if="state.currentFieldId" class="settings-item" @click="chooseExport('json')"><i class="ti ti-file-code"></i>{{ t('topbar.export_json') }}</button>
             <button class="settings-item" :class="{ on: state.telegramChatId }" @click="openTelegram">
               <i class="ti ti-brand-telegram"></i>{{ t('common.telegram_alerts') }}
               <span class="tg-status-dot" :class="{ on: state.telegramChatId }"></span>
@@ -165,6 +166,14 @@
           </button>
           <button class="settings-item" :title="t('topbar.export_pdf')" @click="chooseExport('pdf')">
             <i class="ti ti-file-text"></i>{{ t('topbar.export_pdf') }}
+          </button>
+          <button
+            v-if="state.currentFieldId"
+            class="settings-item"
+            :title="t('topbar.export_json')"
+            @click="chooseExport('json')"
+          >
+            <i class="ti ti-file-code"></i>{{ t('topbar.export_json') }}
           </button>
           <button
             class="settings-item"
@@ -322,7 +331,20 @@ function chooseExport(fmt) {
   settingsOpen.value = false
   hamburgerOpen.value = false
   if (fmt === 'png') store.exportChart()
-  else store.exportPdf()
+  else if (fmt === 'pdf') store.exportPdf()
+  else if (fmt === 'json') exportFieldJson()
+}
+
+async function exportFieldJson() {
+  const field = state.fields.find((f) => f.id === state.currentFieldId)
+  if (!field) return
+  try {
+    const { downloadFieldJson } = await import('../services/fieldExport')
+    await downloadFieldJson(field)
+    store.showToast(t('export.field_json_done'))
+  } catch (e) {
+    store.showToast(t('export.field_json_failed'))
+  }
 }
 
 function doSearch() {

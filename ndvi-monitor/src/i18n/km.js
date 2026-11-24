@@ -30,6 +30,12 @@ export default {
   "topbar.export": "នាំចេញ",
   "topbar.export_png": "នាំចេញជា PNG",
   "topbar.export_pdf": "នាំចេញជា PDF",
+  "topbar.export_json": "នាំចេញទិន្នន័យវាល (JSON)",
+
+  // Field data export
+  "export.field_json": "នាំចេញទិន្នន័យវាល (JSON)",
+  "export.field_json_done": "បាននាំចេញទិន្នន័យវាល",
+  "export.field_json_failed": "មិនអាចនាំចេញទិន្នន័យវាលបានទេ",
   "topbar.how_this_works": "របៀបប្រើប្រាស់",
   "topbar.help": "ជំនួយ",
   "topbar.install_app": "ដំឡើងកម្មវិធី",

@@ -30,6 +30,12 @@ export default {
   'topbar.export': 'Export',
   'topbar.export_png': 'Export as PNG',
   'topbar.export_pdf': 'Export as PDF',
+  'topbar.export_json': 'Export field data (JSON)',
+
+  // Field data export
+  'export.field_json': 'Export field data (JSON)',
+  'export.field_json_done': 'Field data exported',
+  'export.field_json_failed': 'Could not export field data',
   'topbar.how_this_works': 'How this works',
   'topbar.help': 'Help',
   'topbar.install_app': 'Install app',

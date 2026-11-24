@@ -66,6 +66,9 @@ The important product distinction: **Ceres is not just a map viewer.** It is a f
 - Seasonal timing nudges (Phase 3 — 2026-11-24, slice 3):
   - stage-timed "Season note" in the field panel + prompt context for AI/Telegram
   - timing only — never changes the action tier
+- Clean exports (2026-11-24):
+  - per-field JSON (`ceres.field.v1`) from the field panel and the export menu
+  - readable PNG chart (white frame + title) and a multi-page PDF field report
 
 ### Decision engine (Phase 1 — 2026-11-24)
 
@@ -135,6 +138,13 @@ Stage-based timing guidance shown as a "Season note" card in `FieldDetailPanel.v
 - i18n keys: `season.heading`, `season.window_*`, `season.tip_<phase>_<rice|generic>`.
 - Hidden pre-planting and when there is no planting date (no stage to time).
 
+### Exports (2026-11-24)
+
+- **Per-field JSON:** `src/services/fieldExport.js` builds a clean `ceres.field.v1` document: field metadata + location names/codes + centroid, current index/status/stage/confidence, decision (tier + localized next steps/checks), season note, AIM (when the panel has it), rainfall + forecast + official current conditions, the trend series, and field-check observations. Exposed from the field-panel header download icon and the export menu (menu path exports the canonical NDVI trend without panel-only extras).
+- **PNG:** `store.exportChart` composites the active chart canvas (large modal if open, else the panel) onto a white page with the field name/index title, so it is readable outside the dark UI.
+- **PDF:** `store.exportPdf` writes a multi-page field report (field/crop/area/planting/location, latest value + status + confidence, 21-day rainfall, chart, index explanation, data-source footer). It checks page space before each block.
+- **Notes:** both PNG/PDF use the chart currently on screen (`state.chartData`); without a loaded chart they show a toast. PDF text is English because jsPDF's built-in font cannot render Khmer.
+
 ### Operational steps still required when testing CamDX
 
 If not already done on the target database:
@@ -203,6 +213,7 @@ ndvi-monitor/
 │   │   ├── weatherService.js    # Open-Meteo forecast
 │   │   ├── decision.js          # Phase 1 decision engine (client mirror)
 │   │   ├── season.js            # Phase 3 seasonal timing (client mirror)
+│   │   ├── fieldExport.js       # per-field JSON export (ceres.field.v1)
 │   │   └── geocode.js           # Nominatim reverse geocode
 │   ├── i18n/en.js               # English
 │   ├── i18n/km.js               # Khmer
@@ -402,6 +413,7 @@ Do not reintroduce these:
 - **Telegram digest scope:** only the optical NDVI path is digested (one message per chat); `no_data` and radar messages still send individually. Item cap is 500 chars, total 3,800; omitted fields log `telegram_sent = false`.
 - **Season note is timing-only:** `src/services/season.js` and `_shared/season.ts` must stay in sync. It never changes tier/urgency; only the LLM prompts include it, not the deterministic Telegram fallback.
 - **Chart sizing/range:** the field-panel canvas must stay inside `.chart-canvas-wrap` (not directly under `.chart-card`). Chart.js measures the canvas parent, so a direct child overflows below the header. The y-axis is per-index via `resolveYRange()` — never hard-code `0..1`, because NDWI/LSWI (and negative NDVI) would clip off the frame.
+- **Exports:** PNG/PDF read the on-screen chart canvas (`trend-chart-large` when the modal is open, else `trend-chart`) and `state.chartData`; if either is empty they fail with a toast. The PNG is composited on white for readability. The JSON export is best-effort for async weather/location/observations and never blocks the download.
 - **PWA disabled intentionally:** manifest link and `attachPwa()` are commented out. Do not enable without dealing with stale service workers.
 - **Secrets:** do not add service-role keys, bot tokens, or JWTs to code. `testcommand.txt` previously contained a bot token and anon JWT; rotate/delete it if it still exists.
 - **Env mismatch:** `.env` uses `SUPABASE_URL` / `SUPABASE_ANON_KEY` without `VITE_`; `src/config.js` reads `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY`, so hardcoded fallbacks are used.
@@ -486,4 +498,6 @@ After any significant change:
 16. With 2+ fields, open the sidebar and confirm "Today" lists the top actionable fields; clicking one opens it.
 17. With 2+ optical fields linked to the same Telegram chat, run the worker; confirm one combined digest message instead of one message per field.
 18. Open a field with a planting date; confirm the "Season note" window matches the growth stage (e.g. top-dressing while tillering, pre-harvest drain near maturity).
+19. Open a field → header download icon → confirm a readable JSON file with `field`, `current`, `decision`, `weather`, `trend`, and `observations`.
+20. Export PNG and PDF from the menu; confirm both are non-blank/readable and produce no console error.
 ```
