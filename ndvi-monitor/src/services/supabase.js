@@ -345,3 +345,113 @@ export async function createSignedPhotoUrl(storagePath, expiresIn = 3600) {
   if (error) throw error
   return data ? data.signedUrl : null
 }
+
+// ---------------------------------------------------------------------------
+// Phase 2 feedback loop — field checks + action/feedback log
+// ---------------------------------------------------------------------------
+export async function loadFieldObservations(fieldId, limit = 20) {
+  const { data, error } = await sb
+    .from('field_observations')
+    .select('id, observed_on, tags, outcome, notes, photo_path, source, created_at')
+    .eq('field_id', fieldId)
+    .order('created_at', { ascending: false })
+    .limit(limit)
+  if (error) throw error
+  return data || []
+}
+
+function fileExtension(file) {
+  const name = (file && file.name) || ''
+  const m = /\.([a-z0-9]+)$/i.exec(name)
+  if (m) return m[1].toLowerCase()
+  const type = (file && file.type) || ''
+  if (type.includes('png')) return 'png'
+  if (type.includes('webp')) return 'webp'
+  return 'jpg'
+}
+
+// Save an "I checked my field" observation. The optional photo goes into the
+// same private field-photos bucket (path {owner_id}/{ts}.jpg), so the signed-URL
+// helper used by the photo strip works unchanged.
+export async function saveFieldObservation({ fieldId, tags, outcome, notes, photoFile }) {
+  const session = await requireSession()
+  let photoPath = null
+  if (photoFile) {
+    photoPath = `${session.user.id}/${Date.now()}.${fileExtension(photoFile)}`
+    const { error: upErr } = await sb.storage
+      .from('field-photos')
+      .upload(photoPath, photoFile, {
+        contentType: photoFile.type || 'image/jpeg',
+        upsert: false,
+      })
+    if (upErr) throw upErr
+  }
+  const { data, error } = await sb
+    .from('field_observations')
+    .insert({
+      field_id: fieldId,
+      owner_id: session.user.id,
+      tags: Array.isArray(tags) ? tags : [],
+      outcome: outcome || 'unknown',
+      notes: notes && notes.trim() ? notes.trim() : null,
+      photo_path: photoPath,
+      source: 'app',
+    })
+    .select('id, observed_on, tags, outcome, notes, photo_path, source, created_at')
+    .single()
+  if (error) throw error
+  return data
+}
+
+export async function getLatestAlertId(fieldId) {
+  const { data, error } = await sb
+    .from('alerts_log')
+    .select('id')
+    .eq('field_id', fieldId)
+    .order('sent_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  if (error) throw error
+  return data ? data.id : null
+}
+
+export async function loadLatestFieldAction(fieldId) {
+  const { data, error } = await sb
+    .from('field_actions')
+    .select('id, status, useful, reason, snooze_until, created_at')
+    .eq('field_id', fieldId)
+    // Ratings do not affect "acknowledged" state — only these three do.
+    .in('status', ['done', 'snoozed', 'dismissed'])
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  if (error) throw error
+  return data || null
+}
+
+export async function logFieldAction({
+  fieldId,
+  alertId = null,
+  decisionTier = null,
+  actionKey = null,
+  status = 'done',
+  useful = null,
+  reason = null,
+  snoozeUntil = null,
+  notes = null,
+}) {
+  const session = await requireSession()
+  const { error } = await sb.from('field_actions').insert({
+    field_id: fieldId,
+    owner_id: session.user.id,
+    alert_id: alertId || null,
+    decision_tier: decisionTier || null,
+    action_key: actionKey || null,
+    status,
+    useful: useful === null || useful === undefined ? null : !!useful,
+    reason: reason && String(reason).trim() ? String(reason).trim() : null,
+    snooze_until: snoozeUntil || null,
+    notes: notes || null,
+  })
+  if (error) throw error
+}

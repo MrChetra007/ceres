@@ -53,6 +53,11 @@ The important product distinction: **Ceres is not just a map viewer.** It is a f
   - deterministic `monitor` / `scout` / `act` recommendation from existing signals
   - in-app "What to do" card, decision-aware Consult AI, and tiered Telegram advisories
   - see the “Decision engine (Phase 1)” subsection below
+- Feedback loop (Phase 2 — 2026-11-24):
+  - "I checked my field" observations (tags / outcome / notes / photo) → `field_observations`
+  - append-only action + feedback log → `field_actions` (done / snoozed / dismissed / rated)
+  - Done / Snooze / Dismiss suppress repeat Telegram alerts; usefulness ratings are stored
+  - see the “Feedback loop (Phase 2)” subsection below
 
 ### Decision engine (Phase 1 — 2026-11-24)
 
@@ -71,6 +76,24 @@ Turns the metrics the app already has into one **actionable** recommendation ins
   - `ee-alerts-worker` — computes the decision, prefixes every Telegram message with an authoritative `[Monitor]/[Check field]/[Act now]` tag (Khmer too), and appends a deterministic next step when the LLM falls back.
 - **LLM contract:** the model must never upgrade/downgrade the tier, urgency, or recommended step. Thresholds live in `DECISION_THRESHOLDS` inside both decision files.
 - **Verification:** `npm run build`, plus a Node parity test that runs the client and Deno modules over the same scenarios and asserts identical output.
+
+### Feedback loop (Phase 2 — 2026-11-24)
+
+Closes the loop between an advisory and what the farmer actually sees and does.
+
+- **Migration:** `migrations/020_feedback_loop.sql` (run it before testing). Adds:
+  - `field_observations` — one "field check": `tags` (`water`/`weed`/`pest`/`disease`/`nutrient`/`other`/`none`), `outcome` (`improved`/`same`/`worse`/`unknown`), `notes`, optional `photo_path` in the existing private `field-photos` bucket, `source`.
+  - `field_actions` — append-only log: `status` (`done` / `snoozed` / `dismissed` / `rated`), `decision_tier`, `action_key`, `useful`, `reason`, `snooze_until`, optional `alert_id`.
+  - Owner-only RLS. Inserts require the field to be owned by `auth.uid()` (and, when set, the alert to belong to the same owner).
+- **UI**
+  - `FieldObservationModal.vue` + the "Field checks" card in `FieldDetailPanel.vue`: record a check with a camera photo; the last 3 are shown with tags/outcome/notes.
+  - Decision card footer: **Done** / **Snooze 3 days** / **Dismiss**, plus a usefulness rating (thumbs up/down, optional reason).
+- **Worker suppression:** `ee-alerts-worker` reads the latest `done` / `snoozed` / `dismissed` row per field before doing any Earth Engine work and skips the message:
+  - `snoozed` → skip until `snooze_until`
+  - `dismissed` → skip for 7 days
+  - `done` → skip for 3 days
+  - `rated` → never suppresses
+- **Notes:** a later rating does not cancel a snooze/dismiss — the worker filters to the three acknowledgement statuses. If migration 020 is not applied, the worker treats it as "no acknowledgement" (non-fatal) and the UI inserts fail.
 
 ### Operational steps still required when testing CamDX
 
@@ -234,6 +257,13 @@ Location rules:
 - Clearing commune clears consent.
 - Old fields with null location remain valid.
 
+Phase 2 feedback tables:
+
+```text
+field_observations (id, field_id, owner_id, observed_on, tags text[], outcome, notes, photo_path, source, created_at)
+field_actions      (id, field_id, owner_id, alert_id, decision_tier, action_key, status, useful, reason, snooze_until, notes, created_at)
+```
+
 Admin tables:
 
 ```text
@@ -325,6 +355,8 @@ Do not reintroduce these:
 - **Caches:** `ee-data` server caches are split into three flags: `USE_EE_TILE_CACHE = true` (safe — keyed by `geometry_hash`), `USE_EE_TREND_CACHE = false` and `USE_EE_OBS_CACHE = false` (both keyed by `field_id` only; would serve stale values after a boundary edit until they gain a geometry hash or an edit-invalidation hook). Closed-month tile TTL is 2h, open-month 20min. Client caches are on: `USE_CHART_CACHE = true` (cleared on edit), weather 15-min cache, and `USE_AIM_CACHE = true` (key includes a geometry hash). Verify `ee_tile_cache` exists (run the `select`s in `015/016`) before relying on the tile cache.
 - **Decision engine duplication + LLM contract:** `src/services/decision.js` and `supabase/functions/_shared/decision.ts` must stay identical (same pattern as `growthStage.ts`). The LLM may only phrase the result; it must never change the tier, urgency, or next step. `act` requires a stressed field; low-confidence/radar/no-data cap at `scout`.
 - **Phase 1 deploy order:** deploy `consult-ai` and `ee-alerts-worker` together with the client build so the Telegram tier tag, AI prompt and the "What to do" card agree. Stale `consult-ai/index.js` and `ee-alerts-worker/index.js` duplicates still exist — confirm Supabase deploys the `.ts` entrypoints.
+- **Phase 2 migration required:** run `migrations/020_feedback_loop.sql` before testing field checks or alert suppression. Without it, `field_observations` / `field_actions` inserts fail and the worker silently treats every field as unacknowledged.
+- **Suppression is by latest acknowledgement:** the worker queries `field_actions` filtered to `done` / `snoozed` / `dismissed`, so a later `rated` row never cancels a snooze. Keep that filter when adding new statuses.
 - **PWA disabled intentionally:** manifest link and `attachPwa()` are commented out. Do not enable without dealing with stale service workers.
 - **Secrets:** do not add service-role keys, bot tokens, or JWTs to code. `testcommand.txt` previously contained a bot token and anon JWT; rotate/delete it if it still exists.
 - **Env mismatch:** `.env` uses `SUPABASE_URL` / `SUPABASE_ANON_KEY` without `VITE_`; `src/config.js` reads `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY`, so hardcoded fallbacks are used.
@@ -345,6 +377,9 @@ supabase functions deploy dataef-weather
 supabase functions deploy consult-ai
 supabase functions deploy ee-alerts-worker
 supabase functions deploy trigger-alerts-worker
+
+# Phase 2 feedback loop migration (run once on each database)
+psql -v ON_ERROR_STOP=1 -f .\migrations\020_feedback_loop.sql
 
 # Seed via psql, if using direct SQL
 psql -v ON_ERROR_STOP=1 -f .\migrations\seed\001_admin_provinces.sql
@@ -400,4 +435,7 @@ After any significant change:
 10. Confirm mobile shows one overlay at a time.
 11. On the NDVI tab, confirm the "What to do" card shows a tier, action window and next steps; confirm a cloud-blocked/radar month never shows "Act now".
 12. Run the alerts worker; confirm Telegram messages start with a `[Monitor]` / `[Check field]` / `[Act now]` tag.
+13. Open a field → "I checked my field"; add a tag, an outcome and a photo; confirm it appears under "Field checks".
+14. Tap "Snooze 3 days"; run the alerts worker and confirm that field is skipped while other fields still send.
+15. Rate the card (thumbs up/down); confirm the feedback row is stored and does not cancel a snooze.
 ```

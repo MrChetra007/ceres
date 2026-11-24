@@ -491,6 +491,28 @@ function decisionActionLine(decision: any, lang: string): string {
   return lang === "km" ? `ជំហានបន្ទាប់៖ ${text}` : `Next step: ${text}`;
 }
 
+// Phase 2 — should a repeat alert be skipped because the farmer already
+// acknowledged the previous one? Mirrors the UI's Done / Snooze / Dismiss
+// buttons (field_actions rows):
+//   snoozed   -> skip until snooze_until
+//   dismissed -> skip for 7 days
+//   done      -> skip for 3 days
+//   rated     -> never suppresses (feedback only)
+function shouldSuppressAlert(lastAction: any, now = Date.now()): boolean {
+  if (!lastAction) return false;
+  const created = lastAction.created_at
+    ? new Date(lastAction.created_at).getTime()
+    : 0;
+  if (lastAction.status === "snoozed" && lastAction.snooze_until) {
+    return new Date(lastAction.snooze_until).getTime() > now;
+  }
+  if (lastAction.status === "dismissed")
+    return created > 0 && now - created < 7 * 86400000;
+  if (lastAction.status === "done")
+    return created > 0 && now - created < 3 * 86400000;
+  return false;
+}
+
 // Builds the prompt for the advisory LLM (Phase 13 Feature 1). Kept as its own
 // function so the "reasoning task" is explicit and easy to tune/adjust.
 function forecastContextLine(weather: WeatherContext | null): string {
@@ -615,6 +637,32 @@ Deno.serve(async (_req) => {
         const lang = (field as any).profiles?.preferred_language || "en";
         if (!chatId) continue;
 
+        // Phase 2: respect an explicit acknowledgement (Done / Snooze / Dismiss)
+        // before spending any Earth Engine compute or sending another message.
+        // A missing table (migration 020 not applied yet) is non-fatal.
+        let lastAction: any = null;
+        {
+          const { data, error: faErr } = await supabase
+            .from("field_actions")
+            .select("status, snooze_until, created_at")
+            .eq("field_id", field.id)
+            // Only acknowledgements matter; a later usefulness rating must not
+            // cancel a snooze/dismiss.
+            .in("status", ["done", "snoozed", "dismissed"])
+            .order("created_at", { ascending: false })
+            .limit(1)
+            .maybeSingle();
+          if (!faErr && data) lastAction = data;
+        }
+        if (shouldSuppressAlert(lastAction)) {
+          results.push({
+            field: field.name,
+            skipped: true,
+            reason: "acknowledged",
+          });
+          continue;
+        }
+
         const reading = await getFieldReading(field.geojson);
 
         if (reading.source === "none") {
@@ -701,10 +749,10 @@ Deno.serve(async (_req) => {
           useGeneric,
         );
 
-        // Always send — every run, regardless of whether status changed or
-        // improved. (This intentionally removes the Part 5 dedup/"only on
-        // worsening" guard — every field with a linked chat gets a message
-        // on every worker run.)
+        // Send on every run UNLESS the farmer acknowledged the previous alert
+        // (handled above via field_actions: done/snoozed/dismissed). This keeps
+        // the old "only on worsening" dedup removed while respecting explicit
+        // acknowledgements.
         const rainfall = await getRainfallMm(field.geojson);
         // Weather forecast for the field centroid (never blocks the alert — null
         // on failure means the advisory simply runs without a forecast line).

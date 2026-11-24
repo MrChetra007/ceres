@@ -174,6 +174,45 @@
           </span>
         </div>
         <p class="decision-note">{{ t('decision.disclaimer') }}</p>
+
+        <div class="decision-actions">
+          <button class="da-btn" :disabled="actionBusy" @click="logDecisionAction('done')">
+            <i class="ti ti-check"></i>{{ t('decision.done') }}
+          </button>
+          <button class="da-btn" :disabled="actionBusy" @click="logDecisionAction('snoozed')">
+            <i class="ti ti-clock-pause"></i>{{ t('decision.snooze') }}
+          </button>
+          <button class="da-btn" :disabled="actionBusy" @click="logDecisionAction('dismissed')">
+            <i class="ti ti-x"></i>{{ t('decision.dismiss') }}
+          </button>
+        </div>
+
+        <div class="decision-feedback">
+          <template v-if="ratingOpen">
+            <input
+              v-model="ratingReason"
+              class="decision-rating-input"
+              :placeholder="t('decision.rating_reason_placeholder')"
+              maxlength="200"
+            />
+            <button class="da-btn" :disabled="actionBusy" @click="sendRating(false)">
+              {{ t('decision.send_feedback') }}
+            </button>
+            <button class="da-btn ghost" @click="ratingOpen = false">{{ t('common.cancel') }}</button>
+          </template>
+          <template v-else>
+            <span class="decision-helpful-q">{{ t('decision.helpful_q') }}</span>
+            <button class="da-icon-btn" :disabled="actionBusy" :title="t('decision.helpful')" @click="sendRating(true)">
+              <i class="ti ti-thumb-up"></i>
+            </button>
+            <button class="da-icon-btn" :disabled="actionBusy" :title="t('decision.not_helpful')" @click="openRatingReason">
+              <i class="ti ti-thumb-down"></i>
+            </button>
+          </template>
+        </div>
+        <p v-if="latestAction && latestAction.status === 'snoozed' && latestAction.snooze_until" class="decision-ack">
+          {{ t('decision.snoozed_until', { date: formatDate(latestAction.snooze_until.slice(0, 10), state.preferredLanguage) }) }}
+        </p>
       </div>
 
       <!-- Stress Alert is a NDVI-only health signal (no NDWI/LSWI thresholds
@@ -312,6 +351,30 @@
         </div>
         <p v-else class="photo-empty">{{ t('field.no_photos') }}</p>
       </div>
+
+      <div class="detail-section obs-card" v-if="currentField">
+        <div class="obs-card-head">
+          <p class="detail-card-label">{{ t('obs.heading') }}</p>
+          <button type="button" class="obs-add-btn" @click="obsModalOpen = true">
+            <i class="ti ti-plus"></i>{{ t('obs.add') }}
+          </button>
+        </div>
+        <p v-if="obsLoading" class="obs-empty">{{ t('obs.loading') }}</p>
+        <p v-else-if="!observations.length" class="obs-empty">{{ t('obs.empty') }}</p>
+        <ul v-else class="obs-list">
+          <li v-for="o in observations.slice(0, 3)" :key="o.id" class="obs-item">
+            <div class="obs-item-top">
+              <span class="obs-date mono">{{ o.observed_on }}</span>
+              <span class="obs-outcome" :class="'outcome-' + o.outcome">{{ t('obs.outcome_' + o.outcome) }}</span>
+            </div>
+            <div v-if="o.tags && o.tags.length" class="obs-tags">
+              <span v-for="tg in o.tags" :key="tg" class="obs-tag">{{ t('obs.tag_' + tg) }}</span>
+            </div>
+            <p v-if="o.notes" class="obs-notes">{{ o.notes }}</p>
+            <img v-if="o.url" :src="o.url" class="obs-photo" alt="" />
+          </li>
+        </ul>
+      </div>
     </template>
 
     <div v-if="state.photosLightboxIndex != null" class="photo-lightbox" @click.self="closePhoto">
@@ -325,6 +388,13 @@
       @close="locationModalOpen = false"
       @saved="loadLocationNames"
     />
+
+    <FieldObservationModal
+      :visible="obsModalOpen"
+      :field="currentField"
+      @close="obsModalOpen = false"
+      @saved="loadObservations"
+    />
   </div>
 </template>
 
@@ -337,12 +407,20 @@ import { getOrComputeArea, formatHectares } from '../store'
 import ConfidenceBadge from './ConfidenceBadge.vue'
 import IndexLegend from './IndexLegend.vue'
 import FieldLocationModal from './FieldLocationModal.vue'
+import FieldObservationModal from './FieldObservationModal.vue'
 import { resolveLocation, getProvinceName } from '../services/adminBoundaries'
 import { getProvinceWeather } from '../services/dataefService'
 import { buildChartConfig } from '../services/chart'
 import { INDICES, MONTHS, CONSULT_AI_URL } from '../config'
 import { sb, requireSession, refreshSession } from '../services/supabase'
-import { loadFieldPhotos, createSignedPhotoUrl } from '../services/supabase'
+import {
+  loadFieldPhotos,
+  createSignedPhotoUrl,
+  loadFieldObservations,
+  getLatestAlertId,
+  loadLatestFieldAction,
+  logFieldAction,
+} from '../services/supabase'
 import { getRecentIndexValue, getRainfallDetail, getFieldHealthScore, polygonGeometry } from '../services/earthEngine'
 import { getWeatherContext } from '../services/weatherService'
 import { getAimCache, setAimCache } from '../services/aimScoreCache'
@@ -356,6 +434,15 @@ const consultingAi = ref(false)
 const aiExplanation = ref('')
 const aiTruncated = ref(false)
 const photos = ref([])
+const obsModalOpen = ref(false)
+const observations = ref([])
+const obsLoading = ref(false)
+const latestAction = ref(null)
+const actionBusy = ref(false)
+const ratingOpen = ref(false)
+const ratingReason = ref('')
+let obsReq = 0
+let latestAlertId = null
 let chart = null
 let chartResizeObs = null
 
@@ -1159,6 +1246,128 @@ async function loadPhotos() {
   }
 }
 
+// ── Phase 2: field checks + action/feedback log ────────────────────────────
+async function loadObservations() {
+  const field = currentField.value
+  if (!field || !state.supabaseUser) { observations.value = []; obsLoading.value = false; return }
+  const req = ++obsReq
+  obsLoading.value = true
+  try {
+    const rows = await loadFieldObservations(field.id, 20)
+    if (req !== obsReq) return
+    observations.value = rows.map((r) => ({ ...r, url: null }))
+    rows.forEach(async (r, i) => {
+      if (!r.photo_path) return
+      try {
+        const url = await createSignedPhotoUrl(r.photo_path)
+        if (req === obsReq && observations.value[i]) observations.value[i].url = url
+      } catch (e) {
+        // leave a thumbnail placeholder rather than breaking the panel
+      }
+    })
+  } catch (e) {
+    if (req === obsReq) observations.value = []
+  } finally {
+    if (req === obsReq) obsLoading.value = false
+  }
+}
+
+async function loadLatestAction() {
+  const field = currentField.value
+  latestAction.value = null
+  latestAlertId = null
+  if (!field || !state.supabaseUser) return
+  try {
+    latestAction.value = await loadLatestFieldAction(field.id)
+  } catch (e) {
+    latestAction.value = null
+  }
+}
+
+async function ensureLatestAlertId() {
+  if (latestAlertId) return latestAlertId
+  const field = currentField.value
+  if (!field) return null
+  try {
+    latestAlertId = await getLatestAlertId(field.id)
+  } catch (e) {
+    latestAlertId = null
+  }
+  return latestAlertId
+}
+
+function decisionMeta() {
+  const d = decision.value
+  return {
+    tier: d ? d.tier : null,
+    actionKey: d && d.actions && d.actions[0] ? d.actions[0].key : null,
+  }
+}
+
+async function logDecisionAction(status) {
+  const field = currentField.value
+  if (!field || !state.supabaseUser || actionBusy.value) return
+  actionBusy.value = true
+  try {
+    const alertId = await ensureLatestAlertId()
+    const meta = decisionMeta()
+    const snoozeUntil = status === 'snoozed' ? new Date(Date.now() + 3 * 86400000).toISOString() : null
+    await logFieldAction({
+      fieldId: field.id,
+      alertId,
+      decisionTier: meta.tier,
+      actionKey: meta.actionKey,
+      status,
+      snoozeUntil,
+    })
+    store.showToast(
+      t(
+        status === 'done'
+          ? 'decision.logged_done'
+          : status === 'snoozed'
+            ? 'decision.logged_snoozed'
+            : 'decision.logged_dismissed',
+      ),
+    )
+    await loadLatestAction()
+  } catch (e) {
+    store.showToast(t('decision.action_failed'))
+  } finally {
+    actionBusy.value = false
+  }
+}
+
+function openRatingReason() {
+  ratingReason.value = ''
+  ratingOpen.value = true
+}
+
+async function sendRating(useful) {
+  const field = currentField.value
+  if (!field || !state.supabaseUser || actionBusy.value) return
+  actionBusy.value = true
+  try {
+    const alertId = await ensureLatestAlertId()
+    const meta = decisionMeta()
+    await logFieldAction({
+      fieldId: field.id,
+      alertId,
+      decisionTier: meta.tier,
+      actionKey: meta.actionKey,
+      status: 'rated',
+      useful,
+      reason: useful ? null : ratingReason.value,
+    })
+    store.showToast(t('decision.thanks_feedback'))
+    ratingOpen.value = false
+    ratingReason.value = ''
+  } catch (e) {
+    store.showToast(t('decision.action_failed'))
+  } finally {
+    actionBusy.value = false
+  }
+}
+
 function openPhoto(i) {
   state.photosLightboxIndex = i
 }
@@ -1398,13 +1607,15 @@ watch(() => state.benchmarkValue, () => {
   if (state.chartData && state.infoPanelVisible) render(state.chartData)
 })
 watch(() => state.mainMonth, () => { updateMarker(); loadAim() })
-watch(() => state.currentFieldId, () => { aiExplanation.value = ''; aiTruncated.value = false; photos.value = []; state.photosLightboxIndex = null; loadPhotos(); aim.value = null; aimDetailsOpen.value = false; loadAim() })
+watch(() => state.currentFieldId, () => { aiExplanation.value = ''; aiTruncated.value = false; photos.value = []; state.photosLightboxIndex = null; loadPhotos(); aim.value = null; aimDetailsOpen.value = false; loadAim(); observations.value = []; latestAction.value = null; latestAlertId = null; obsModalOpen.value = false; loadObservations(); loadLatestAction() })
 watch(() => currentField.value && currentField.value.id, () => { loadWeather(); loadAim(); loadOfficialWeather() })
 watch(() => currentField.value && currentField.value.provinceCode, () => loadOfficialWeather())
 watch(() => state.infoPanelVisible, async (open) => {
   if (open && currentField.value) {
     loadPhotos()
     loadAim()
+    loadObservations()
+    loadLatestAction()
     if (state.chartData) {
       await nextTick()
       render(state.chartData)
