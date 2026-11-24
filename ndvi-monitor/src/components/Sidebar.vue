@@ -7,6 +7,8 @@
       </div>
     </div>
 
+    <TodayTriage />
+
     <div class="sidebar-search">
       <i class="ti ti-search"></i>
       <input type="text" v-model="query" :placeholder="t('sidebar.search')" />
@@ -88,6 +90,7 @@ import { state, fieldStatus, fieldTrends } from '../store'
 import * as store from '../store'
 import { getOrComputeArea, formatHectares, getAreaWarning, fieldConfidence } from '../store'
 import ConfidenceBadge from './ConfidenceBadge.vue'
+import TodayTriage from './TodayTriage.vue'
 import { useI18n } from '../i18n'
 import { toKhmerDigits } from '../services/format'
 

@@ -277,3 +277,132 @@
   color: var(--red);
   border-color: rgba(239, 91, 91, 0.5);
 }
+
+/* ---- Today triage (Phase 3) ---- */
+.triage-card {
+  margin: 10px 16px 4px;
+  padding: 10px 12px;
+  border: 0.5px solid var(--panel-border-strong);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.04);
+}
+.triage-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.triage-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text);
+}
+.triage-title .ti {
+  font-size: 13px;
+  color: var(--accent);
+}
+.triage-sub {
+  font-size: 10px;
+  color: var(--text-faint);
+}
+.triage-empty {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--text-faint);
+}
+.triage-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.triage-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 7px;
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.04);
+  border: 0.5px solid transparent;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.triage-item:hover {
+  border-color: var(--panel-border-strong);
+  background: rgba(255, 255, 255, 0.07);
+}
+.triage-item.tier-act {
+  border-left: 3px solid var(--red);
+}
+.triage-item.tier-scout {
+  border-left: 3px solid var(--amber);
+}
+.triage-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.triage-dot.tier-act {
+  background: var(--red);
+}
+.triage-dot.tier-scout {
+  background: var(--amber);
+}
+.triage-dot.tier-monitor {
+  background: var(--accent);
+}
+.triage-main {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+  flex: 1;
+}
+.triage-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.triage-why {
+  font-size: 10.5px;
+  line-height: 1.35;
+  color: var(--text-dim);
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+.triage-tier {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 2px 6px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.triage-item.tier-act .triage-tier {
+  background: rgba(239, 91, 91, 0.16);
+  color: var(--red);
+}
+.triage-item.tier-scout .triage-tier {
+  background: var(--amber-dim);
+  color: var(--amber);
+}
+.triage-item.tier-monitor .triage-tier {
+  background: var(--accent-dim);
+  color: var(--accent);
+}

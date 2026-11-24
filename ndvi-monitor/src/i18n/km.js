@@ -362,6 +362,12 @@ export default {
   "obs.empty": "មិនទាន់មានការពិនិត្យវាល — កត់ត្រាអ្វីដែលអ្នកឃើញ ដើម្បីជួយផ្ទៀងផ្ទាត់ការណែនាំ។",
   "obs.loading": "កំពុងផ្ទុក…",
 
+  // Phase 3 — today's triage
+  "triage.title": "ថ្ងៃនេះ",
+  "triage.sub": "កន្លែងដែលគួរមើលមុន",
+  "triage.calm": "វាលទាំងអស់ដែលកំពុងតាមដានមើលទៅធម្មតា — មិនចាំបាច់ធ្វើសកម្មភាពថ្ងៃនេះទេ។",
+  "triage.loading": "កំពុងពិនិត្យវាល…",
+
   // Field form modal (new-field save flow)
   "field_form.new_field": "វាលថ្មី",
   "field_form.hint": "បន្ថែមព័ត៌មានវាលរបស់អ្នក — ឈ្មោះ កាលបរិច្ឆេទដាំ និងដំណាំ។",

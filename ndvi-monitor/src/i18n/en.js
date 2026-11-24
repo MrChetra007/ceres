@@ -334,6 +334,12 @@ export default {
   'obs.empty': 'No field checks yet — record what you see to help verify the advice.',
   'obs.loading': 'Loading…',
 
+  // Phase 3 — today's triage
+  'triage.title': 'Today',
+  'triage.sub': 'Where to look first',
+  'triage.calm': 'All monitored fields look normal — no action needed today.',
+  'triage.loading': 'Checking fields…',
+
   // Field form modal (new-field save flow)
   'field_form.new_field': 'New field',
   'field_form.hint': 'Add your field details — name, planting date and crop.',

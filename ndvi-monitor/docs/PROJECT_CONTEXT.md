@@ -58,6 +58,10 @@ The important product distinction: **Ceres is not just a map viewer.** It is a f
   - append-only action + feedback log → `field_actions` (done / snoozed / dismissed / rated)
   - Done / Snooze / Dismiss suppress repeat Telegram alerts; usefulness ratings are stored
   - see the “Feedback loop (Phase 2)” subsection below
+- Today triage (Phase 3 — 2026-11-24, slice 1):
+  - ranked top-3 "where to look first" list in the sidebar, reusing `buildDecision`
+  - ranks by action tier, signal score and hectares, and shows the decision headline
+  - Telegram digest and seasonal timing nudges are still pending
 
 ### Decision engine (Phase 1 — 2026-11-24)
 
@@ -94,6 +98,15 @@ Closes the loop between an advisory and what the farmer actually sees and does.
   - `done` → skip for 3 days
   - `rated` → never suppresses
 - **Notes:** a later rating does not cancel a snooze/dismiss — the worker filters to the three acknowledgement statuses. If migration 020 is not applied, the worker treats it as "no acknowledgement" (non-fatal) and the UI inserts fail.
+
+### Today triage (Phase 3 — slice 1, 2026-11-24)
+
+`TodayTriage.vue` (rendered at the top of `Sidebar.vue` when there are 2+ fields) closes the "which field should I look at first?" gap.
+
+- Reuses `buildDecision` per field from data already in memory: `fieldStatus`, `fieldTrends`, growth stage, confidence and area. **No extra Earth Engine calls** — it deliberately omits per-field rainfall/forecast; open the field for the full decision.
+- Ranks actionable fields (`act` > `scout`, then signal score, then capped hectares) and shows the top 3 with the decision headline and tier.
+- Shows a calm "all fields look normal" state when every field is `monitor`; hidden for single-field users.
+- Still pending for Phase 3: per-user Telegram digest and seasonal timing nudges.
 
 ### Operational steps still required when testing CamDX
 
@@ -357,6 +370,7 @@ Do not reintroduce these:
 - **Phase 1 deploy order:** deploy `consult-ai` and `ee-alerts-worker` together with the client build so the Telegram tier tag, AI prompt and the "What to do" card agree. Stale `consult-ai/index.js` and `ee-alerts-worker/index.js` duplicates still exist — confirm Supabase deploys the `.ts` entrypoints.
 - **Phase 2 migration required:** run `migrations/020_feedback_loop.sql` before testing field checks or alert suppression. Without it, `field_observations` / `field_actions` inserts fail and the worker silently treats every field as unacknowledged.
 - **Suppression is by latest acknowledgement:** the worker queries `field_actions` filtered to `done` / `snoozed` / `dismissed`, so a later `rated` row never cancels a snooze. Keep that filter when adding new statuses.
+- **Triage uses cached client state:** `TodayTriage.vue` ranks from `fieldStatus` / `fieldTrends` already loaded and intentionally skips rainfall/forecast to avoid an Earth Engine fan-out, so a field's full decision can differ slightly until opened.
 - **PWA disabled intentionally:** manifest link and `attachPwa()` are commented out. Do not enable without dealing with stale service workers.
 - **Secrets:** do not add service-role keys, bot tokens, or JWTs to code. `testcommand.txt` previously contained a bot token and anon JWT; rotate/delete it if it still exists.
 - **Env mismatch:** `.env` uses `SUPABASE_URL` / `SUPABASE_ANON_KEY` without `VITE_`; `src/config.js` reads `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY`, so hardcoded fallbacks are used.
@@ -438,4 +452,5 @@ After any significant change:
 13. Open a field → "I checked my field"; add a tag, an outcome and a photo; confirm it appears under "Field checks".
 14. Tap "Snooze 3 days"; run the alerts worker and confirm that field is skipped while other fields still send.
 15. Rate the card (thumbs up/down); confirm the feedback row is stored and does not cancel a snooze.
+16. With 2+ fields, open the sidebar and confirm "Today" lists the top actionable fields; clicking one opens it.
 ```
