@@ -1,5 +1,6 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { generateExplanation, languageLine } from "../_shared/llm.ts";
+import { buildDecision, decisionPromptBlock } from "../_shared/decision.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
@@ -39,6 +40,32 @@ function jsonResponse(body: unknown, status = 200, corsHeaders: Record<string, s
   });
 }
 
+// % change of the NDVI observation history: most recent vs ~14+ days earlier
+// (negative = declining). Mirrors the client and the alerts worker so all three
+// reach the same "declining" decision.
+function trendPctFromHistory(raw: unknown): number | null {
+  const list = Array.isArray(raw) ? raw : [];
+  const pts = list
+    .filter(
+      (h: any) =>
+        h && typeof h.date === "string" && typeof h.ndvi === "number" && isFinite(h.ndvi),
+    )
+    .slice(0, 10)
+    .sort((a: any, b: any) => String(a.date).localeCompare(String(b.date)));
+  if (pts.length < 2) return null;
+  const recent = pts[pts.length - 1];
+  let earlier = null;
+  for (let i = pts.length - 2; i >= 0; i--) {
+    const days = (new Date(recent.date).getTime() - new Date(pts[i].date).getTime()) / 86400000;
+    if (days >= 14) {
+      earlier = pts[i];
+      break;
+    }
+  }
+  if (!earlier || !earlier.ndvi) return null;
+  return ((recent.ndvi - earlier.ndvi) / earlier.ndvi) * 100;
+}
+
 Deno.serve(async (req) => {
   const corsHeaders = getCorsHeaders(req);
   if (req.method === "OPTIONS") {
@@ -76,6 +103,11 @@ Deno.serve(async (req) => {
       mode,
       observationAgeDays,
       reason,
+      // Phase 1 decision input: the canonical (untranslated) status so the
+      // shared decision engine can grade it, and the client's short forecast so
+      // "rain is coming — you may wait" matches the card the farmer just saw.
+      statusKey,
+      forecastDays,
     } = await req.json();
 
     // The farmer's own profile language wins; fall back to what the client
@@ -96,6 +128,32 @@ Deno.serve(async (req) => {
     if (readingValue == null) {
       return jsonResponse({ ok: false, error: "missing_data" }, 400, corsHeaders);
     }
+
+    // ── Phase 1: deterministic decision (the LLM only phrases this) ──────────
+    // Built from the SAME inputs the client card uses, so the answer matches the
+    // tier/action the farmer saw. Low confidence, radar and no-data can never
+    // become an "act" here because buildDecision forbids it.
+    const canonicalMode =
+      typeof mode === "string" && mode ? mode : rviValue != null ? "radar" : "optical";
+    const decision = buildDecision({
+      index: "ndvi",
+      status: typeof statusKey === "string" && statusKey ? statusKey : "unknown",
+      stage: typeof growthStage === "string" ? growthStage : null,
+      dayCount: typeof dayCount === "number" ? dayCount : null,
+      prePlanting: typeof dayCount === "number" && dayCount < 0,
+      ndvi: rviValue != null ? null : typeof ndviValue === "number" ? ndviValue : null,
+      rvi: typeof rviValue === "number" ? rviValue : null,
+      lswi: typeof lswiValue === "number" ? lswiValue : null,
+      rainfallMm: typeof rainfallMm === "number" ? rainfallMm : null,
+      forecastDays: Array.isArray(forecastDays) ? forecastDays : null,
+      confidenceTier: typeof confidenceTier === "string" ? confidenceTier : null,
+      observationAgeDays:
+        typeof observationAgeDays === "number" ? observationAgeDays : null,
+      mode: canonicalMode,
+      trendPct: trendPctFromHistory(observationHistory),
+      cropEnglish: typeof cropEnglish === "string" ? cropEnglish : null,
+    });
+    const decisionBlock = decisionPromptBlock(decision);
 
     // 1. Check cache — only reuse if the reading + status haven't moved. The
     //    legacy ai_explanations.ndvi_value column stores whichever reading was
@@ -245,8 +303,9 @@ ${lastClearSection}
 ${cropNote}
 ${sensorNote}
 ${confidenceLine}
+${decisionBlock}
 ${langLine}
-In plain, easy-to-understand language (a short paragraph is fine, longer if needed): describe what the numbers suggest, name 1-2 possible causes as possibilities to check — never state a single cause as certain — and explain enough that the farmer understands the situation. End with one practical next step. Write the reply directly: never restate these instructions, never list evaluation criteria, never write a checklist or plan. Do not use technical jargon like "NDVI" or "LSWI" in the reply itself.`;
+In plain, easy-to-understand language (a short paragraph is fine, longer if needed): describe what the numbers suggest, name 1-2 possible causes as possibilities to check — never state a single cause as certain — and explain enough that the farmer understands the situation. Finish with the recommended next step from the DECISION block, phrased naturally — do NOT change the action tier, urgency or recommended step. Write the reply directly: never restate these instructions, never list evaluation criteria, never write a checklist or plan. Do not use technical jargon like "NDVI" or "LSWI" in the reply itself.`;
 
     // If the model hits its output token ceiling (finish_reason "length" /
     // "MAX_TOKENS") and trails off mid-sentence, retry the same provider with a
@@ -258,8 +317,9 @@ Data: ${readingLine} rainfall (21d) ${rainfallTotal}, status: ${status}, growth 
 Water need at this stage: ${waterNeed}
 ${lastClearSection === "" ? "" : `Note: ${lastClearSection}`}
 ${confidenceLine === "" ? "" : `Remember: ${confidenceLine}`}
+${decisionBlock}
 ${langLine}
-Write the reply directly — no checklist, no plan, no restating these instructions. Do not mention "NDVI", "LSWI" or any index name.`;
+Use the recommended next step from the DECISION block unchanged. Write the reply directly — no checklist, no plan, no restating these instructions. Do not mention "NDVI", "LSWI" or any index name.`;
 
     const result = await generateExplanation(prompt, concisePrompt);
     const explanation =

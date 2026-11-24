@@ -2,7 +2,7 @@
 
 **Use this file first.** If a future AI session needs to understand the app quickly, point it here. It is the shortest accurate map of the product, the code, the current state, and the rules for changing it.
 
-**Last updated:** 2026-11-20  
+**Last updated:** 2026-11-24  
 **Repo:** `D:\SAAS\NDVI`  
 **App root:** `D:\SAAS\NDVI\ndvi-monitor`  
 **Supabase project ref:** `wopwwtnvqyomiwbsxiks`  
@@ -28,7 +28,7 @@ The important product distinction: **Ceres is not just a map viewer.** It is a f
 
 ---
 
-## 2. Current state (as of 2026-11-20)
+## 2. Current state (as of 2026-11-24)
 
 ### Working / complete
 
@@ -49,6 +49,28 @@ The important product distinction: **Ceres is not just a map viewer.** It is a f
   - demo shared fields
   - `/government` dashboard
   - DataEF province aliases
+- Decision engine (Phase 1 — 2026-11-24):
+  - deterministic `monitor` / `scout` / `act` recommendation from existing signals
+  - in-app "What to do" card, decision-aware Consult AI, and tiered Telegram advisories
+  - see the “Decision engine (Phase 1)” subsection below
+
+### Decision engine (Phase 1 — 2026-11-24)
+
+Turns the metrics the app already has into one **actionable** recommendation instead of leaving the farmer to interpret indices.
+
+- **Files (keep in sync):** `src/services/decision.js` (browser) and `supabase/functions/_shared/decision.ts` (Deno) are verbatim ports with the same rules — same pattern as `_shared/growthStage.ts` vs `src/config.js`. Change both together.
+- **Output:** a structured card `{ tier, severity, urgency, timeWindow, headline, hypotheses, actions, verify, reason, flags, score }`. Text items are `{ key, params }` resolved through `decision.*` i18n keys (en/km) in the UI and an English map for LLM prompts.
+- **Tiers:**
+  - `monitor` — no evidence of a problem; keep normal practices and re-check next pass.
+  - `scout` — uncertain/early signal; check the field before spending money. Includes below-expected, radar, no-data, and all low-confidence cases.
+  - `act` — deliberately narrow: only a **stressed** field with a clear time-sensitive reason (high severity, a sensitive stage, or dry/wet at a water-hungry stage).
+- **Hard rules:** low confidence, radar, and no-data never exceed `scout`; below-expected never reaches `act`; rain within ~3 days relieves a dry, non-stressed field (advises waiting). Hypotheses are always framed as possibilities, never diagnoses.
+- **Where it is used:**
+  - `FieldDetailPanel.vue` — "What to do" card on the NDVI tab (tier, action window, next steps; collapsible field-check / causes / why).
+  - `consult-ai` — recomputes the decision server-side from `statusKey` + forecast + trend and injects a `DECISION` block into the prompt. The LLM may only **phrase** it.
+  - `ee-alerts-worker` — computes the decision, prefixes every Telegram message with an authoritative `[Monitor]/[Check field]/[Act now]` tag (Khmer too), and appends a deterministic next step when the LLM falls back.
+- **LLM contract:** the model must never upgrade/downgrade the tier, urgency, or recommended step. Thresholds live in `DECISION_THRESHOLDS` inside both decision files.
+- **Verification:** `npm run build`, plus a Node parity test that runs the client and Deno modules over the same scenarios and asserts identical output.
 
 ### Operational steps still required when testing CamDX
 
@@ -116,6 +138,7 @@ ndvi-monitor/
 │   │   ├── adminBoundaries.js   # Province/District/Commune/Village lookups
 │   │   ├── dataefService.js     # DataEF current-conditions proxy client
 │   │   ├── weatherService.js    # Open-Meteo forecast
+│   │   ├── decision.js          # Phase 1 decision engine (client mirror)
 │   │   └── geocode.js           # Nominatim reverse geocode
 │   ├── i18n/en.js               # English
 │   ├── i18n/km.js               # Khmer
@@ -127,7 +150,7 @@ ndvi-monitor/
 │   ├── consult-ai/              # AI agronomist
 │   ├── telegram-webhook/        # bot linking/photos
 │   ├── trigger-alerts-worker/   # service-role-only manual trigger
-│   └── _shared/                 # llm, weather, dataef, cloudMask, growthStage
+│   └── _shared/                 # llm, weather, dataef, cloudMask, growthStage, decision
 ├── migrations/                  # schema + feature migrations
 │   └── seed/                    # admin data, demo data, verify_seed.sql
 └── docs/                        # project docs
@@ -161,6 +184,8 @@ ee-alerts-worker
   ├── builds LLM advisory
   └── sends Telegram + logs alerts_log
 ```
+
+The **decision engine** sits beside this flow: it consumes the same status/confidence/growth-stage/rainfall/forecast/trend values and produces the `monitor` / `scout` / `act` recommendation used by the field-detail card, Consult AI, and the alerts worker. The browser and Edge Functions must use the matching modules (`src/services/decision.js` and `_shared/decision.ts`).
 
 The browser never authenticates directly with Earth Engine.
 
@@ -233,6 +258,7 @@ Codes are TEXT with leading zeros. Never convert them to numbers.
   - `src/config.js` stage tables
 - `ee-alerts-worker` tries a 14-day window first, widens to 90 days, then radar.
 - `alerts_log.status` values: `healthy`, `below_expected`, `stressed`, `radar_flag`, `no_data`.
+- Decision engine (Phase 1): `src/services/decision.js` + `_shared/decision.ts` convert that status + confidence + stage + rainfall + forecast + NDVI trend into `monitor` / `scout` / `act`. `act` requires a stressed reading with a clear time-sensitive reason; radar, no-data and low-confidence cap at `scout`.
 
 ---
 
@@ -297,6 +323,8 @@ Do not reintroduce these:
 - **Mobile overlay stacking:** do not auto-open the observations sheet and detail drawer together on phones.
 - **Vite scan:** `vite.config.js` restricts `optimizeDeps.entries` to `index.html`; otherwise legacy prototype HTML causes a missing `three` dependency warning.
 - **Caches:** `ee-data` server caches are split into three flags: `USE_EE_TILE_CACHE = true` (safe — keyed by `geometry_hash`), `USE_EE_TREND_CACHE = false` and `USE_EE_OBS_CACHE = false` (both keyed by `field_id` only; would serve stale values after a boundary edit until they gain a geometry hash or an edit-invalidation hook). Closed-month tile TTL is 2h, open-month 20min. Client caches are on: `USE_CHART_CACHE = true` (cleared on edit), weather 15-min cache, and `USE_AIM_CACHE = true` (key includes a geometry hash). Verify `ee_tile_cache` exists (run the `select`s in `015/016`) before relying on the tile cache.
+- **Decision engine duplication + LLM contract:** `src/services/decision.js` and `supabase/functions/_shared/decision.ts` must stay identical (same pattern as `growthStage.ts`). The LLM may only phrase the result; it must never change the tier, urgency, or next step. `act` requires a stressed field; low-confidence/radar/no-data cap at `scout`.
+- **Phase 1 deploy order:** deploy `consult-ai` and `ee-alerts-worker` together with the client build so the Telegram tier tag, AI prompt and the "What to do" card agree. Stale `consult-ai/index.js` and `ee-alerts-worker/index.js` duplicates still exist — confirm Supabase deploys the `.ts` entrypoints.
 - **PWA disabled intentionally:** manifest link and `attachPwa()` are commented out. Do not enable without dealing with stale service workers.
 - **Secrets:** do not add service-role keys, bot tokens, or JWTs to code. `testcommand.txt` previously contained a bot token and anon JWT; rotate/delete it if it still exists.
 - **Env mismatch:** `.env` uses `SUPABASE_URL` / `SUPABASE_ANON_KEY` without `VITE_`; `src/config.js` reads `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY`, so hardcoded fallbacks are used.
@@ -314,6 +342,7 @@ npm run build
 
 # Edge Function deploys (account must have access to project wopwwtnvqyomiwbsxiks)
 supabase functions deploy dataef-weather
+supabase functions deploy consult-ai
 supabase functions deploy ee-alerts-worker
 supabase functions deploy trigger-alerts-worker
 
@@ -369,4 +398,6 @@ After any significant change:
 8. As farmer, confirm /government redirects to /map.
 9. Confirm a field with no province hides the DataEF card.
 10. Confirm mobile shows one overlay at a time.
+11. On the NDVI tab, confirm the "What to do" card shows a tier, action window and next steps; confirm a cloud-blocked/radar month never shows "Act now".
+12. Run the alerts worker; confirm Telegram messages start with a `[Monitor]` / `[Check field]` / `[Act now]` tag.
 ```

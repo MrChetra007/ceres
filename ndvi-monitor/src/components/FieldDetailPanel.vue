@@ -103,6 +103,79 @@
         <p class="stage-days mono">{{ stageDaysText }}</p>
       </div>
 
+      <!-- Decision card (Phase 1): one deterministic "what to do" — tier,
+           action window, next steps and what to verify. Built by the shared
+           decision engine so the UI and Telegram always agree. -->
+      <div
+        v-if="isField && state.currentIndex === 'ndvi' && decisionLocalized"
+        class="detail-section decision-card"
+        :class="'decision-' + decisionLocalized.tier"
+      >
+        <div class="decision-head">
+          <p class="detail-card-label">{{ t('decision.heading') }}</p>
+          <span class="decision-tier" :class="'tier-' + decisionLocalized.tier">
+            <i class="ti" :class="decisionIcon"></i>{{ t('decision.tier_' + decisionLocalized.tier) }}
+          </span>
+        </div>
+
+        <p class="decision-headline">{{ decisionLocalized.headlineText }}</p>
+
+        <p class="decision-window">
+          <i class="ti ti-clock"></i>
+          {{ t('decision.window_label', { window: t('decision.window_' + decisionLocalized.timeWindow) }) }}
+        </p>
+
+        <div v-if="decisionLocalized.actionTexts.length" class="decision-block">
+          <p class="decision-block-title">{{ t('decision.actions') }}</p>
+          <ul class="decision-list">
+            <li v-for="(a, i) in decisionLocalized.actionTexts" :key="'a' + i">
+              <i class="ti ti-arrow-right"></i><span>{{ a }}</span>
+            </li>
+          </ul>
+        </div>
+
+        <button
+          class="decision-details-toggle"
+          :aria-expanded="decisionDetailsOpen"
+          @click="decisionDetailsOpen = !decisionDetailsOpen"
+        >
+          <span>{{ decisionDetailsOpen ? t('aim.hide_details') : t('aim.show_details') }}</span>
+          <i class="ti" :class="decisionDetailsOpen ? 'ti-chevron-up' : 'ti-chevron-down'"></i>
+        </button>
+
+        <div v-if="decisionDetailsOpen" class="decision-details">
+          <div v-if="decisionLocalized.verifyTexts.length" class="decision-block">
+            <p class="decision-block-title">{{ t('decision.verify') }}</p>
+            <ul class="decision-list decision-check">
+              <li v-for="(v, i) in decisionLocalized.verifyTexts" :key="'v' + i">
+                <i class="ti ti-eye"></i><span>{{ v }}</span>
+              </li>
+            </ul>
+          </div>
+          <div v-if="decisionLocalized.hypothesisTexts.length" class="decision-block">
+            <p class="decision-block-title">{{ t('decision.likely') }}</p>
+            <p class="decision-hyps">{{ decisionLocalized.hypothesisTexts.join(' · ') }}</p>
+          </div>
+          <p class="decision-reason">
+            <b>{{ t('decision.why') }}:</b> {{ decisionLocalized.reasonText }}
+          </p>
+        </div>
+
+        <div class="decision-foot">
+          <span
+            v-if="decisionLocalized.confidenceTier"
+            class="decision-conf"
+            :class="'conf-' + decisionLocalized.confidenceTier"
+          >
+            {{ t('decision.conf_' + decisionLocalized.confidenceTier) }}
+          </span>
+          <span v-if="decisionLocalized.dataAgeDays != null" class="decision-age">
+            {{ t('decision.data_age', { days: decisionLocalized.dataAgeDays }) }}
+          </span>
+        </div>
+        <p class="decision-note">{{ t('decision.disclaimer') }}</p>
+      </div>
+
       <!-- Stress Alert is a NDVI-only health signal (no NDWI/LSWI thresholds
            exist yet) — hide the card on non-NDVI tabs instead of showing stale
            NDVI text. -->
@@ -273,6 +346,7 @@ import { loadFieldPhotos, createSignedPhotoUrl } from '../services/supabase'
 import { getRecentIndexValue, getRainfallDetail, getFieldHealthScore, polygonGeometry } from '../services/earthEngine'
 import { getWeatherContext } from '../services/weatherService'
 import { getAimCache, setAimCache } from '../services/aimScoreCache'
+import { buildDecision, localizeDecision } from '../services/decision'
 import turfCentroid from '@turf/centroid'
 import { formatMonthYear, stageName as stageNameKm, daySinceLabel, formatDate, isSameMonth as isSameMonthDates, toKhmerDigits, confReason } from '../services/format'
 import { useI18n } from '../i18n'
@@ -372,6 +446,7 @@ watch(
 const aim = ref(null)
 const aimLoading = ref(false)
 const aimDetailsOpen = ref(false)
+const decisionDetailsOpen = ref(false)
 let aimReq = 0
 
 const aimPhrase = computed(() => {
@@ -853,6 +928,94 @@ const stressMsg = computed(() => {
   return t('field.stress_healthy')
 })
 
+// ── Phase 1 decision card ──────────────────────────────────────────────────
+// The deterministic tier is computed from the SAME signals already on screen
+// (status, confidence, growth stage, rainfall, forecast, NDVI trend). The card
+// only renders on the NDVI tab because the status/trend inputs are NDVI-based.
+const decisionStatus = computed(() => {
+  const cls = heroStatus.value && heroStatus.value.badgeClass
+  if (cls === 'stressed') return 'stressed'
+  if (cls === 'moderate' || cls === 'below_expected') return 'below_expected'
+  if (cls === 'healthy') return 'healthy'
+  return 'unknown'
+})
+
+// % change of the NDVI series: most recent reading vs the last reading ~14+
+// days earlier (negative = greenness declining). Mirrors the worker's
+// getNdviTrendPct so the app and Telegram reach the same "declining" flag.
+const ndviTrendPct = computed(() => {
+  const series = state.currentIndex === 'ndvi' && Array.isArray(state.chartData)
+    ? state.chartData
+    : (Array.isArray(state.ndviChartData) ? state.ndviChartData : null)
+  if (!series || series.length < 2) return null
+  const pts = series
+    .filter((p) => p && p.date && typeof p.value === 'number' && isFinite(p.value))
+    .slice()
+    .sort((a, b) => String(a.date).localeCompare(String(b.date)))
+  if (pts.length < 2) return null
+  const recent = pts[pts.length - 1]
+  let earlier = null
+  for (let i = pts.length - 2; i >= 0; i--) {
+    const days = (new Date(recent.date) - new Date(pts[i].date)) / 86400000
+    if (days >= 14) { earlier = pts[i]; break }
+  }
+  if (!earlier || !earlier.value) return null
+  return ((recent.value - earlier.value) / earlier.value) * 100
+})
+
+const decisionConfidence = computed(() => {
+  // A radar reading is a rough proxy — treat it as medium, never high.
+  if (activeObservation.value && activeObservation.value.isRadar) return { tier: 'medium', reason: '' }
+  return conf.value || null
+})
+
+const decision = computed(() => {
+  if (!isField.value || state.currentIndex !== 'ndvi') return null
+  const f = currentField.value
+  if (!f) return null
+  const obs = activeObservation.value
+  const isRadar = !!(obs && obs.isRadar)
+  const mode = state.selectedSceneStatus && state.selectedSceneStatus.mode
+    ? state.selectedSceneStatus.mode
+    : (state.radarFallback.main ? 'radar' : state.cloudBlock.main ? 'no_data' : 'optical')
+  const stage = growthStageDays.value != null && !stagePrePlanting.value
+    ? store.getGrowthStage(growthStageDays.value, f).stage
+    : null
+  const lswi = aim.value && aim.value.rawValues && aim.value.rawValues.lswi != null
+    ? aim.value.rawValues.lswi
+    : null
+  const age = state.selectedSceneStatus && state.selectedSceneStatus.daysSinceObservation != null
+    ? state.selectedSceneStatus.daysSinceObservation
+    : null
+  // Fall back to the one-shot latest reading while the per-scene series loads.
+  const fallbackValue = !obs && status.value && typeof status.value.value === 'number'
+    ? status.value.value
+    : null
+  return buildDecision({
+    index: 'ndvi',
+    status: decisionStatus.value,
+    stage,
+    dayCount: growthStageDays.value,
+    prePlanting: prePlanting.value,
+    ndvi: isRadar ? null : (obs && typeof obs.value === 'number' ? obs.value : fallbackValue),
+    rvi: isRadar && obs && typeof obs.value === 'number' ? obs.value : null,
+    lswi,
+    rainfallMm: state.rainfallMm,
+    forecastDays: wxDays.value,
+    confidenceTier: decisionConfidence.value ? decisionConfidence.value.tier : null,
+    observationAgeDays: age,
+    mode,
+    trendPct: ndviTrendPct.value,
+    cropEnglish: f.cropEnglish || null,
+  })
+})
+
+const decisionLocalized = computed(() => (decision.value ? localizeDecision(decision.value, t) : null))
+const decisionIcon = computed(() => {
+  const tier = decisionLocalized.value && decisionLocalized.value.tier
+  return tier === 'act' ? 'ti-alert-triangle' : tier === 'scout' ? 'ti-search' : 'ti-eye'
+})
+
 const rainText = computed(() => {
   if (state.rainfallMm != null) return state.rainfallMm.toFixed(0) + ' mm'
   if (!state.eeReady) return t('field.loading')
@@ -1142,6 +1305,20 @@ async function consultAi() {
         ? 'radar_read'
         : 'clear_optical'
 
+  // Canonical NDVI status for the shared decision engine. Derived from the
+  // NDVI value itself (not the active tab) so Consult AI stays consistent even
+  // when opened from the NDWI/LSWI/RVI tabs.
+  let statusKeyOut = 'unknown'
+  if (rviValue != null) {
+    statusKeyOut = 'unknown'
+  } else if (ndviValue == null) {
+    statusKeyOut = 'no_data'
+  } else {
+    const st = store.buildStatusObject(field, ndviValue, 'ndvi', asOfDate.value)
+    const cls = st && st.badgeClass
+    statusKeyOut = cls === 'stressed' ? 'stressed' : cls === 'moderate' ? 'below_expected' : cls === 'healthy' ? 'healthy' : 'unknown'
+  }
+
   let token
   try {
     const session = await requireSession()
@@ -1164,6 +1341,10 @@ async function consultAi() {
         rainfallBuckets,
         lastClearReading,
         status: healthStatus,
+        // Canonical, untranslated status for the shared decision engine. The
+        // display `status` above can be Khmer, so never grade from it.
+        statusKey: statusKeyOut,
+        forecastDays: wxDays.value,
         growthStage,
         dayCount,
         confidenceTier: confidence ? confidence.tier : null,

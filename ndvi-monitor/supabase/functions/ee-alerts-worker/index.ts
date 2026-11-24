@@ -4,6 +4,13 @@ import { generateExplanation, languageLine } from "../_shared/llm.ts";
 // Growth-stage thresholds live in _shared/growthStage.ts so this worker and
 // the ee-data function stay in sync automatically.
 import { statusFromNdvi } from "../_shared/growthStage.ts";
+// Phase 1 decision engine — the deterministic tier/action the LLM may only
+// phrase, shared with consult-ai and the client (src/services/decision.js).
+import {
+  buildDecision,
+  decisionPromptBlock,
+  decisionText,
+} from "../_shared/decision.ts";
 import { getWeatherContext } from "../_shared/weather.ts";
 import type { WeatherContext } from "../_shared/weather.ts";
 import {
@@ -440,6 +447,50 @@ function safeText(text: string | null, fallback: string): string {
   return text && text.trim().length > 0 ? text.trim() : fallback;
 }
 
+// ── Phase 1: deterministic tier tag + fallback action line ─────────────────
+// The tier comes from buildDecision(), never from the LLM. The tag makes the
+// action level explicit in every Telegram message; the action line is only
+// used when the LLM fails and the flat template is sent, so the farmer still
+// gets a concrete next step instead of just a status number.
+const DECISION_TIER_EN: Record<string, string> = {
+  monitor: "Monitor",
+  scout: "Check field",
+  act: "Act now",
+};
+const DECISION_TIER_KM: Record<string, string> = {
+  monitor: "តាមដាន",
+  scout: "ពិនិត្យវាល",
+  act: "ធ្វើសកម្មភាពឥឡូវ",
+};
+const DECISION_ACTION_KM: Record<string, string> = {
+  "decision.act_pre_planting": "ពិនិត្យម្តងទៀតបន្ទាប់ពីដាំ។",
+  "decision.act_check_soil": "ពិនិត្យសំណើមដីនៅជម្រៅ ៥–១០ សង់ទីម៉ែត្រ។",
+  "decision.act_wait_rain":
+    "ភ្លៀងអាចនឹងធ្លាក់ក្នុងរយៈពេល ៣ ថ្ងៃ — អ្នកអាចរង់ចាំ ហើយពិនិត្យម្តងទៀតបន្ទាប់ពីភ្លៀង។",
+  "decision.act_irrigate": "ប្រសិនបើដីស្ងួត ហើយមានទឹក សូមស្រោចទឹកស្រាលៗ។",
+  "decision.act_drain": "ពិនិត្យ និងសម្អាតប្រឡាយ ហើយកុំដាក់ជីរហូតទឹកស្រក។",
+  "decision.act_no_fertilizer": "កុំដាក់ជីនៅពេលមានទឹកឈរ។",
+  "decision.act_monitor":
+    "បន្តធ្វើដូចធម្មតា ហើយពិនិត្យម្តងទៀតបន្ទាប់ពីផ្កាយរណបឆ្លងកាត់បន្ទាប់។",
+  "decision.act_scout_pest": "ដើរពិនិត្យវាល ហើយមើលសត្វល្អិត ជំងឺ ឬស្មៅ។",
+  "decision.act_check_nutrients":
+    "មើលពណ៌លឿង; ពិចារណាបន្ថែមជីបន្តិច ប្រសិនបើបញ្ជាក់បាន។",
+};
+
+function decisionTag(decision: any, lang: string): string {
+  const labels = lang === "km" ? DECISION_TIER_KM : DECISION_TIER_EN;
+  const label = decision && labels[decision.tier];
+  return label ? `[${label}] ` : "";
+}
+
+function decisionActionLine(decision: any, lang: string): string {
+  const item = decision && decision.actions && decision.actions[0];
+  if (!item) return "";
+  const text = lang === "km" ? DECISION_ACTION_KM[item.key] || "" : decisionText(item);
+  if (!text) return "";
+  return lang === "km" ? `ជំហានបន្ទាប់៖ ${text}` : `Next step: ${text}`;
+}
+
 // Builds the prompt for the advisory LLM (Phase 13 Feature 1). Kept as its own
 // function so the "reasoning task" is explicit and easy to tune/adjust.
 function forecastContextLine(weather: WeatherContext | null): string {
@@ -463,7 +514,8 @@ async function buildAdvisoryPrompt(
   weather: WeatherContext | null,
   lang: string,
   officialLine = "",
-): Promise<string> {
+  confidence: string | null = null,
+): Promise<{ prompt: string; decision: ReturnType<typeof buildDecision> }> {
   const lswi = await getLswiForGeometry(field.geojson).catch(() => null);
   const pct = await getNdviTrendPct(field.geojson).catch(() => null);
   const pctLine =
@@ -477,13 +529,49 @@ async function buildAdvisoryPrompt(
   const statusLabel = status.replace("_", " ");
   const langLine = languageLine(lang);
 
-  return `You are writing a short Telegram alert for a rice farmer in Battambang, Cambodia, about their field named "${field.name}".
+  // Day count for the decision (pre-planting guard) — planting_date can be in
+  // the future, in which case there is no crop to advise on yet.
+  let dayCount: number | null = null;
+  if (field.planting_date) {
+    dayCount = Math.floor(
+      (Date.now() - new Date(field.planting_date).getTime()) / 86400000,
+    );
+  }
+
+  // Deterministic decision — the LLM must only phrase this. trendPct is signed
+  // (negative = declining); the worker's `pct` is a positive "fall" amount.
+  const decision = buildDecision({
+    index: "ndvi",
+    status,
+    stage,
+    dayCount,
+    prePlanting: dayCount != null && dayCount < 0,
+    ndvi,
+    rvi: null,
+    lswi,
+    rainfallMm: rainfall,
+    forecastDays: weather?.forecast_days || null,
+    // The 14-day vs 90-day window confidence. A low-confidence (90-day) reading
+    // must never be graded as "act" by the decision engine.
+    confidenceTier: confidence,
+    observationAgeDays: null,
+    mode: "optical",
+    trendPct: pct == null ? null : -pct,
+    cropEnglish: (field as any).crop_english || null,
+  });
+  const decisionBlock = decisionPromptBlock(decision);
+
+  const prompt = `You are writing a short Telegram alert for a rice farmer in Battambang, Cambodia, about their field named "${field.name}".
 Satellite data: NDVI ${ndvi.toFixed(2)} (${pctLine}), LSWI (moisture) ${lswi == null ? "n/a" : lswi.toFixed(2)}, rainfall (21 days) ${rainText}, growth stage: ${stageText}, current status: ${statusLabel}.
 ${forecastContextLine(weather)}
 ${officialLine ? `${officialLine}\nCurrent conditions describe now, not a prediction; the 5-day forecast above is the only forecast.` : ""}
 
+${decisionBlock}
+
 ${langLine}
-Write 2-3 short sentences. Describe what the numbers suggest about the likely cause of a stress signal (drought vs. flood vs. normal for this growth stage) and give ONE practical, cautious next step. Use the weather forecast to inform this: mention upcoming rain (or its absence) when it is relevant to the field's situation — e.g. warn that rain is expected soon if the field is dry, or note a dry spell ahead if the forecast shows little rain. IMPORTANT: this is guidance to inform the farmer, NOT a diagnosis — never state a cause with certainty. Always hedge with words like "likely" / "could be". Do not repeat the technical index names (NDVI, LSWI) in the reply itself.`;
+Write 2-3 short sentences. Describe what the numbers suggest about the likely cause of a stress signal (drought vs. flood vs. normal for this growth stage) and give ONE practical, cautious next step. Use the weather forecast to inform this: mention upcoming rain (or its absence) when it is relevant to the field's situation — e.g. warn that rain is expected soon if the field is dry, or note a dry spell ahead if the forecast shows little rain. IMPORTANT: this is guidance to inform the farmer, NOT a diagnosis — never state a cause with certainty. Always hedge with words like "likely" / "could be". Do not repeat the technical index names (NDVI, LSWI) in the reply itself. Finish with the recommended next step from the DECISION block, phrased naturally — do NOT change the action tier, urgency or recommended step.`;
+
+  return { prompt, decision };
 }
 
 Deno.serve(async (_req) => {
@@ -660,7 +748,7 @@ Deno.serve(async (_req) => {
           }
         }
 
-        const prompt = await buildAdvisoryPrompt(
+        const { prompt, decision } = await buildAdvisoryPrompt(
           field,
           ndvi,
           status,
@@ -669,11 +757,13 @@ Deno.serve(async (_req) => {
           weather,
           lang,
           officialLine,
+          confidence,
         );
         const result = await generateExplanation(prompt);
 
         let modelUsed: string | null = null;
         let message: string;
+        let usedFallback = false;
         if (result && !result.truncated) {
           modelUsed = result.model;
           message = safeText(
@@ -699,6 +789,7 @@ Deno.serve(async (_req) => {
               "Advisory fell back to flat template (no LLM provider returned text)",
             );
           }
+          usedFallback = true;
           message = buildAlertMessage(
             field.name,
             status,
@@ -709,6 +800,17 @@ Deno.serve(async (_req) => {
             lang,
           );
         }
+
+        // Flat template has no action — append the deterministic next step so
+        // an LLM outage never leaves the farmer with only a status number.
+        if (usedFallback) {
+          const actionLine = decisionActionLine(decision, lang);
+          if (actionLine) message += `\n${actionLine}`;
+        }
+
+        // The tier tag is authoritative and comes from buildDecision(), not the
+        // LLM, so it can never be talked up into "act now" by the model.
+        message = decisionTag(decision, lang) + message;
 
         // Flag low-confidence (90-day fallback) readings so they're never
         // presented with the same certainty as a fresh 14-day reading.
