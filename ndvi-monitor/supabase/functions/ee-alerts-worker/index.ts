@@ -596,6 +596,76 @@ Write 2-3 short sentences. Describe what the numbers suggest about the likely ca
   return { prompt, decision };
 }
 
+// ── Phase 3: per-chat digest ───────────────────────────────────────────────
+// A farmer with several fields currently gets one Telegram message per field.
+// Buffer the optical advisories per chat and send one digest instead. Telegram
+// caps messages at 4096 chars, so cap well under that, truncate long items, and
+// turn overflow into "…and N more field(s)".
+const DIGEST_MAX_CHARS = 3800;
+const DIGEST_ITEM_MAX_CHARS = 500;
+
+interface DigestItem {
+  fieldId: string;
+  fieldName: string;
+  status: string;
+  ndviValue: number | null;
+  message: string;
+  result: any;
+}
+interface DigestBucket {
+  chatId: string;
+  lang: string;
+  items: DigestItem[];
+}
+
+function digestItemLine(item: DigestItem): string {
+  let text = String(item.message || "");
+  if (text.length > DIGEST_ITEM_MAX_CHARS) {
+    text = text.slice(0, DIGEST_ITEM_MAX_CHARS - 1).trimEnd() + "\u2026";
+  }
+  // The tier tag (e.g. "[Check field] ") is authoritative and sits at the
+  // front. Detect a leading field name after it so fallback messages (which
+  // already start with "Field name:") are not double-prefixed.
+  const tagMatch = text.match(/^\[[^\]]+\]\s*/);
+  const tag = tagMatch ? tagMatch[0] : "";
+  const body = tag ? text.slice(tag.length) : text;
+  const hasName =
+    body.startsWith(item.fieldName + ":") ||
+    body.startsWith(item.fieldName + " \u2014");
+  return hasName
+    ? `\u2022 ${text}`
+    : `\u2022 ${tag}${item.fieldName}: ${body}`;
+}
+
+function buildDigestMessage(
+  lang: string,
+  items: DigestItem[],
+): { text: string; included: Set<string> } {
+  const header =
+    lang === "km"
+      ? `ព័ត៌មានវាលថ្ងៃនេះ (${items.length} វាល):`
+      : `Today's field update (${items.length} fields):`;
+  const out: string[] = [header, ""];
+  const includedIds = new Set<string>();
+  let used = header.length + 1;
+  for (const item of items) {
+    const line = digestItemLine(item);
+    if (used + line.length + 1 > DIGEST_MAX_CHARS) break;
+    out.push(line);
+    used += line.length + 1;
+    includedIds.add(item.fieldId);
+  }
+  const remaining = items.length - includedIds.size;
+  if (remaining > 0) {
+    out.push(
+      lang === "km"
+        ? `…និងវាលចំនួន ${remaining} ទៀត`
+        : `…and ${remaining} more field(s)`,
+    );
+  }
+  return { text: out.join("\n"), included: includedIds };
+}
+
 Deno.serve(async (_req) => {
   try {
     await eeInit();
@@ -630,6 +700,9 @@ Deno.serve(async (_req) => {
     if (error) throw error;
 
     const results = [];
+    // Phase 3: optical advisories buffered per chat, flushed as one digest
+    // after every field has been processed.
+    const pendingByChat = new Map<string, DigestBucket>();
 
     for (const field of fields || []) {
       try {
@@ -869,30 +942,36 @@ Deno.serve(async (_req) => {
               : " (based on older data — no recent clear satellite scene)";
         }
 
-        const telegramSent = await sendTelegram(chatId, message);
-
-        await supabase.from("alerts_log").insert({
-          field_id: field.id,
+        // Buffer the optical advisory per chat; it is sent (as-is for one
+        // field, as a digest for several) after the whole loop completes.
+        const resultObj = {
+          field: field.name,
           status,
-          ndvi_value: ndvi,
+          sent: true,
+          model: modelUsed,
+          telegramSent: false, // updated after the per-chat flush
+          confidence,
+          windowDays,
+        };
+        let bucket = pendingByChat.get(chatId);
+        if (!bucket) {
+          bucket = { chatId, lang, items: [] };
+          pendingByChat.set(chatId, bucket);
+        }
+        bucket.items.push({
+          fieldId: field.id,
+          fieldName: field.name,
+          status,
+          ndviValue: ndvi,
           message,
-          chat_id: chatId,
-          telegram_sent: telegramSent,
+          result: resultObj,
         });
+        results.push(resultObj);
 
         if (modelUsed)
           console.log(
             `Advisory served by: ${modelUsed} for field ${field.name}`,
           );
-        results.push({
-          field: field.name,
-          status,
-          sent: true,
-          model: modelUsed,
-          telegramSent,
-          confidence,
-          windowDays,
-        });
       } catch (fieldErr) {
         console.error(
           `Failed processing field ${field.name} (${field.id}):`,
@@ -904,6 +983,43 @@ Deno.serve(async (_req) => {
           sent: false,
           error: String(fieldErr),
         });
+      }
+    }
+
+    // Phase 3: send one message, or one digest, per chat. The per-field
+    // alerts_log rows are written AFTER the send so telegram_sent reflects the
+    // real delivery result. `message` stays the individual field message (for
+    // per-field history/audit), not the combined digest text.
+    for (const bucket of pendingByChat.values()) {
+      if (!bucket.items.length) continue;
+      const digested = bucket.items.length > 1;
+      let text = bucket.items[0].message;
+      let included: Set<string> | null = null;
+      if (digested) {
+        const built = buildDigestMessage(bucket.lang, bucket.items);
+        text = built.text;
+        included = built.included;
+      }
+      const telegramSent = await sendTelegram(bucket.chatId, text);
+      for (const item of bucket.items) {
+        // A field omitted from an over-long digest was NOT delivered.
+        const delivered =
+          telegramSent && (!included || included.has(item.fieldId));
+        item.result.telegramSent = delivered;
+        item.result.digested = digested;
+        item.result.digestSize = bucket.items.length;
+      }
+      const rows = bucket.items.map((item) => ({
+        field_id: item.fieldId,
+        status: item.status,
+        ndvi_value: item.ndviValue,
+        message: item.message,
+        chat_id: bucket.chatId,
+        telegram_sent: item.result.telegramSent,
+      }));
+      const { error: logErr } = await supabase.from("alerts_log").insert(rows);
+      if (logErr) {
+        console.error("[digest] alerts_log insert failed", logErr);
       }
     }
 

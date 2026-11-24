@@ -61,7 +61,9 @@ The important product distinction: **Ceres is not just a map viewer.** It is a f
 - Today triage (Phase 3 — 2026-11-24, slice 1):
   - ranked top-3 "where to look first" list in the sidebar, reusing `buildDecision`
   - ranks by action tier, signal score and hectares, and shows the decision headline
-  - Telegram digest and seasonal timing nudges are still pending
+- Telegram digest (Phase 3 — 2026-11-24, slice 2):
+  - `ee-alerts-worker` sends one message per chat instead of one per optical field
+- Seasonal timing nudges are still pending.
 
 ### Decision engine (Phase 1 — 2026-11-24)
 
@@ -106,7 +108,20 @@ Closes the loop between an advisory and what the farmer actually sees and does.
 - Reuses `buildDecision` per field from data already in memory: `fieldStatus`, `fieldTrends`, growth stage, confidence and area. **No extra Earth Engine calls** — it deliberately omits per-field rainfall/forecast; open the field for the full decision.
 - Ranks actionable fields (`act` > `scout`, then signal score, then capped hectares) and shows the top 3 with the decision headline and tier.
 - Shows a calm "all fields look normal" state when every field is `monitor`; hidden for single-field users.
-- Still pending for Phase 3: per-user Telegram digest and seasonal timing nudges.
+- Seasonal timing nudges are still pending for Phase 3.
+
+### Telegram digest (Phase 3 — slice 2, 2026-11-24)
+
+`ee-alerts-worker` now buffers optical NDVI advisories per Telegram chat and sends:
+
+- one message as before when a farmer has a single optical field;
+- one digest — `Today's field update (N fields):` followed by `• [tier] Field: …` — when there are several.
+
+Details:
+
+- Each item is capped at 500 chars, the whole digest at 3,800 (Telegram's limit is 4,096). Overflow becomes `…and N more field(s)`; fields omitted from an over-long digest are logged with `telegram_sent = false` because they were not delivered.
+- `alerts_log` still gets one row per field with that field's **individual** message (per-field history/audit) plus the real delivery flag.
+- `no_data` and radar-only messages still send individually — those branches are separate; the digest currently covers the optical NDVI path.
 
 ### Operational steps still required when testing CamDX
 
@@ -218,7 +233,7 @@ ee-alerts-worker
   ├── calls Open-Meteo for 5-day forecast
   ├── calls DataEF for official current conditions
   ├── builds LLM advisory
-  └── sends Telegram + logs alerts_log
+  └── sends one Telegram message/digest per chat + logs alerts_log
 ```
 
 The **decision engine** sits beside this flow: it consumes the same status/confidence/growth-stage/rainfall/forecast/trend values and produces the `monitor` / `scout` / `act` recommendation used by the field-detail card, Consult AI, and the alerts worker. The browser and Edge Functions must use the matching modules (`src/services/decision.js` and `_shared/decision.ts`).
@@ -371,6 +386,7 @@ Do not reintroduce these:
 - **Phase 2 migration required:** run `migrations/020_feedback_loop.sql` before testing field checks or alert suppression. Without it, `field_observations` / `field_actions` inserts fail and the worker silently treats every field as unacknowledged.
 - **Suppression is by latest acknowledgement:** the worker queries `field_actions` filtered to `done` / `snoozed` / `dismissed`, so a later `rated` row never cancels a snooze. Keep that filter when adding new statuses.
 - **Triage uses cached client state:** `TodayTriage.vue` ranks from `fieldStatus` / `fieldTrends` already loaded and intentionally skips rainfall/forecast to avoid an Earth Engine fan-out, so a field's full decision can differ slightly until opened.
+- **Telegram digest scope:** only the optical NDVI path is digested (one message per chat); `no_data` and radar messages still send individually. Item cap is 500 chars, total 3,800; omitted fields log `telegram_sent = false`.
 - **PWA disabled intentionally:** manifest link and `attachPwa()` are commented out. Do not enable without dealing with stale service workers.
 - **Secrets:** do not add service-role keys, bot tokens, or JWTs to code. `testcommand.txt` previously contained a bot token and anon JWT; rotate/delete it if it still exists.
 - **Env mismatch:** `.env` uses `SUPABASE_URL` / `SUPABASE_ANON_KEY` without `VITE_`; `src/config.js` reads `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY`, so hardcoded fallbacks are used.
@@ -453,4 +469,5 @@ After any significant change:
 14. Tap "Snooze 3 days"; run the alerts worker and confirm that field is skipped while other fields still send.
 15. Rate the card (thumbs up/down); confirm the feedback row is stored and does not cancel a snooze.
 16. With 2+ fields, open the sidebar and confirm "Today" lists the top actionable fields; clicking one opens it.
+17. With 2+ optical fields linked to the same Telegram chat, run the worker; confirm one combined digest message instead of one message per field.
 ```
