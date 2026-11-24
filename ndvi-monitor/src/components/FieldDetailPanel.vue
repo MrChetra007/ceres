@@ -272,7 +272,9 @@
         <span class="chart-card-title">{{ title }}</span>
         <button class="icon-btn" :title="t('field.enlarge_chart')" @click="state.chartModalVisible = true"><i class="ti ti-arrows-maximize"></i></button>
       </div>
-      <canvas id="trend-chart" ref="chartCanvas"></canvas>
+      <div class="chart-canvas-wrap">
+        <canvas id="trend-chart" ref="chartCanvas"></canvas>
+      </div>
     </div>
 
     <div class="detail-section rain-card">
@@ -1218,14 +1220,16 @@ async function render(data) {
   updateMarker()
   await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))
   if (chart) chart.resize()
-  const card = chartCanvas.value && chartCanvas.value.closest('.chart-card')
-  if (card) {
+  // Observe the canvas wrapper (not the whole card) so a wrapping chart header
+  // correctly shrinks the plot area instead of letting the canvas overflow it.
+  const wrap = chartCanvas.value && chartCanvas.value.closest('.chart-canvas-wrap')
+  if (wrap) {
     let resizeTimer = null
     chartResizeObs = new ResizeObserver(() => {
       clearTimeout(resizeTimer)
       resizeTimer = setTimeout(() => { if (chart) chart.resize() }, 80)
     })
-    chartResizeObs.observe(card)
+    chartResizeObs.observe(wrap)
   }
 }
 

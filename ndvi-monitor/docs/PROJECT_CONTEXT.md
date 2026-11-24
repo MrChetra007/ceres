@@ -401,6 +401,7 @@ Do not reintroduce these:
 - **Triage uses cached client state:** `TodayTriage.vue` ranks from `fieldStatus` / `fieldTrends` already loaded and intentionally skips rainfall/forecast to avoid an Earth Engine fan-out, so a field's full decision can differ slightly until opened.
 - **Telegram digest scope:** only the optical NDVI path is digested (one message per chat); `no_data` and radar messages still send individually. Item cap is 500 chars, total 3,800; omitted fields log `telegram_sent = false`.
 - **Season note is timing-only:** `src/services/season.js` and `_shared/season.ts` must stay in sync. It never changes tier/urgency; only the LLM prompts include it, not the deterministic Telegram fallback.
+- **Chart sizing/range:** the field-panel canvas must stay inside `.chart-canvas-wrap` (not directly under `.chart-card`). Chart.js measures the canvas parent, so a direct child overflows below the header. The y-axis is per-index via `resolveYRange()` — never hard-code `0..1`, because NDWI/LSWI (and negative NDVI) would clip off the frame.
 - **PWA disabled intentionally:** manifest link and `attachPwa()` are commented out. Do not enable without dealing with stale service workers.
 - **Secrets:** do not add service-role keys, bot tokens, or JWTs to code. `testcommand.txt` previously contained a bot token and anon JWT; rotate/delete it if it still exists.
 - **Env mismatch:** `.env` uses `SUPABASE_URL` / `SUPABASE_ANON_KEY` without `VITE_`; `src/config.js` reads `VITE_SUPABASE_URL` / `VITE_SUPABASE_ANON_KEY`, so hardcoded fallbacks are used.

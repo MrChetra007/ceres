@@ -24,18 +24,60 @@ export function buildYearLabel(data) {
   return years.length > 1 ? years[0] + '\u2013' + years[years.length - 1] : String(years[0])
 }
 
-export function buildMonthTicks(data) {
+export function buildMonthTicks(data, maxTicks = 7) {
   const map = {}
   data.forEach((d) => {
     const dt = new Date(d.date)
     map[dt.getFullYear() + '-' + (dt.getMonth() + 1)] = new Date(dt.getFullYear(), dt.getMonth(), 1).getTime()
   })
   let values = Object.keys(map).map((k) => map[k]).sort((a, b) => a - b)
-  if (values.length <= 7) return values
-  const step = Math.ceil(values.length / 7)
+  if (values.length <= maxTicks) return values
+  const step = Math.ceil(values.length / maxTicks)
   const thinned = values.filter((_, i) => i % step === 0)
   if (thinned[thinned.length - 1] !== values[values.length - 1]) thinned.push(values[values.length - 1])
   return thinned
+}
+
+// Per-index y-axis range. The chart used to hard-code 0..1 for every optical
+// index, which clipped NDWI/LSWI (and any negative NDVI) below the frame. Start
+// from the index's visualization range, widen to include the real data and the
+// benchmark, pad slightly, then snap to a clean 0.1 grid so tick labels stay
+// short and stable.
+export function resolveYRange(data, cfg, benchmarkValue) {
+  const vis = (cfg && cfg.vis) || {}
+  const visMin = typeof vis.min === 'number' ? vis.min : 0
+  const visMax = typeof vis.max === 'number' ? vis.max : 1
+  let dataMin = Infinity
+  let dataMax = -Infinity
+  const consider = (v) => {
+    if (typeof v === 'number' && isFinite(v)) {
+      if (v < dataMin) dataMin = v
+      if (v > dataMax) dataMax = v
+    }
+  }
+  ;(data || []).forEach((d) => consider(d && d.value))
+  consider(benchmarkValue)
+  const hasData = isFinite(dataMin) && isFinite(dataMax)
+
+  // Use the index's own visualization range by default; only widen (with a
+  // little padding) when the data actually exceeds it. This keeps physical
+  // floors/ceilings sane (e.g. RVI starts at 0, not -0.1).
+  const span =
+    (hasData ? Math.max(visMax, dataMax) : visMax) -
+      (hasData ? Math.min(visMin, dataMin) : visMin) || 0.2
+  const pad = span * 0.05
+  let min = hasData && dataMin < visMin ? dataMin - pad : visMin
+  let max = hasData && dataMax > visMax ? dataMax + pad : visMax
+  min = Math.floor(min * 10) / 10
+  max = Math.ceil(max * 10) / 10
+
+  const minSpan = cfg && cfg.name === 'RVI' ? 0.4 : 0.3
+  if (max - min < minSpan) {
+    const mid = (max + min) / 2
+    min = Math.round((mid - minSpan / 2) * 10) / 10
+    max = Math.round((mid + minSpan / 2) * 10) / 10
+  }
+  return { min, max }
 }
 
 export function currentDateMarkerPlugin() {
@@ -69,8 +111,9 @@ export function currentDateMarkerPlugin() {
 
 export function buildChartConfig(ctx, data, index, large, getStageLabel, benchmarkValue) {
   const cfg = INDICES[index] || INDICES.ndvi
-  const monthTicks = buildMonthTicks(data)
+  const monthTicks = buildMonthTicks(data, large ? 8 : 5)
   const yearLabel = buildYearLabel(data)
+  const yRange = resolveYRange(data, cfg, benchmarkValue)
   const gradient = ctx.createLinearGradient(0, 0, 0, ctx.canvas.height || 220)
   gradient.addColorStop(0, '#22c55e')
   gradient.addColorStop(0.4, '#a3e635')
@@ -109,6 +152,9 @@ export function buildChartConfig(ctx, data, index, large, getStageLabel, benchma
     options: {
       responsive: true,
       maintainAspectRatio: false,
+      // Small breathing room so the first/last tick label is not clipped by
+      // the canvas edge (especially the longer Khmer month names).
+      layout: { padding: { top: 2, right: 10, bottom: 2, left: 2 } },
       interaction: { mode: 'index', intersect: false },
       plugins: {
         title: {
@@ -122,7 +168,13 @@ export function buildChartConfig(ctx, data, index, large, getStageLabel, benchma
         },
         legend: {
           display: typeof benchmarkValue === 'number',
-          labels: { color: '#9aa4b1', boxWidth: 14, font: { size: 10 } },
+          labels: {
+            color: '#9aa4b1',
+            boxWidth: 12,
+            boxHeight: 2,
+            padding: 8,
+            font: { size: large ? 10 : 9 },
+          },
         },
         tooltip: {
           backgroundColor: 'rgba(20, 25, 40, 0.92)',
@@ -154,6 +206,7 @@ export function buildChartConfig(ctx, data, index, large, getStageLabel, benchma
             color: '#555',
             maxRotation: 0,
             autoSkip: false,
+            padding: 4,
             callback: (value) => formatAxisMonth(value, state.preferredLanguage),
           },
           grid: { display: false },
@@ -162,12 +215,17 @@ export function buildChartConfig(ctx, data, index, large, getStageLabel, benchma
           },
         },
         y: {
-          // RVI (Sentinel-1 radar, 4*VH/(VV+VH)) is bounded 0..4 and reaches
-          // ~2 at dense canopy — give it its own ceiling (from vis.max) instead
-          // of the optical-series 0..1 cap that clipped every RVI value above 1.
-          min: 0,
-          max: cfg.name === 'RVI' ? (cfg.vis ? cfg.vis.max : 2) : 1,
-          ticks: { stepSize: 0.2, font: { size: tickFont }, color: '#555' },
+          // Per-index range (NDWI/LSWI include negatives; RVI goes to ~2).
+          // resolveYRange also widens to fit the real data/benchmark.
+          min: yRange.min,
+          max: yRange.max,
+          ticks: {
+            maxTicksLimit: large ? 9 : 6,
+            padding: 2,
+            font: { size: tickFont },
+            color: '#555',
+            callback: (value) => Number(value).toFixed(1),
+          },
           grid: { color: '#eeeeee' },
           title: {
             display: true,

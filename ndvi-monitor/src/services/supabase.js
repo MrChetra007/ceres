@@ -220,11 +220,16 @@ export async function signOut() {
 // Telegram linking (Phase 8.3)
 // ---------------------------------------------------------------------------
 export async function getMyProfile() {
+  // Filter by the signed-in user explicitly instead of relying on RLS alone;
+  // a filterless .maybeSingle() breaks (multiple rows) if the profiles RLS
+  // policy is ever loosened.
+  const session = await requireSession()
   const { data, error } = await sb
     .from('profiles')
     .select(
       'telegram_chat_id, preferred_language, role, subscription_tier, subscription_status, subscription_source, subscription_renews_at, max_aois, max_hectares, consult_ai_enabled'
     )
+    .eq('id', session.user.id)
     .maybeSingle()
   if (error) throw error
   return data || {

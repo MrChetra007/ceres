@@ -102,9 +102,12 @@
   border-radius: 8px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
   padding: 12px;
-  min-width: 320px;
+  min-width: 0;
   height: 280px;
   flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .chart-card-header {
@@ -112,12 +115,23 @@
   justify-content: space-between;
   align-items: center;
   margin-bottom: 6px;
+  flex: 0 0 auto;
 }
 
 .chart-card-title {
   font-size: 12px;
   font-weight: 600;
   color: #1a1a18;
+}
+
+/* Chart.js measures the canvas's parent, so the canvas needs its own flex
+   wrapper. If the canvas sits directly under .chart-card (which also holds the
+   header) it is sized to the whole card and spills below it. */
+.chart-canvas-wrap {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  width: 100%;
 }
 
 #trend-chart {
@@ -143,10 +157,12 @@
   box-shadow: 0 12px 48px rgba(0, 0, 0, 0.35);
   width: 100%;
   max-width: 960px;
+  height: min(90vh, 640px);
   max-height: 90vh;
   display: flex;
   flex-direction: column;
   padding: 1rem 1.25rem 1.25rem;
+  overflow: hidden;
 }
 
 .chart-modal-header {
@@ -171,5 +187,6 @@
 .chart-modal-body canvas {
   flex: 1;
   width: 100%;
-  min-height: 320px;
+  height: 100%;
+  min-height: 0;
 }
