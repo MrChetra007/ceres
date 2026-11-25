@@ -35,6 +35,20 @@ function deferIdle(fn) {
   else setTimeout(fn, 50)
 }
 
+// Background batches (field statuses/trends, dry-month markers) must not race
+// the first map tile: Earth Engine throttles concurrent interactive calls, so a
+// tile that could take ~5s was taking 10-20s when three batches started with
+// it. Wait for the main tile to settle (bounded, so a bad request can't hang
+// them forever), then run at idle.
+function deferAfterMainTile(fn, tries) {
+  tries = tries || 0
+  if (state.mainTileLoading && tries < 150) {
+    setTimeout(() => deferAfterMainTile(fn, tries + 1), 100)
+    return
+  }
+  deferIdle(fn)
+}
+
 // One-surface-at-a-time rule for phones. Desktop can keep the fields drawer,
 // detail drawer and observations sheet open together; a 360px viewport cannot.
 export function isMobileViewport() {
@@ -2077,7 +2091,7 @@ export function beginSessionWork() {
     // compete with the map load. Field statuses/trends run their own deferred
     // batch once the fields arrive (loadFieldsFromSupabase). Runs after the
     // current work at idle time.
-    deferIdle(() => {
+    deferAfterMainTile(() => {
       fetchDryMonths()
     })
   } else if (state.eeReady) {
@@ -2257,7 +2271,7 @@ export async function loadFieldsFromSupabase() {
     // session (geometry may have changed). Reset the dedup keys they guard on.
     allStatusSig = null
     allTrendsSig = null
-    deferIdle(() => {
+    deferAfterMainTile(() => {
       refreshAllFieldStatuses()
       refreshAllFieldTrends()
     })

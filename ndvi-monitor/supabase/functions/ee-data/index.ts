@@ -175,25 +175,49 @@ async function buildMaskedComposite(
   // Scene count and field-level valid fraction are independent Earth Engine
   // evaluations — run them concurrently instead of one after the other. On a
   // cold tile cache this removes one full round-trip from every request.
+  //
+  // The valid-fraction reduce runs at 20 m, not 10 m: validity comes from the
+  // 60 m s2cloudless probability and 20 m SCL mask, so 10 m was oversampling a
+  // signal that cannot vary that finely — and it was the dominant cost of a
+  // cold tile. The rendered tile itself is still full-resolution; only the
+  // confidence estimate is sampled.
   const composite = maskedIndices.median().rename(name);
-  const countPromise = evaluate(maskedIndices.size());
+  const countStart = performance.now();
+  const countPromise = evaluate(maskedIndices.size()).then((r: any) => {
+    console.log(
+      `[ee-data] tile count ${index} ${startISO || "?"} ${Math.round(performance.now() - countStart)}ms = ${r}`,
+    );
+    return r;
+  });
+  const validStart = performance.now();
   const validPromise = validPixelFraction(
     composite,
     name,
     geom,
-    10,
+    20,
     ee,
     evaluate,
-  ).catch((e: any) => {
-    // An empty/masked composite can make the reduce fail; treat it as unknown
-    // instead of failing the whole tile.
-    console.error("[ee-data] validPixelFraction failed:", e);
-    return null;
-  });
+  )
+    .then((r: any) => {
+      console.log(
+        `[ee-data] tile validFraction ${index} ${startISO || "?"} ${Math.round(performance.now() - validStart)}ms = ${r}`,
+      );
+      return r;
+    })
+    .catch((e: any) => {
+      // An empty/masked composite can make the reduce fail; treat it as unknown
+      // instead of failing the whole tile.
+      console.error("[ee-data] validPixelFraction failed:", e);
+      return null;
+    });
+  const tEval = performance.now();
   const [count, validFraction] = await Promise.all([
     countPromise,
     validPromise,
   ]);
+  console.log(
+    `[ee-data] buildMaskedComposite ${index} ${startISO || "?"} count+valid ${Math.round(performance.now() - tEval)}ms count=${count} valid=${validFraction}`,
+  );
   if (!count || count === 0) {
     return Promise.resolve({
       img: null,
@@ -588,6 +612,7 @@ async function actionGetIndexTile(payload: any) {
   // (no sceneDate) may hit it. Mode-aware: an optical request must never be
   // handed a radar-fallback row and vice versa.
   if (!payload.sceneDate) {
+    const cacheStart = performance.now();
     const cached = await readTileCache(
       index,
       payload.year,
@@ -595,7 +620,15 @@ async function actionGetIndexTile(payload: any) {
       geomHash,
       closed,
     );
-    if (cached) return cached;
+    if (cached) {
+      console.log(
+        `[ee-data] getIndexTile cache HIT ${index} ${payload.year}-${payload.month} mode=${cached.mode} in ${Math.round(performance.now() - cacheStart)}ms`,
+      );
+      return cached;
+    }
+    console.log(
+      `[ee-data] getIndexTile cache MISS ${index} ${payload.year}-${payload.month} in ${Math.round(performance.now() - cacheStart)}ms`,
+    );
   }
 
   let result: any;
@@ -805,7 +838,11 @@ async function actionGetIndexTile(payload: any) {
     masked.validFraction >= CLOUD_RESILIENCE.MIN_VALID_PIXEL_FRACTION
   ) {
     const composite = masked.img.clip(geom);
+    const mapStart = performance.now();
     const url = await getMapUrl(composite, vis);
+    console.log(
+      `[ee-data] getMapUrl ${index} ${payload.year}-${payload.month} in ${Math.round(performance.now() - mapStart)}ms`,
+    );
     result = {
       mode: "optical",
       count: clearSceneCount,
