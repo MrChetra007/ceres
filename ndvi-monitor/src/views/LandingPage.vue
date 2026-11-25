@@ -8,7 +8,7 @@
       <div class="brand-chip">
         <img class="brand-mark" :src="logo1" alt="" />
         <div class="brand-text">
-          <span class="brand-name">NDVI Rice Monitor</span>
+          <span class="brand-name">NDVI Crop Monitor</span>
           <span class="brand-loc mono">{{ t('landing.loc_sub') }}</span>
         </div>
       </div>

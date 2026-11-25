@@ -1,7 +1,7 @@
 {
-  "name": "NDVI Rice Crop Health Monitor Battambang",
-  "short_name": "NDVI Rice",
-  "description": "Satellite crop-health monitoring for rice farmers in Battambang, Cambodia.",
+  "name": "NDVI Crop Health Monitor",
+  "short_name": "NDVI Crop",
+  "description": "Satellite crop-health monitoring for farmers in Battambang, Cambodia.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

@@ -273,6 +273,11 @@ const collapsed = ref(
   savedCollapsed !== null ? savedCollapsed === "1" : isMobile.value,
 );
 let playTimer = null;
+let playToken = 0;
+const PLAY_MIN_MS = 1400;
+const PLAY_MAX_WAIT_MS = 8000;
+const PLAY_POLL_MS = 120;
+const PREFETCH_AHEAD = 3;
 let debounceTimer = null;
 let debounceTimerRight = null;
 
@@ -438,6 +443,10 @@ function eventLabel(i) {
 }
 
 function onMainSlider(e) {
+  if (playing.value) {
+    playing.value = false;
+    stopPlay();
+  }
   state.mainMonth = parseInt(e.target.value);
   state.selectedObservationDate = null; // manual scrub → revert to month's lowest-cloud scene
   state.displayedObservationDate = null;
@@ -449,6 +458,10 @@ function onMainSlider(e) {
 }
 
 function onRightSlider(e) {
+  if (playing.value) {
+    playing.value = false;
+    stopPlay();
+  }
   state.rightMonth = parseInt(e.target.value);
   clearTimeout(debounceTimerRight);
   debounceTimerRight = setTimeout(
@@ -482,28 +495,77 @@ watch(
 
 function startPlay() {
   stopPlay();
-  playTimer = setInterval(() => {
-    const b = sliderBounds.value;
-    const next = state.mainMonth >= b.max ? b.min : state.mainMonth + 1;
-    state.mainMonth = next;
-    state.selectedObservationDate = null; // animation scrubs all months
-    state.displayedObservationDate = null;
-    store.loadIndexForMonth(next, store.currentGeometry.value, true);
-    if (state.compareMode) {
-      state.rightMonth = next;
-      store.loadIndexForMonthRight(next, true);
-    }
-  }, 2500);
+  const b = sliderBounds.value;
+  if (b.max <= b.min) {
+    playing.value = false;
+    return;
+  }
+  // Playback always scrubs whole months, never a pinned scene.
+  state.selectedObservationDate = null;
+  state.displayedObservationDate = null;
+  const token = playToken;
+  // Warm the next few months while the user is still looking at the current
+  // one, so the first advances don't sit on a blank map.
+  prefetchAhead(state.mainMonth, PREFETCH_AHEAD);
+  playTimer = setTimeout(() => advancePlay(token), 800);
+}
+
+// Queue the months after `fromIdx` (wrapping inside the active range). Requests
+// dedupe in the store, so calling this on every step only fills the window.
+function prefetchAhead(fromIdx, count) {
+  const b = sliderBounds.value;
+  const span = b.max - b.min + 1;
+  if (span <= 1) return;
+  for (let i = 1; i <= count; i++) {
+    const idx = b.min + ((fromIdx - b.min + i) % span);
+    store.prefetchIndexForMonth(idx, store.currentGeometry.value);
+  }
+}
+
+// Advance only after the month just requested has actually resolved (or after a
+// timeout, so one bad month can't freeze the player). Fast months still get a
+// minimum on-screen time; slow months advance as soon as they paint.
+function advancePlay(token) {
+  if (token !== playToken) return;
+  const b = sliderBounds.value;
+  const next = state.mainMonth >= b.max ? b.min : state.mainMonth + 1;
+  state.mainMonth = next;
+  state.selectedObservationDate = null;
+  state.displayedObservationDate = null;
+  prefetchAhead(next, PREFETCH_AHEAD);
+  const started = Date.now();
+  store.loadIndexForMonth(next, store.currentGeometry.value, true);
+  if (state.compareMode) {
+    state.rightMonth = next;
+    store.loadIndexForMonthRight(next, true);
+  }
+  holdThenAdvance(token, started);
+}
+
+function holdThenAdvance(token, started) {
+  if (token !== playToken) return;
+  const waited = Date.now() - started;
+  if (state.mainTileLoading && waited < PLAY_MAX_WAIT_MS) {
+    playTimer = setTimeout(() => holdThenAdvance(token, started), PLAY_POLL_MS);
+    return;
+  }
+  const remain = Math.max(0, PLAY_MIN_MS - waited);
+  playTimer = setTimeout(() => advancePlay(token), remain);
 }
 
 function stopPlay() {
+  playToken++;
   if (playTimer) {
-    clearInterval(playTimer);
+    clearTimeout(playTimer);
     playTimer = null;
   }
 }
 
 function goLatest() {
+  if (playing.value) {
+    playing.value = false;
+    stopPlay();
+  }
   const b = sliderBounds.value;
   const latest = rangeActive.value ? b.max : Math.max(0, MONTHS.length - 2);
   state.mainMonth = latest;
@@ -517,6 +579,10 @@ function goLatest() {
 }
 
 function goToday() {
+  if (playing.value) {
+    playing.value = false;
+    stopPlay();
+  }
   store.jumpToToday();
 }
 

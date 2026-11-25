@@ -1,8 +1,8 @@
-# Ceres / NDVI Rice Monitor — AI Context Handoff
+# Ceres / NDVI Crop Monitor — AI Context Handoff
 
 **Use this file first.** If a future AI session needs to understand the app quickly, point it here. It is the shortest accurate map of the product, the code, the current state, and the rules for changing it.
 
-**Last updated:** 2026-11-24  
+**Last updated:** 2026-11-25  
 **Repo:** `D:\SAAS\NDVI`  
 **App root:** `D:\SAAS\NDVI\ndvi-monitor`  
 **Supabase project ref:** `wopwwtnvqyomiwbsxiks`  
@@ -12,7 +12,7 @@
 
 ## 1. What the app is
 
-Ceres is a satellite crop-health monitor for rice farmers in Cambodia, built around real Sentinel-2 data and Supabase.
+Ceres is a satellite crop-health monitor for farmers in Cambodia, built around real Sentinel-2 data and Supabase. It launched with a rice focus, but it is **not rice-only**: users can monitor many crops — corn/maize, beans/soybean, cassava, mango, cashew, banana, vegetables, and anything else they type. Rice gets a dedicated growth-stage model; every other crop uses a generic vegetative cycle.
 
 Core user flow:
 
@@ -26,9 +26,17 @@ Core user flow:
 
 The important product distinction: **Ceres is not just a map viewer.** It is a field record system + satellite pipeline + alerting system + (now) a two-sided CamDX data exchange.
 
+### Crop support
+
+- **Any crop is allowed.** The field form accepts free text (Khmer or English) and keeps what the user typed in `crop_name`; `crop_english` is the normalized English key that drives growth stages and AI prompts (`src/services/crops.js`).
+- **Known crops** (autocomplete chips): rice, mango, cashew, cassava, potato, maize/corn, banana, pepper, rubber, coconut, tobacco, vegetables, cabbage, cucumber, watermelon, beans, sugarcane, soybean, pineapple, water spinach, lotus, sesame, sweet potato.
+- **Stage models:** rice (or no crop set — the historical default) uses `RICE_GROWTH_STAGES`; every other crop uses `GENERIC_GROWTH_STAGES` in `src/config.js`, selected through `isRiceCrop()`.
+- **Season tips** already ship rice vs generic wording (`season.tip_<phase>_<rice|generic>`), so non-rice crops get generic timing guidance rather than paddy-specific advice.
+- **Brand:** the UI, page title and manifest now present the app as "NDVI Crop Monitor". Older docs/filenames may still say "NDVI Rice Monitor" — that is legacy, not a functional limit.
+
 ---
 
-## 2. Current state (as of 2026-11-24)
+## 2. Current state (as of 2026-11-25)
 
 ### Working / complete
 
@@ -41,6 +49,12 @@ The important product distinction: **Ceres is not just a map viewer.** It is a f
 - Open-Meteo 5-day forecast
 - Telegram linking + scheduled `ee-alerts-worker`
 - Email/password auth
+- Multi-crop support (2026-11-25):
+  - free-text crop picker with 24 known crops; rice uses the 6-stage model, everything else a generic 3-stage cycle
+  - UI, page title, manifest and docs are crop-neutral ("NDVI Crop Monitor")
+- Time-lapse performance (2026-11-25):
+  - load-aware playback with 3-month prefetch, in-flight prefetch reuse and a stale-response guard
+  - `ee-data` month cache now serves any cached mode (not just optical), and cold tiles run the scene-count + valid-fraction evaluations in parallel
 - CamDX Phase 0–6 implementation:
   - admin-boundary tables + 36-file seed
   - location picker + consent
@@ -208,6 +222,7 @@ ndvi-monitor/
 │   ├── services/
 │   │   ├── earthEngine.js       # thin client for ee-data
 │   │   ├── supabase.js          # Supabase client + auth + field/area CRUD
+│   │   ├── crops.js             # crop-name normalization + known-crop list
 │   │   ├── adminBoundaries.js   # Province/District/Commune/Village lookups
 │   │   ├── dataefService.js     # DataEF current-conditions proxy client
 │   │   ├── weatherService.js    # Open-Meteo forecast
@@ -302,6 +317,12 @@ share_with_authorities
 
 There are **no address columns** (no province/district name stored). Location is official codes + centroid. Human-readable names are resolved from `admin_*` tables at read time.
 
+Crop rules:
+
+- `crop_name` is exactly what the user typed; `crop_english` is the normalized key (`null` when an unrecognized Khmer name has no English mapping).
+- A null/empty crop is treated as rice for growth stages (the historical default). This is a fallback, not a product restriction.
+- Any crop string is accepted; adding a new crop to the autocomplete only needs an entry in `KNOWN_CROPS` (`src/services/crops.js`).
+
 Location rules:
 
 - `share_with_authorities` defaults false.
@@ -338,6 +359,7 @@ Codes are TEXT with leading zeros. Never convert them to numbers.
 - Field status comes from shared growth-stage logic:
   - `_shared/growthStage.ts`
   - `src/config.js` stage tables
+- Rice (or no crop set) uses `RICE_GROWTH_STAGES`; every other crop uses the day-based `GENERIC_GROWTH_STAGES`. The switch is `isRiceCrop(cropEnglish)` from `src/services/crops.js`. Non-rice crops never get paddy-specific stages or rice season tips.
 - `ee-alerts-worker` tries a 14-day window first, widens to 90 days, then radar.
 - `alerts_log.status` values: `healthy`, `below_expected`, `stressed`, `radar_flag`, `no_data`.
 - Decision engine (Phase 1): `src/services/decision.js` + `_shared/decision.ts` convert that status + confidence + stage + rainfall + forecast + NDVI trend into `monitor` / `scout` / `act`. `act` requires a stressed reading with a clear time-sensitive reason; radar, no-data and low-confidence cap at `scout`.
@@ -411,6 +433,7 @@ Do not reintroduce these:
 - **Suppression is by latest acknowledgement:** the worker queries `field_actions` filtered to `done` / `snoozed` / `dismissed`, so a later `rated` row never cancels a snooze. Keep that filter when adding new statuses.
 - **Triage uses cached client state:** `TodayTriage.vue` ranks from `fieldStatus` / `fieldTrends` already loaded and intentionally skips rainfall/forecast to avoid an Earth Engine fan-out, so a field's full decision can differ slightly until opened.
 - **Telegram digest scope:** only the optical NDVI path is digested (one message per chat); `no_data` and radar messages still send individually. Item cap is 500 chars, total 3,800; omitted fields log `telegram_sent = false`.
+- **Time-lapse playback is load-aware:** `TimeControl.vue` advances only after `state.mainTileLoading` clears (or an 8s timeout), keeps each loaded month on screen for a minimum hold, and prefetches 3 months ahead via `prefetchIndexForMonth()`. `loadIndexForMonth` reuses an in-flight prefetch and uses `mainTileSeq` to drop out-of-order/stale responses. Server-side, `ee_tile_cache` reads the newest cached mode (optical / radar_fallback / cloud_blocked / no_data) for month scrubs, and `buildMaskedComposite` runs the scene count + valid-fraction evaluates in parallel. Do not replace this with a fixed `setInterval` — that is what made months skip before they loaded.
 - **Season note is timing-only:** `src/services/season.js` and `_shared/season.ts` must stay in sync. It never changes tier/urgency; only the LLM prompts include it, not the deterministic Telegram fallback.
 - **Chart sizing/range:** the field-panel canvas must stay inside `.chart-canvas-wrap` (not directly under `.chart-card`). Chart.js measures the canvas parent, so a direct child overflows below the header. The y-axis is per-index via `resolveYRange()` — never hard-code `0..1`, because NDWI/LSWI (and negative NDVI) would clip off the frame.
 - **Exports:** PNG/PDF read the on-screen chart canvas (`trend-chart-large` when the modal is open, else `trend-chart`) and `state.chartData`; if either is empty they fail with a toast. The PNG is composited on white for readability. The JSON export is best-effort for async weather/location/observations and never blocks the download.

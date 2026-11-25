@@ -31,9 +31,9 @@ export const landingIndices = [
     fullName: 'Normalized Difference Water Index',
     formula: 'NDWI = (Green \u2212 NIR) / (Green + NIR)',
     description:
-      'Reads standing water instead of greenness \u2014 a flooded paddy lights up where a dry field stays dark, catching the wet phase NDVI misses.',
+      'Reads standing water instead of greenness \u2014 a flooded field lights up where a dry field stays dark, catching the wet phase NDVI misses.',
     scaleLow: 'dry land, little or no water',
-    scaleHigh: 'standing water, flooded paddies',
+    scaleHigh: 'standing water, flooded fields',
     gradient: ['#8a6a4d', '#d9c79a', '#9cc9e3', '#4a90d9', '#1d3f6b'],
     beforeImage: ndwiBefore,
     afterImage: ndwiAfter,
@@ -44,7 +44,7 @@ export const landingIndices = [
     fullName: 'Land Surface Water Index',
     formula: 'LSWI = (NIR \u2212 SWIR) / (NIR + SWIR)',
     description:
-      'Uses the shortwave band to sense water held in soil and plant canopies \u2014 the saturated canopy and wet paddy floor read clearly through it.',
+      'Uses the shortwave band to sense water held in soil and plant canopies \u2014 the saturated canopy and wet field floor read clearly through it.',
     scaleLow: 'dry soil, dry vegetation',
     scaleHigh: 'moist soil, saturated canopy',
     gradient: ['#d9c79a', '#9cc9e3', '#1d5a86'],

@@ -172,7 +172,28 @@ async function buildMaskedComposite(
     return idx.updateMask(validPixelMask(scene, ee));
   });
 
-  const count = await evaluate(maskedIndices.size());
+  // Scene count and field-level valid fraction are independent Earth Engine
+  // evaluations — run them concurrently instead of one after the other. On a
+  // cold tile cache this removes one full round-trip from every request.
+  const composite = maskedIndices.median().rename(name);
+  const countPromise = evaluate(maskedIndices.size());
+  const validPromise = validPixelFraction(
+    composite,
+    name,
+    geom,
+    10,
+    ee,
+    evaluate,
+  ).catch((e: any) => {
+    // An empty/masked composite can make the reduce fail; treat it as unknown
+    // instead of failing the whole tile.
+    console.error("[ee-data] validPixelFraction failed:", e);
+    return null;
+  });
+  const [count, validFraction] = await Promise.all([
+    countPromise,
+    validPromise,
+  ]);
   if (!count || count === 0) {
     return Promise.resolve({
       img: null,
@@ -182,18 +203,6 @@ async function buildMaskedComposite(
       compositeEnd: "",
     });
   }
-
-  const composite = maskedIndices.median().rename(name);
-  // Field-level valid fraction over the geometry (fraction of pixels carrying a
-  // non-NaN index value = pixel survived cloud/shadow mask AND has data).
-  const validFraction = await validPixelFraction(
-    composite,
-    name,
-    geom,
-    10,
-    ee,
-    evaluate,
-  );
 
   // d may be a plain timestamp, a JS Date, or an ee.Date — only the last case
   // is a computed value that must be evaluated before Date can consume it.
@@ -364,13 +373,16 @@ async function readTileCache(
   year: number,
   month: number,
   geomHash: string,
-  mode: string,
   closed: boolean,
 ): Promise<any | null> {
   // TEST FLAG: bypass all cache reads — every request recomputes against EE.
   if (!USE_EE_TILE_CACHE) return null;
   try {
     const before = Date.now() - tileCacheTtlMs(closed);
+    // Month-scrub requests have no scene date, so ANY cached mode for this
+    // index/month/geometry is valid: optical, radar_fallback, cloud_blocked or
+    // no_data. Reading only "optical" made cloudy/no-data months recompute on
+    // every replay; take the newest row instead.
     const { data } = await supabase
       .from("ee_tile_cache")
       .select(
@@ -380,8 +392,9 @@ async function readTileCache(
       .eq("year", year)
       .eq("month", month)
       .eq("geometry_hash", geomHash)
-      .eq("mode", mode)
       .gt("computed_at", new Date(before).toISOString())
+      .order("computed_at", { ascending: false })
+      .limit(1)
       .maybeSingle();
     if (!data) return null;
     return {
@@ -580,7 +593,6 @@ async function actionGetIndexTile(payload: any) {
       payload.year,
       payload.month,
       geomHash,
-      "optical",
       closed,
     );
     if (cached) return cached;

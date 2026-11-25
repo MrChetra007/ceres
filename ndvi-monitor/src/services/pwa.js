@@ -74,7 +74,7 @@ export function maybeShowInstallInvite() {
   markDownloaded()
   if (installAvailable()) {
     showToast(
-      'Install the NDVI Rice app for one-tap access and offline maps.',
+      'Install the NDVI Crop app for one-tap access and offline maps.',
       12000,
       [{ label: 'Install', onClick: installApp }],
     )

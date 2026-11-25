@@ -49,6 +49,44 @@ export function isMobileViewport() {
 // arrives (the layer is applied once); any real change makes a different key.
 const inflightTiles = new Map()
 
+// Time-lapse prefetch: while the current month is on screen, the player can
+// resolve the NEXT month in the background and stash its tile metadata here.
+// The browser image cache is warmed too, so advancing paints immediately
+// instead of waiting for a fresh ee-data round-trip. Keyed exactly like
+// inflightTiles (index, month, scene date and geometry) and capped in size.
+const PREFETCH_TTL_MS = 5 * 60 * 1000
+const PREFETCH_MAX = 16
+const prefetchedTiles = new Map()
+const prefetchPromises = new Map()
+
+let mainTileSeq = 0
+
+function tileKeyFor(idx, geometry, sceneKey) {
+  return state.currentIndex + '|' + idx + '|' + (sceneKey || '') + '|' + JSON.stringify(geometry)
+}
+
+function rememberPrefetchedTile(key, res) {
+  if (!res || res.mode === 'error') return
+  prefetchedTiles.set(key, { res, at: Date.now() })
+  if (res.url && typeof Image !== 'undefined') {
+    // Warm the browser's image cache for Leaflet.
+    const img = new Image()
+    img.src = res.url
+  }
+  while (prefetchedTiles.size > PREFETCH_MAX) {
+    const oldest = prefetchedTiles.keys().next().value
+    prefetchedTiles.delete(oldest)
+  }
+}
+
+function takePrefetchedTile(key) {
+  const hit = prefetchedTiles.get(key)
+  if (!hit) return null
+  prefetchedTiles.delete(key)
+  if (Date.now() - hit.at > PREFETCH_TTL_MS) return null
+  return hit.res
+}
+
 let dryMonthsFetchedKey = null
 
 // ---------------------------------------------------------------------------
@@ -168,6 +206,10 @@ export const state = reactive({
   aoiEditorEditId: null,
   editingFieldId: null,
   loading: false,
+  // True only while the MAIN index tile for the selected month is resolving.
+  // The time-lapse player waits on this so it never advances before the month
+  // it just asked for has been applied.
+  mainTileLoading: false,
   statusState: 'idle',
   statusText: '',
   toasts: [],
@@ -1055,9 +1097,13 @@ export function loadIndexForMonth(idx, geometry, silent) {
   if (!mapReg.map) return
   const geom = geometry || getGeometry()
   const sceneKey = state.currentIndex === 'truecolor' ? (state.trueColorDate || '') : (state.selectedObservationDate || '')
-  const tileKey = state.currentIndex + '|' + idx + '|' + sceneKey + '|' + JSON.stringify(geom)
+  const tileKey = tileKeyFor(idx, geom, sceneKey)
   if (inflightTiles.has(tileKey)) return
-  inflightTiles.set(tileKey, true)
+  const cached = state.currentIndex === 'truecolor' ? null : takePrefetchedTile(tileKey)
+  const pending = cached ? null : prefetchPromises.get(tileKey)
+  if (!cached) inflightTiles.set(tileKey, true)
+  const seq = ++mainTileSeq
+  state.mainTileLoading = true
   state.latestView = null
   state.latestViewLoading = false
   const cfg = INDICES[state.currentIndex]
@@ -1070,6 +1116,8 @@ export function loadIndexForMonth(idx, geometry, silent) {
   if (state.currentIndex === 'truecolor') {
     loadTrueColor(m, geom, state.trueColorDate, (res) => {
       inflightTiles.delete(tileKey)
+      if (seq !== mainTileSeq) { endLoading(); return }
+      state.mainTileLoading = false
       endLoading()
       state.sceneCount.main = res.count
       state.trueColorScenes = res.scenes || []
@@ -1107,8 +1155,10 @@ export function loadIndexForMonth(idx, geometry, silent) {
   // pre-empt that logic and silently show the month composite instead, which
   // is the bug we're fixing.
   const sceneDate = state.currentIndex !== 'truecolor' ? state.selectedObservationDate : null
-  ee.loadIndexTile(m, state.currentIndex, geom, (res) => {
+  const onResult = (res) => {
     inflightTiles.delete(tileKey)
+    if (seq !== mainTileSeq) { endLoading(); return }
+    state.mainTileLoading = false
     state.sceneCount.main = res.count
     state.opticalMeta.main = null // set only by the clear-optical branch below
     if (res.mode === 'error') {
@@ -1232,7 +1282,30 @@ export function loadIndexForMonth(idx, geometry, silent) {
     }
     metaBits.push(state.opticalMeta.main.clearSceneCount + ' ' + (state.opticalMeta.main.clearSceneCount === 1 ? 'scene' : 'scenes'))
     setStatus('ready', cfg.name + ' layer \u2014 ' + sceneLabel + (metaBits.length ? ' \u00b7 ' + metaBits.join(' \u00b7 ') : ''))
-  }, sceneDate)
+  }
+  if (cached) onResult(cached)
+  else if (pending) pending.then((res) => { takePrefetchedTile(tileKey); onResult(res) })
+  else ee.loadIndexTile(m, state.currentIndex, geom, onResult, sceneDate)
+}
+
+// Resolve a month's tile ahead of time for the time-lapse player. The result is
+// stashed for loadIndexForMonth (instant advance) and the browser image cache is
+// warmed. Errors are not cached, so a later real load can retry honestly.
+export function prefetchIndexForMonth(idx, geometry) {
+  const m = MONTHS[idx]
+  if (!m || !state.eeReady || !mapReg.map || state.currentIndex === 'truecolor') return
+  const geom = geometry || getGeometry()
+  const sceneDate = state.selectedObservationDate || null
+  const key = tileKeyFor(idx, geom, sceneDate)
+  if (prefetchedTiles.has(key) || prefetchPromises.has(key) || inflightTiles.has(key)) return
+  const promise = new Promise((resolve) => {
+    ee.loadIndexTile(m, state.currentIndex, geom, (res) => {
+      prefetchPromises.delete(key)
+      rememberPrefetchedTile(key, res)
+      resolve(res)
+    }, sceneDate)
+  })
+  prefetchPromises.set(key, promise)
 }
 
 export function loadIndexForMonthRight(idx, silent) {

@@ -1,7 +1,9 @@
 # Documentation Index
 
-Internal project docs for the NDVI Rice Monitor (Ceres). Previously scattered
-across the repo root, now grouped by purpose.
+Internal project docs for the NDVI Crop Monitor (Ceres). Previously scattered
+across the repo root, now grouped by purpose. The app started with a rice focus
+but supports many crops (corn/maize, beans, cassava, and any crop the user
+types); only rice has a dedicated growth-stage model.
 
 ## Start Here
 
