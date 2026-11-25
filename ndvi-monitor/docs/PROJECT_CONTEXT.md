@@ -183,6 +183,7 @@ where id = '<extension-viewer-user-uuid>';
 - Expected seed counts: **25 provinces, 210 districts, 1,661 communes, 14,512 villages**.
   - DataEF source has 14,576 villages but contains 54 duplicate codes, one malformed code (`0506140-`), and 9 orphan villages under missing commune `120913`.
   - Duplicates/malformed/orphan rows are intentionally skipped.
+- `ee-data` **v67** deployed 2026-11-25 with any-mode month-cache reads and parallel scene-count/valid-fraction evaluation. Deploys use `supabase/functions/ee-data/index.ts`; the stale `index.js` has all caching disabled.
 - PWA files exist but are **disabled** intentionally.
 
 ---
