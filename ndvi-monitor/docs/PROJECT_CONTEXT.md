@@ -54,7 +54,9 @@ The important product distinction: **Ceres is not just a map viewer.** It is a f
   - UI, page title, manifest and docs are crop-neutral ("NDVI Crop Monitor")
 - Time-lapse performance (2026-11-25):
   - load-aware playback with 3-month prefetch, in-flight prefetch reuse and a stale-response guard
+  - playback also waits for Leaflet's visible tiles to finish loading, not just the `ee-data` response
   - `ee-data` month cache now serves any cached mode (not just optical), and cold tiles run the scene-count + valid-fraction evaluations in parallel
+  - persistent IndexedDB tile cache (`src/services/tileCache.js`) reuses resolved month tiles across reloads within a 2h/20min TTL
 - CamDX Phase 0–6 implementation:
   - admin-boundary tables + 36-file seed
   - location picker + consent
@@ -183,7 +185,7 @@ where id = '<extension-viewer-user-uuid>';
 - Expected seed counts: **25 provinces, 210 districts, 1,661 communes, 14,512 villages**.
   - DataEF source has 14,576 villages but contains 54 duplicate codes, one malformed code (`0506140-`), and 9 orphan villages under missing commune `120913`.
   - Duplicates/malformed/orphan rows are intentionally skipped.
-- `ee-data` **v67** deployed 2026-11-25 with any-mode month-cache reads and parallel scene-count/valid-fraction evaluation. Deploys use `supabase/functions/ee-data/index.ts`; the stale `index.js` has all caching disabled.
+- `ee-data` **v68** deployed 2026-11-25 with any-mode month-cache reads, parallel scene-count/valid-fraction evaluation, 20 m valid-fraction sampling, and cache/compute timing logs. Deploys use `supabase/functions/ee-data/index.ts`; the stale `index.js` has all caching disabled.
 - PWA files exist but are **disabled** intentionally.
 
 ---
@@ -224,6 +226,7 @@ ndvi-monitor/
 │   │   ├── earthEngine.js       # thin client for ee-data
 │   │   ├── supabase.js          # Supabase client + auth + field/area CRUD
 │   │   ├── crops.js             # crop-name normalization + known-crop list
+│   │   ├── tileCache.js         # persistent IndexedDB tile cache (IndexedDB → ee-data)
 │   │   ├── adminBoundaries.js   # Province/District/Commune/Village lookups
 │   │   ├── dataefService.js     # DataEF current-conditions proxy client
 │   │   ├── weatherService.js    # Open-Meteo forecast
@@ -434,7 +437,9 @@ Do not reintroduce these:
 - **Suppression is by latest acknowledgement:** the worker queries `field_actions` filtered to `done` / `snoozed` / `dismissed`, so a later `rated` row never cancels a snooze. Keep that filter when adding new statuses.
 - **Triage uses cached client state:** `TodayTriage.vue` ranks from `fieldStatus` / `fieldTrends` already loaded and intentionally skips rainfall/forecast to avoid an Earth Engine fan-out, so a field's full decision can differ slightly until opened.
 - **Telegram digest scope:** only the optical NDVI path is digested (one message per chat); `no_data` and radar messages still send individually. Item cap is 500 chars, total 3,800; omitted fields log `telegram_sent = false`.
-- **Time-lapse playback is load-aware:** `TimeControl.vue` advances only after `state.mainTileLoading` clears (or an 8s timeout), keeps each loaded month on screen for a minimum hold, and prefetches 3 months ahead via `prefetchIndexForMonth()`. `loadIndexForMonth` reuses an in-flight prefetch and uses `mainTileSeq` to drop out-of-order/stale responses. Server-side, `ee_tile_cache` reads the newest cached mode (optical / radar_fallback / cloud_blocked / no_data) for month scrubs, and `buildMaskedComposite` runs the scene count + valid-fraction evaluates in parallel. Do not replace this with a fixed `setInterval` — that is what made months skip before they loaded.
+- **Time-lapse playback is load-aware:** `TimeControl.vue` advances only after `state.mainTileLoading` clears **and** Leaflet's visible overlay tiles finish (`mapReg.ndviLayer.isLoading()`), then holds the frame for a minimum time. It prefetches 3 months ahead via `prefetchIndexForMonth()`; `loadIndexForMonth` reuses an in-flight prefetch and uses `mainTileSeq` to drop out-of-order/stale responses. The 20s cap prevents one stuck tile from freezing playback, but do not replace this with a fixed `setInterval` — that is what made months skip before they loaded.
+- **Persistent client tile cache:** `src/services/tileCache.js` stores whole-month tile responses in IndexedDB (60-entry cap, keyed by `index | year | month | geometry hash`). TTL matches `ee-data`: **2h closed / 20min open**. Do not cache pinned `sceneDate` requests or true-color, do not extend the TTL (signed EE URLs expire), and do not reuse a row after a geometry edit — the changed geometry produces a new key.
+- **Server-side tile cache:** `ee_tile_cache` reads the newest cached mode (optical / radar_fallback / cloud_blocked / no_data) for month scrubs, `buildMaskedComposite` runs the scene count + valid-fraction evaluates in parallel, and the valid-fraction sample uses 20 m (not 10 m) because validity comes from 60 m s2cloudless + 20 m SCL.
 - **Season note is timing-only:** `src/services/season.js` and `_shared/season.ts` must stay in sync. It never changes tier/urgency; only the LLM prompts include it, not the deterministic Telegram fallback.
 - **Chart sizing/range:** the field-panel canvas must stay inside `.chart-canvas-wrap` (not directly under `.chart-card`). Chart.js measures the canvas parent, so a direct child overflows below the header. The y-axis is per-index via `resolveYRange()` — never hard-code `0..1`, because NDWI/LSWI (and negative NDVI) would clip off the frame.
 - **Exports:** PNG/PDF read the on-screen chart canvas (`trend-chart-large` when the modal is open, else `trend-chart`) and `state.chartData`; if either is empty they fail with a toast. The PNG is composited on white for readability. The JSON export is best-effort for async weather/location/observations and never blocks the download.

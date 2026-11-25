@@ -8,6 +8,7 @@ import {
 import * as ee from './services/earthEngine'
 import { loadTrueColor, rectGeometry, polygonGeometry, pointGeometry } from './services/earthEngine'
 import { normalizeCrop, isRiceCrop } from './services/crops'
+import { getCachedTile, putCachedTile, cachedTileKey } from './services/tileCache'
 import { reverseGeocode } from './services/geocode'
 import {
   toKhmerDigits, stageName, statusLabel, futurePlantingText, noReadingText,
@@ -77,6 +78,13 @@ let mainTileSeq = 0
 
 function tileKeyFor(idx, geometry, sceneKey) {
   return state.currentIndex + '|' + idx + '|' + (sceneKey || '') + '|' + JSON.stringify(geometry)
+}
+
+// IndexedDB key for whole-month scrubs only. A pinned scene (sceneDate) must
+// never reuse a month row, and true-color is a different data path.
+function persistentTileKey(idx, geometry) {
+  const m = MONTHS[idx]
+  return m ? cachedTileKey(state.currentIndex, m.year, m.month, geometry) : null
 }
 
 function rememberPrefetchedTile(key, res) {
@@ -1112,6 +1120,7 @@ export function loadIndexForMonth(idx, geometry, silent) {
   const geom = geometry || getGeometry()
   const sceneKey = state.currentIndex === 'truecolor' ? (state.trueColorDate || '') : (state.selectedObservationDate || '')
   const tileKey = tileKeyFor(idx, geom, sceneKey)
+  const persistentKey = state.currentIndex === 'truecolor' || sceneKey ? null : persistentTileKey(idx, geom)
   if (inflightTiles.has(tileKey)) return
   const cached = state.currentIndex === 'truecolor' ? null : takePrefetchedTile(tileKey)
   const pending = cached ? null : prefetchPromises.get(tileKey)
@@ -1169,10 +1178,13 @@ export function loadIndexForMonth(idx, geometry, silent) {
   // pre-empt that logic and silently show the month composite instead, which
   // is the bug we're fixing.
   const sceneDate = state.currentIndex !== 'truecolor' ? state.selectedObservationDate : null
-  const onResult = (res) => {
+  const onResult = (res, fromCache) => {
     inflightTiles.delete(tileKey)
     if (seq !== mainTileSeq) { endLoading(); return }
     state.mainTileLoading = false
+    if (persistentKey && !fromCache) {
+      putCachedTile(persistentKey, res, m.year, m.month)
+    }
     state.sceneCount.main = res.count
     state.opticalMeta.main = null // set only by the clear-optical branch below
     if (res.mode === 'error') {
@@ -1297,9 +1309,15 @@ export function loadIndexForMonth(idx, geometry, silent) {
     metaBits.push(state.opticalMeta.main.clearSceneCount + ' ' + (state.opticalMeta.main.clearSceneCount === 1 ? 'scene' : 'scenes'))
     setStatus('ready', cfg.name + ' layer \u2014 ' + sceneLabel + (metaBits.length ? ' \u00b7 ' + metaBits.join(' \u00b7 ') : ''))
   }
-  if (cached) onResult(cached)
-  else if (pending) pending.then((res) => { takePrefetchedTile(tileKey); onResult(res) })
-  else ee.loadIndexTile(m, state.currentIndex, geom, onResult, sceneDate)
+  if (cached) onResult(cached, true)
+  else if (pending) pending.then((res) => { takePrefetchedTile(tileKey); onResult(res, true) })
+  else if (persistentKey) {
+    getCachedTile(persistentKey).then((persisted) => {
+      if (seq !== mainTileSeq) { inflightTiles.delete(tileKey); endLoading(); return }
+      if (persisted) onResult(persisted, true)
+      else ee.loadIndexTile(m, state.currentIndex, geom, onResult, sceneDate)
+    })
+  } else ee.loadIndexTile(m, state.currentIndex, geom, onResult, sceneDate)
 }
 
 // Resolve a month's tile ahead of time for the time-lapse player. The result is
@@ -1312,14 +1330,25 @@ export function prefetchIndexForMonth(idx, geometry) {
   const sceneDate = state.selectedObservationDate || null
   const key = tileKeyFor(idx, geom, sceneDate)
   if (prefetchedTiles.has(key) || prefetchPromises.has(key) || inflightTiles.has(key)) return
-  const promise = new Promise((resolve) => {
-    ee.loadIndexTile(m, state.currentIndex, geom, (res) => {
-      prefetchPromises.delete(key)
-      rememberPrefetchedTile(key, res)
-      resolve(res)
-    }, sceneDate)
-  })
+  const persistentKey = sceneDate ? null : persistentTileKey(idx, geom)
+  const promise = (async () => {
+    if (persistentKey) {
+      const persisted = await getCachedTile(persistentKey)
+      if (persisted) {
+        rememberPrefetchedTile(key, persisted)
+        return persisted
+      }
+    }
+    return new Promise((resolve) => {
+      ee.loadIndexTile(m, state.currentIndex, geom, (res) => {
+        rememberPrefetchedTile(key, res)
+        if (persistentKey) putCachedTile(persistentKey, res, m.year, m.month)
+        resolve(res)
+      }, sceneDate)
+    })
+  })()
   prefetchPromises.set(key, promise)
+  promise.finally(() => prefetchPromises.delete(key))
 }
 
 export function loadIndexForMonthRight(idx, silent) {
