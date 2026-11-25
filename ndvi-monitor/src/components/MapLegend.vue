@@ -26,7 +26,7 @@ const isTrueColor = computed(() => effectiveIndex() === 'truecolor')
 const conf = computed(() => viewConfidence('main'))
 
 // Per-index legend scale values (the gradient bar stays the same). New
-// visual-only indices (savi/evi/gndvi/gci) get their own start/mid/end labels —
+// visual-only indices (savi/evi/gndvi/gci/ndre) get their own start/mid/end labels —
 // placeholders for the user to tune.
 const LEGEND_SCALE = {
   ndvi: ['0.0', '0.4', '1.0'],
@@ -36,6 +36,7 @@ const LEGEND_SCALE = {
   evi: ['0.0', '0.5', '1.0'],
   gndvi: ['-0.2', '0.3', '0.8'],
   gci: ['0.0', '4.0', '8.0'],
+  ndre: ['-0.2', '0.3', '0.8'],
   rvi: ['0.0', '0.5', '1.0'],
 }
 const scale = computed(() => LEGEND_SCALE[effectiveIndex()] || ['0.0', '0.4', '1.0'])

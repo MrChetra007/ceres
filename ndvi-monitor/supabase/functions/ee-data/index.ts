@@ -69,6 +69,7 @@ const BANDS: Record<string, string[]> = {
   evi: ["B8", "B4", "B2"],
   gndvi: ["B8", "B3"],
   gci: ["B8", "B3"],
+  ndre: ["B8", "B5"],
 };
 const VIS: Record<string, Record<string, unknown>> = {
   ndvi: { min: -0.2, max: 0.8, palette: ["red", "yellow", "green"] },
@@ -78,7 +79,7 @@ const VIS: Record<string, Record<string, unknown>> = {
     palette: ["brown", "tan", "#e0f0ff", "#4a90d9", "#003366"],
   },
   lswi: { min: -0.3, max: 0.6, palette: ["tan", "lightblue", "darkblue"] },
-  // SAVI/EVI/GNDVI/GCI are visual/exploratory tabs only (they do NOT feed the
+  // SAVI/EVI/GNDVI/GCI/NDRE are visual/exploratory tabs only (they do NOT feed the
   // growth-stage stress-alert scoring). Palettes below are starter breakpoints
   // for the user to tune.
   savi: { min: 0, max: 1, palette: ["brown", "yellow", "green"] },
@@ -87,6 +88,9 @@ const VIS: Record<string, Record<string, unknown>> = {
   // GCI = (NIR / Green) - 1, a ratio that keeps responding in dense canopies.
   // Keep in sync with src/config.js GCI_VIS.
   gci: { min: 0, max: 8, palette: ["#8a6a4d", "#e3a72e", "#6ba85f"] },
+  // NDRE = (NIR - RedEdge) / (NIR + RedEdge). B5 is a 20 m red-edge band, so
+  // NDRE's effective detail is 20 m. Keep in sync with src/config.js NDRE_VIS.
+  ndre: { min: -0.2, max: 0.8, palette: ["#8a6a4d", "#e3a72e", "#6ba85f"] },
   // RVI = 4*VH/(VV+VH) is mathematically bounded [0, 4]; VV>=VH for
   // vegetated surfaces keeps realistic dense-canopy values below ~2. Must stay
   // in sync with src/config.js RVI_VIS (legend, chart y-axis, ramp) so the
@@ -101,7 +105,7 @@ const TRUE_COLOR_VIS = { min: 0, max: 3000, gamma: 1.4 };
 const DRY_MONTH_THRESHOLD = 50;
 
 // Apply the band math for a given index to a (single) image and rename the
-// result band to `name`. NDVI/NDWI/LSWI/GNDVI are 2-band ratios that map cleanly
+// result band to `name`. NDVI/NDWI/LSWI/GNDVI/NDRE are 2-band ratios that map cleanly
 // onto ee.Image.normalizedDifference(); SAVI and EVI need a custom expression
 // (same style as the RVI fallback above). This is the single place index math
 // lives — every action that computes an index goes through here so a new index

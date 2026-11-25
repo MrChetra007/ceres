@@ -28,6 +28,7 @@ export interface IndexBand {
 //   lswi        [-0.3, 0.6] → -0.075 / 0.15 / 0.375
 //   savi/evi    [0, 1]      → 0.25 / 0.5 / 0.75
 //   gci         [0, 8]      → 2 / 4 / 6
+//   ndre        [-0.2, 0.8] → 0.05 / 0.30 / 0.55
 export const INDEX_BANDS: Record<string, IndexBand[]> = {
   ndvi: [
     { max: 0.05, label: "dead", phraseKey: "aim.p_ndvi_dead", phrase: "No living vegetation detected." },
@@ -71,6 +72,13 @@ export const INDEX_BANDS: Record<string, IndexBand[]> = {
     { max: 4, label: "unhealthy", phraseKey: "aim.p_gci_unhealthy", phrase: "Weak chlorophyll signal." },
     { max: 6, label: "moderate", phraseKey: "aim.p_gci_moderate", phrase: "Moderate chlorophyll / greenness." },
     { max: Infinity, label: "healthy", phraseKey: "aim.p_gci_healthy", phrase: "Strong chlorophyll / dense green canopy." },
+  ],
+  // NDRE is a normalized difference, so it shares NDVI/GNDVI's [-0.2, 0.8] scale.
+  ndre: [
+    { max: 0.05, label: "dead", phraseKey: "aim.p_ndre_dead", phrase: "No live green vegetation." },
+    { max: 0.3, label: "unhealthy", phraseKey: "aim.p_ndre_unhealthy", phrase: "Weak red-edge chlorophyll signal." },
+    { max: 0.55, label: "moderate", phraseKey: "aim.p_ndre_moderate", phrase: "Moderate canopy chlorophyll." },
+    { max: Infinity, label: "healthy", phraseKey: "aim.p_ndre_healthy", phrase: "Strong canopy chlorophyll." },
   ],
   // The composite health score (0-100) reuses the same 4-band language.
   composite: [
