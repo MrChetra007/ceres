@@ -275,7 +275,7 @@ const collapsed = ref(
 let playTimer = null;
 let playToken = 0;
 const PLAY_MIN_MS = 1400;
-const PLAY_MAX_WAIT_MS = 8000;
+const PLAY_MAX_WAIT_MS = 20000;
 const PLAY_POLL_MS = 120;
 const PREFETCH_AHEAD = 3;
 let debounceTimer = null;
@@ -542,15 +542,29 @@ function advancePlay(token) {
   holdThenAdvance(token, started);
 }
 
+// True while Leaflet is still downloading the visible overlay tiles. The server
+// can finish computing a month while its PNG tiles are still arriving, so
+// `mainTileLoading` alone is not enough — without this the player advanced
+// before the layer had actually painted.
+function visibleLayersBusy() {
+  return [store.mapReg.ndviLayer, store.mapReg.ndviLayerRight].some(
+    (layer) => layer && typeof layer.isLoading === "function" && layer.isLoading(),
+  );
+}
+
 function holdThenAdvance(token, started) {
   if (token !== playToken) return;
   const waited = Date.now() - started;
-  if (state.mainTileLoading && waited < PLAY_MAX_WAIT_MS) {
+  const busy = state.mainTileLoading || visibleLayersBusy();
+  if (busy && waited < PLAY_MAX_WAIT_MS) {
     playTimer = setTimeout(() => holdThenAdvance(token, started), PLAY_POLL_MS);
     return;
   }
-  const remain = Math.max(0, PLAY_MIN_MS - waited);
-  playTimer = setTimeout(() => advancePlay(token), remain);
+  // Wait until the server response AND the visible tiles are done, then hold the
+  // finished frame on screen for a minimum time. On timeout, move on quickly so
+  // one stuck tile can't freeze playback forever.
+  const hold = busy ? 300 : PLAY_MIN_MS;
+  playTimer = setTimeout(() => advancePlay(token), hold);
 }
 
 function stopPlay() {
