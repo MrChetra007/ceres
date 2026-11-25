@@ -86,6 +86,7 @@ export default {
   'band.tip_savi': 'Vegetation health, adjusted for bare soil in sparse crops',
   'band.tip_evi': 'Vegetation density, corrected for haze and canopy shadow',
   'band.tip_gndvi': 'Vegetation health, more sensitive to chlorophyll/nitrogen',
+  'band.tip_gci': 'Chlorophyll-sensitive green ratio (NIR / Green - 1)',
   'band.tip_rvi': 'Radar vegetation index from Sentinel-1 — works through clouds',
   'band.tip_truecolor': 'Real satellite photo — no index calculation',
   'band.scene_precision': 'Scene',
@@ -108,6 +109,7 @@ export default {
   'index.savi_title': 'SAVI — Soil-Adjusted Vegetation Index (L=0.5). Corrects for bare-soil brightness; better for early-season or low-cover fields. Visual-only for now, not used for stress alerts.',
   'index.evi_title': 'EVI — Enhanced Vegetation Index. Resists saturation at high biomass; the blue band corrects atmospheric and soil noise. Visual-only for now, not used for stress alerts.',
   'index.gndvi_title': 'GNDVI — Green NDVI. Uses the green band, more responsive to chlorophyll and canopy water content. Visual-only for now, not used for stress alerts.',
+  'index.gci_title': 'GCI — Green Chlorophyll Index (NIR / Green - 1). Stays sensitive to chlorophyll in dense canopies. Visual-only for now, not used for stress alerts.',
   'index.truecolor_title': 'True Color — real Sentinel-2 photo (Bands 4·3·2). Clouds show as-is: a cloudy date is exactly why that month is low-confidence.',
   'index.trend': 'Trend',
   // Time control
@@ -873,6 +875,10 @@ export default {
   'aim.p_gndvi_moderate': 'Moderate greenness.',
   'aim.p_gndvi_unhealthy': 'Weak chlorophyll / greenness signal.',
   'aim.p_gndvi_dead': 'No live green vegetation.',
+  'aim.p_gci_healthy': 'Strong chlorophyll / dense green canopy.',
+  'aim.p_gci_moderate': 'Moderate chlorophyll / greenness.',
+  'aim.p_gci_unhealthy': 'Weak chlorophyll signal.',
+  'aim.p_gci_dead': 'No live green vegetation.',
   // Tutorial / first-run onboarding
   'tut.skip': 'Skip',
   'tut.back': 'Back',

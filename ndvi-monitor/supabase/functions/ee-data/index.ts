@@ -68,6 +68,7 @@ const BANDS: Record<string, string[]> = {
   savi: ["B8", "B4"],
   evi: ["B8", "B4", "B2"],
   gndvi: ["B8", "B3"],
+  gci: ["B8", "B3"],
 };
 const VIS: Record<string, Record<string, unknown>> = {
   ndvi: { min: -0.2, max: 0.8, palette: ["red", "yellow", "green"] },
@@ -77,12 +78,15 @@ const VIS: Record<string, Record<string, unknown>> = {
     palette: ["brown", "tan", "#e0f0ff", "#4a90d9", "#003366"],
   },
   lswi: { min: -0.3, max: 0.6, palette: ["tan", "lightblue", "darkblue"] },
-  // SAVI/EVI/GNDVI are visual/exploratory tabs only (they do NOT feed the
+  // SAVI/EVI/GNDVI/GCI are visual/exploratory tabs only (they do NOT feed the
   // growth-stage stress-alert scoring). Palettes below are starter breakpoints
   // for the user to tune.
   savi: { min: 0, max: 1, palette: ["brown", "yellow", "green"] },
   evi: { min: 0, max: 1, palette: ["red", "orange", "green"] },
   gndvi: { min: -0.2, max: 0.8, palette: ["red", "purple", "green"] },
+  // GCI = (NIR / Green) - 1, a ratio that keeps responding in dense canopies.
+  // Keep in sync with src/config.js GCI_VIS.
+  gci: { min: 0, max: 8, palette: ["#8a6a4d", "#e3a72e", "#6ba85f"] },
   // RVI = 4*VH/(VV+VH) is mathematically bounded [0, 4]; VV>=VH for
   // vegetated surfaces keeps realistic dense-canopy values below ~2. Must stay
   // in sync with src/config.js RVI_VIS (legend, chart y-axis, ramp) so the
@@ -127,6 +131,14 @@ function applyIndex(img: any, index: string, name: string) {
         C1,
         C2,
         L,
+      })
+      .rename(name);
+  }
+  if (index === "gci") {
+    return img
+      .expression("(NIR / GREEN) - 1", {
+        NIR: img.select("B8"),
+        GREEN: img.select("B3"),
       })
       .rename(name);
   }

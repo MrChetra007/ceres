@@ -46,6 +46,7 @@
             'savi',
             'evi',
             'gndvi',
+            'gci',
             'rvi',
             'truecolor',
           ]"
@@ -240,6 +241,7 @@ function bandTip(idx) {
     savi: t("band.tip_savi"),
     evi: t("band.tip_evi"),
     gndvi: t("band.tip_gndvi"),
+    gci: t("band.tip_gci"),
     rvi: t("band.tip_rvi"),
     truecolor: t("band.tip_truecolor"),
   };

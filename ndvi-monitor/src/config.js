@@ -20,12 +20,15 @@ export const MAP_ZOOM = 14
 export const NDVI_VIS = { min: -0.2, max: 0.8, palette: ['red', 'yellow', 'green'] }
 export const NDWI_VIS = { min: -1, max: 1, palette: ['brown', 'tan', '#e0f0ff', '#4a90d9', '#003366'] }
 export const LSWI_VIS = { min: -0.3, max: 0.6, palette: ['tan', 'lightblue', 'darkblue'] }
-// SAVI/EVI/GNDVI are visual/exploratory tabs only (they do NOT feed the
+// SAVI/EVI/GNDVI/GCI are visual/exploratory tabs only (they do NOT feed the
 // growth-stage stress-alert scoring). Palettes below are starter breakpoints
 // for the user to tune. Keep in sync with ee-data's VIS.
 export const SAVI_VIS = { min: 0, max: 1, palette: ['brown', 'yellow', 'green'] }
 export const EVI_VIS = { min: 0, max: 1, palette: ['red', 'orange', 'green'] }
 export const GNDVI_VIS = { min: -0.2, max: 0.8, palette: ['red', 'purple', 'green'] }
+// GCI = (NIR / Green) - 1, a ratio (not a normalized difference). Typical
+// vegetated values run roughly 0-8; this is a visual scale to tune.
+export const GCI_VIS = { min: 0, max: 8, palette: ['#8a6a4d', '#e3a72e', '#6ba85f'] }
 export const RVI_VIS = { min: 0, max: 2, palette: ['blue', 'white', 'green'] }
 
 // True Color photo mode — real Sentinel-2 RGB (B4·B3·B2), not an index.
@@ -93,6 +96,14 @@ export const INDICES = {
     fullKhm: 'សន្ទស្សន៍ NDVI បៃតង',
     explain: 'Mirror of NDVI but using the green band (B3), which responds more to chlorophyll and canopy water content. Placeholder scale — tune the breakpoints.',
     explainKhm: 'ដូច NDVI ប៉ុន្តែប្រើបទបៃតង (B3) ដែលឆ្លើយតបខ្លាំងជាងនឹងក្លរ៉ូហ្វីល និងសំណើមក្នុងសំបកដំណាំ។ មាត្រដ្ឋានបណ្ដោះអាសន្ន — អាចកែតម្រូវបាន។',
+  },
+  gci: {
+    name: 'GCI', bands: ['B8', 'B3'], vis: GCI_VIS, label: 'Chlorophyll',
+    color: '#65a30d',
+    full: 'Green Chlorophyll Index',
+    fullKhm: 'សន្ទស្សន៍ក្លរ៉ូហ្វីលបៃតង',
+    explain: 'A ratio of near-infrared over green (GCI = NIR / Green - 1). Stays sensitive to chlorophyll in denser canopies, where normalized indices begin to flatten. Visual-only for now, not used for stress alerts.',
+    explainKhm: 'សមាមាត្ររវាងអ៊ីនហ្វ្រារ៉េដជិត និងពណ៌បៃតង (GCI = NIR / Green - 1)។ នៅតែងាយនឹងក្លរ៉ូហ្វីលក្នុងគម្របក្រាស់ ដែលសន្ទស្សន៍ធម្មតាចាប់ផ្តើមរាបស្មើ។ បង្ហាញតែប៉ុណ្ណោះ — មិនទាន់ប្រើសម្រាប់ការជូនដំណឹងស្ត្រេសទេ។',
   },
   rvi: {
     name: 'RVI', bands: ['VV', 'VH'], vis: RVI_VIS, label: 'Radar',

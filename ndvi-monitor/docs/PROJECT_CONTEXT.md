@@ -19,7 +19,7 @@ Core user flow:
 1. Sign in with email/password (Supabase Auth).
 2. Draw a field polygon/rectangle on a Leaflet map.
 3. Set crop and planting date.
-4. View monthly NDVI / NDWI / LSWI / SAVI / EVI / GNDVI / RVI / true-color layers.
+4. View monthly NDVI / NDWI / LSWI / SAVI / EVI / GNDVI / GCI / RVI / true-color layers.
 5. Get a field health status, trend chart, rainfall context, stress alert, and AI-written advisory.
 6. Receive Telegram alerts.
 7. For CamDX: tag the field with official Province > District > Commune > Village codes, optionally consent to share anonymized health, and let extension officers see commune-level summaries at `/government`.
@@ -40,7 +40,7 @@ The important product distinction: **Ceres is not just a map viewer.** It is a f
 
 ### Working / complete
 
-- NDVI / NDWI / LSWI / SAVI / EVI / GNDVI / RVI / true-color map layers
+- NDVI / NDWI / LSWI / SAVI / EVI / GNDVI / GCI / RVI / true-color map layers
 - Time slider, latest view, scene counts, cloud-blocked and radar fallback states
 - Field draw/save/edit/delete and dashboard
 - Growth-stage-aware health status
@@ -185,7 +185,8 @@ where id = '<extension-viewer-user-uuid>';
 - Expected seed counts: **25 provinces, 210 districts, 1,661 communes, 14,512 villages**.
   - DataEF source has 14,576 villages but contains 54 duplicate codes, one malformed code (`0506140-`), and 9 orphan villages under missing commune `120913`.
   - Duplicates/malformed/orphan rows are intentionally skipped.
-- `ee-data` **v68** deployed 2026-11-25 with any-mode month-cache reads, parallel scene-count/valid-fraction evaluation, 20 m valid-fraction sampling, and cache/compute timing logs. Deploys use `supabase/functions/ee-data/index.ts`; the stale `index.js` has all caching disabled.
+- `ee-data` **v69** deployed 2026-11-25 with GCI (Green Chlorophyll Index, NIR/Green − 1) plus all v68 tile-cache/parallel-evaluation changes. Deploys use `supabase/functions/ee-data/index.ts`; the stale `index.js` has all caching disabled.
+- `migrations/021_add_gci_index.sql` applied: `ee_tile_cache` and `ee_trend_cache` index CHECK constraints now include `gci`.
 - PWA files exist but are **disabled** intentionally.
 
 ---
@@ -357,9 +358,9 @@ Codes are TEXT with leading zeros. Never convert them to numbers.
 ## 8. Satellite/status pipeline
 
 - `ee-data` is the only Earth Engine compute path.
-- Indices: `ndvi`, `ndwi`, `lswi`, `savi`, `evi`, `gndvi`, `rvi`, `truecolor`.
+- Indices: `ndvi`, `ndwi`, `lswi`, `savi`, `evi`, `gndvi`, `gci`, `rvi`, `truecolor`. GCI = (NIR / Green) − 1 is **visual-only** (not in decisions/alerts/health score).
 - Cloud policy: Sentinel-2 scene cloud cover < 40% is “clean”; radar fallback uses Sentinel-1 RVI.
-- Radar substitution is **NDVI-only**. NDWI/LSWI/SAVI/EVI/GNDVI return honest no-data.
+- Radar substitution is **NDVI-only**. NDWI/LSWI/SAVI/EVI/GNDVI/GCI return honest no-data.
 - Field status comes from shared growth-stage logic:
   - `_shared/growthStage.ts`
   - `src/config.js` stage tables
@@ -440,6 +441,7 @@ Do not reintroduce these:
 - **Time-lapse playback is load-aware:** `TimeControl.vue` advances only after `state.mainTileLoading` clears **and** Leaflet's visible overlay tiles finish (`mapReg.ndviLayer.isLoading()`), then holds the frame for a minimum time. It prefetches 3 months ahead via `prefetchIndexForMonth()`; `loadIndexForMonth` reuses an in-flight prefetch and uses `mainTileSeq` to drop out-of-order/stale responses. The 20s cap prevents one stuck tile from freezing playback, but do not replace this with a fixed `setInterval` — that is what made months skip before they loaded.
 - **Persistent client tile cache:** `src/services/tileCache.js` stores whole-month tile responses in IndexedDB (60-entry cap, keyed by `index | year | month | geometry hash`). TTL matches `ee-data`: **2h closed / 20min open**. Do not cache pinned `sceneDate` requests or true-color, do not extend the TTL (signed EE URLs expire), and do not reuse a row after a geometry edit — the changed geometry produces a new key.
 - **Server-side tile cache:** `ee_tile_cache` reads the newest cached mode (optical / radar_fallback / cloud_blocked / no_data) for month scrubs, `buildMaskedComposite` runs the scene count + valid-fraction evaluates in parallel, and the valid-fraction sample uses 20 m (not 10 m) because validity comes from 60 m s2cloudless + 20 m SCL.
+- **Adding a new index:** update `src/config.js` (`INDICES` + VIS), `ee-data` (`BANDS`, `VIS`, `applyIndex`), `BandPanel.vue` tabs/tips, `MapLegend.vue` scale labels, `en.js`/`km.js` (`band.tip_*`, `index.*_title`, `aim.p_*`), `_shared/indexTranslations.ts`, and a migration extending the `index` CHECK constraints on `ee_tile_cache` and `ee_trend_cache`. GCI (migration 021) is the worked example; it is visual-only.
 - **Season note is timing-only:** `src/services/season.js` and `_shared/season.ts` must stay in sync. It never changes tier/urgency; only the LLM prompts include it, not the deterministic Telegram fallback.
 - **Chart sizing/range:** the field-panel canvas must stay inside `.chart-canvas-wrap` (not directly under `.chart-card`). Chart.js measures the canvas parent, so a direct child overflows below the header. The y-axis is per-index via `resolveYRange()` — never hard-code `0..1`, because NDWI/LSWI (and negative NDVI) would clip off the frame.
 - **Exports:** PNG/PDF read the on-screen chart canvas (`trend-chart-large` when the modal is open, else `trend-chart`) and `state.chartData`; if either is empty they fail with a toast. The PNG is composited on white for readability. The JSON export is best-effort for async weather/location/observations and never blocks the download.

@@ -27,6 +27,7 @@ export interface IndexBand {
 //   ndwi        [-1, 1]     → -0.5 / 0 / 0.5
 //   lswi        [-0.3, 0.6] → -0.075 / 0.15 / 0.375
 //   savi/evi    [0, 1]      → 0.25 / 0.5 / 0.75
+//   gci         [0, 8]      → 2 / 4 / 6
 export const INDEX_BANDS: Record<string, IndexBand[]> = {
   ndvi: [
     { max: 0.05, label: "dead", phraseKey: "aim.p_ndvi_dead", phrase: "No living vegetation detected." },
@@ -63,6 +64,13 @@ export const INDEX_BANDS: Record<string, IndexBand[]> = {
     { max: 0.3, label: "unhealthy", phraseKey: "aim.p_gndvi_unhealthy", phrase: "Weak chlorophyll / greenness signal." },
     { max: 0.55, label: "moderate", phraseKey: "aim.p_gndvi_moderate", phrase: "Moderate greenness." },
     { max: Infinity, label: "healthy", phraseKey: "aim.p_gndvi_healthy", phrase: "Strong green canopy." },
+  ],
+  // GCI is a ratio [-1..∞]; quartiles of the shared 0..8 visual range.
+  gci: [
+    { max: 2, label: "dead", phraseKey: "aim.p_gci_dead", phrase: "No live green vegetation." },
+    { max: 4, label: "unhealthy", phraseKey: "aim.p_gci_unhealthy", phrase: "Weak chlorophyll signal." },
+    { max: 6, label: "moderate", phraseKey: "aim.p_gci_moderate", phrase: "Moderate chlorophyll / greenness." },
+    { max: Infinity, label: "healthy", phraseKey: "aim.p_gci_healthy", phrase: "Strong chlorophyll / dense green canopy." },
   ],
   // The composite health score (0-100) reuses the same 4-band language.
   composite: [
