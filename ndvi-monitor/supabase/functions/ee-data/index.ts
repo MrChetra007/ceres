@@ -1602,8 +1602,8 @@ async function actionGetFieldStatus(payload: any) {
 // ── getFieldHealthScore ────────────────────────────────────────────────────
 // AIM · Feature 2 + 3 + 4. One 0-100 composite on a 4-band plain-language
 // verdict, blending the GROWTH-STAGE-APPROPRIATE indices:
-//   early stages (Germination/Seedling) → savi + lswi
-//   later stages / unknown              → ndvi + lswi + evi
+//   early stages (Transplanting/Tillering) → savi + lswi
+//   later stages / unknown                → ndvi + lswi + evi
 // Each index is normalized to 0..1 against its OWN VIS range before the
 // weighted average, so indices with different natural ranges can be combined.
 // Returns the raw per-index values too so the discrepancy rules (F4) operate

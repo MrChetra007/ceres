@@ -18,11 +18,13 @@
 
 import { stageForDay } from "./growthStage.ts";
 
-const EARLY_STAGES = new Set(["Germination", "Seedling"]);
+// Client RICE_GROWTH_STAGES (src/config.js) names — the rice stages before the
+// canopy closes over. Keep in sync with _shared/growthStage.ts.
+const EARLY_STAGES = new Set(["Transplanting", "Tillering"]);
 
-// Soil is still clearly visible through the canopy in Germination/Seedling →
+// Soil is still clearly visible through the canopy in Transplanting/Tillering →
 // use SAVI (L=0.5, corrects for soil brightness). Once the canopy closes over
-// (Vegetative onward), plain NDVI is the reliable standard again.
+// (Stem Elongation / Booting onward), plain NDVI is the reliable standard again.
 export function primaryIndexForStage(stageName: string | null): string {
   if (stageName && EARLY_STAGES.has(stageName)) return "savi";
   return "ndvi";

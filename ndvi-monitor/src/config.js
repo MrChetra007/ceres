@@ -179,24 +179,7 @@ export const DEFAULT_PRESETS = [
   { label: 'Factory South', lat: 12.855, lng: 103.010, zoom: 14 },
 ]
 
-export const RICE_GROWTH_STAGES = [
-  { maxDay: 10, stage: 'Transplanting', min: -0.1, max: 0.3 },
-  { maxDay: 30, stage: 'Tillering', min: 0.3, max: 0.55 },
-  { maxDay: 55, stage: 'Stem Elongation / Booting', min: 0.5, max: 0.75 },
-  { maxDay: 75, stage: 'Flowering / Heading', min: 0.6, max: 0.85 },
-  { maxDay: 100, stage: 'Grain Filling / Maturity', min: 0.4, max: 0.7 },
-  { maxDay: 130, stage: 'Harvest / Senescence', min: -0.1, max: 0.4 },
-]
-
-// Day-based generic vegetative cycle for crops without rice-specific tables
-// (mango, cassava, banana, ...). Wider bands than rice and fewer stages — the
-// same day-since-planting driver, but with thresholds that don't assume the
-// flood-and-recede cycle of a paddy.
-export const GENERIC_GROWTH_STAGES = [
-  { maxDay: 40, stage: 'Vegetative', min: 0.15, max: 0.5 },
-  { maxDay: 85, stage: 'Flowering / Fruiting', min: 0.35, max: 0.65 },
-  { maxDay: 130, stage: 'Mature', min: 0.25, max: 0.55 },
-]
+export { RICE_GROWTH_STAGES, GENERIC_GROWTH_STAGES } from './data/stages.js'
 
 export const EVENTS = [
   { year: 2025, month: 8, label: 'Flood', type: 'flood' },

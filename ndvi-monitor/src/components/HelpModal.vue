@@ -85,12 +85,12 @@
         <h4>{{ t('help.growth_stages') }}</h4>
         <p>{{ t('help.stages_intro') }}</p>
         <ul>
-          <li><strong>{{ t('field.stage_germination') }}</strong> ({{ t('help.days') }} 1&ndash;10) &mdash; {{ t('help.stage_germ_txt') }}</li>
-          <li><strong>{{ t('field.stage_seedling') }}</strong> ({{ t('help.days') }} 11&ndash;25) &mdash; {{ t('help.stage_seed_txt') }}</li>
-          <li><strong>{{ t('field.stage_vegetative') }}</strong> ({{ t('help.days') }} 26&ndash;55) &mdash; {{ t('help.stage_veg_txt') }}</li>
-          <li><strong>{{ t('field.stage_reproductive') }}</strong> ({{ t('help.days') }} 56&ndash;90) &mdash; {{ t('help.stage_repro_txt') }}</li>
-          <li><strong>{{ t('field.stage_maturation') }}</strong> ({{ t('help.days') }} 91&ndash;110) &mdash; {{ t('help.stage_mat_txt') }}</li>
-          <li><strong>{{ t('field.stage_harvest') }}</strong> ({{ t('help.days') }} 111+) &mdash; {{ t('help.stage_harv_txt') }}</li>
+          <li><strong>{{ t('field.stage_transplanting') }}</strong> ({{ t('help.days') }} 1&ndash;10) &mdash; {{ t('help.stage_transplant_txt') }}</li>
+          <li><strong>{{ t('field.stage_tillering') }}</strong> ({{ t('help.days') }} 11&ndash;30) &mdash; {{ t('help.stage_tiller_txt') }}</li>
+          <li><strong>{{ t('field.stage_stem_booting') }}</strong> ({{ t('help.days') }} 31&ndash;55) &mdash; {{ t('help.stage_stem_txt') }}</li>
+          <li><strong>{{ t('field.stage_flowering_heading') }}</strong> ({{ t('help.days') }} 56&ndash;75) &mdash; {{ t('help.stage_flower_txt') }}</li>
+          <li><strong>{{ t('field.stage_grainfill_maturity') }}</strong> ({{ t('help.days') }} 76&ndash;100) &mdash; {{ t('help.stage_grain_txt') }}</li>
+          <li><strong>{{ t('field.stage_harvest_senescence') }}</strong> ({{ t('help.days') }} 101+) &mdash; {{ t('help.stage_harvest_txt') }}</li>
         </ul>
 
         <h4>{{ t('help.data_source') }}</h4>

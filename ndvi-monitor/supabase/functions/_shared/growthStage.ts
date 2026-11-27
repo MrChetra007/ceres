@@ -1,21 +1,22 @@
 // Shared growth-stage logic — single source of truth for ee-alerts-worker and
-// the ee-data Edge Function. Ported verbatim from the original inline copy in
-// ee-alerts-worker (which itself was a port of the app's app.js thresholds) so
-// the two functions can never drift out of sync.
+// the ee-data Edge Function. The rice table is a VERBATIM copy of
+// RICE_GROWTH_STAGES in src/config.js (the client is the source of truth; the
+// browser cannot import this Deno module). Keep them identical — tests/stages.test.js
+// asserts table + stageForDay parity for days 0–200.
 export const RICE_GROWTH_STAGES = [
-  { name: "Germination", maxDay: 10, min: 0.05, max: 0.15 },
-  { name: "Seedling", maxDay: 25, min: 0.15, max: 0.3 },
-  { name: "Vegetative", maxDay: 55, min: 0.3, max: 0.55 },
-  { name: "Reproductive", maxDay: 90, min: 0.55, max: 0.75 },
-  { name: "Maturation", maxDay: 110, min: 0.35, max: 0.55 },
-  { name: "Harvest", maxDay: Infinity, min: 0.1, max: 0.3 },
+  { name: "Transplanting", maxDay: 10, min: -0.1, max: 0.3 },
+  { name: "Tillering", maxDay: 30, min: 0.3, max: 0.55 },
+  { name: "Stem Elongation / Booting", maxDay: 55, min: 0.5, max: 0.75 },
+  { name: "Flowering / Heading", maxDay: 75, min: 0.6, max: 0.85 },
+  { name: "Grain Filling / Maturity", maxDay: 100, min: 0.4, max: 0.7 },
+  { name: "Harvest / Senescence", maxDay: 130, min: -0.1, max: 0.4 },
 ];
 
 // Same day-based driver as RICE_GROWTH_STAGES but with a plain vegetative
 // cycle and wider bands — used for fields whose crop isn't rice.
 export const GENERIC_GROWTH_STAGES = [
   { name: "Vegetative", maxDay: 40, min: 0.15, max: 0.5 },
-  { name: "Flowering", maxDay: 85, min: 0.35, max: 0.65 },
+  { name: "Flowering / Fruiting", maxDay: 85, min: 0.35, max: 0.65 },
   { name: "Mature", maxDay: 130, min: 0.25, max: 0.55 },
 ];
 

@@ -364,7 +364,7 @@ Codes are TEXT with leading zeros. Never convert them to numbers.
 - Field status comes from shared growth-stage logic:
   - `_shared/growthStage.ts`
   - `src/config.js` stage tables
-- Rice (or no crop set) uses `RICE_GROWTH_STAGES`; every other crop uses the day-based `GENERIC_GROWTH_STAGES`. The switch is `isRiceCrop(cropEnglish)` from `src/services/crops.js`. Non-rice crops never get paddy-specific stages or rice season tips.
+- Rice (or no crop set) uses `RICE_GROWTH_STAGES`; every other crop uses the day-based `GENERIC_GROWTH_STAGES`. The switch is `isRiceCrop(cropEnglish)` from `src/services/crops.js`. Non-rice crops never get paddy-specific stages or rice season tips. The client tables in `src/data/stages.js` (re-exported by `src/config.js`) are the source of truth; `_shared/growthStage.ts` is a parity-tested copy (`tests/stages.test.js` asserts both rice and generic tables plus `stageForDay` for days 0–200).
 - `ee-alerts-worker` tries a 14-day window first, widens to 90 days, then radar.
 - `alerts_log.status` values: `healthy`, `below_expected`, `stressed`, `radar_flag`, `no_data`.
 - Decision engine (Phase 1): `src/services/decision.js` + `_shared/decision.ts` convert that status + confidence + stage + rainfall + forecast + NDVI trend into `monitor` / `scout` / `act`. `act` requires a stressed reading with a clear time-sensitive reason; radar, no-data and low-confidence cap at `scout`.
