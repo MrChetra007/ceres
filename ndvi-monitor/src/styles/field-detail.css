@@ -148,6 +148,13 @@
   color: var(--text-dim);
 }
 
+.hero-image-meta {
+  margin: 4px 0 0;
+  font-size: 10.5px;
+  line-height: 1.35;
+  color: var(--text-faint);
+}
+
 .hero-bench {
   display: flex;
   align-items: center;
@@ -390,6 +397,22 @@
 }
 
 .meta-row b { color: var(--text); font-weight: 600; }
+
+.meta-value {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.meta-edit-btn {
+  background: transparent;
+  border: 0;
+  color: var(--text-faint);
+  padding: 2px;
+  cursor: pointer;
+  line-height: 1;
+  font-size: 13px;
+}
+.meta-edit-btn:hover { color: var(--accent); }
 
 /* ---- Consult AI ---- */
 .ai-consult-btn {
@@ -892,4 +915,11 @@
   font-size: 12px;
   line-height: 1.5;
   color: var(--text);
+}
+.season-disclaimer {
+  margin: 6px 0 0;
+  font-size: 10.5px;
+  line-height: 1.4;
+  color: var(--text-faint);
+  font-style: italic;
 }

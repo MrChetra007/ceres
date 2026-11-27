@@ -218,6 +218,8 @@ export const state = reactive({
   rangePresetId: null,
   rangeMonths: [],
   rainfallMm: null,
+  // 'idle' (not requested) | 'loading' | 'ready' (0 mm is ready) | 'unavailable'
+  rainfallStatus: 'idle',
   benchmarkValue: null,
   isDrawing: false,
   isAoiDraw: false,
@@ -519,6 +521,7 @@ function detachFieldSelection() {
   state.editingFieldId = null
   currentGeometry.value = null
   state.rainfallMm = null
+  state.rainfallStatus = 'idle'
   state.infoPanelVisible = false
   state.selectedObservationDate = null
   state.displayedObservationDate = null
@@ -2603,6 +2606,10 @@ export function loadField(field) {
   state.sceneCount.main = 0
   state.cloudBlock.main = null
   state.radarFallback.main = null
+  // The bundle returns rainfall with the tile/trend; mark it as loading now so
+  // the panel can say "loading" rather than "unavailable".
+  state.rainfallMm = null
+  state.rainfallStatus = 'loading'
 
   beginLoading()
   setStatus('computing', 'Loading field data...')
@@ -2614,6 +2621,7 @@ export function loadField(field) {
     (res) => {
       endLoading()
       if (!res) {
+        state.rainfallStatus = 'unavailable'
         setStatus('error', 'Failed to load field data')
         return
       }
@@ -2633,8 +2641,9 @@ export function loadField(field) {
       if (state.currentIndex !== 'rvi') state.ndviChartData = res.chartTrend
       checkStress(res.chartTrend, null, null, state.currentIndex)
 
-      // 4. Rainfall + benchmark.
+      // 4. Rainfall + benchmark. A numeric 0 is a real reading, not "missing".
       state.rainfallMm = res.rainfall
+      state.rainfallStatus = res.rainfall == null ? 'unavailable' : 'ready'
       state.benchmarkValue = res.benchmark
 
       setStatus('ready', cfg.name + ' field data loaded')
@@ -2765,8 +2774,26 @@ export function loadFieldTrend(field) {
 }
 
 export function loadRainfall(geometry) {
-  if (!state.eeReady || !geometry) { state.rainfallMm = null; return }
-  ee.getRainfallMm(geometry, 21, (mm) => { state.rainfallMm = mm })
+  if (!state.eeReady || !geometry) {
+    state.rainfallMm = null
+    state.rainfallStatus = 'idle'
+    return
+  }
+  state.rainfallStatus = 'loading'
+  ee.getRainfallMm(geometry, 21, (mm) => {
+    state.rainfallMm = mm
+    state.rainfallStatus = mm == null ? 'unavailable' : 'ready'
+  })
+}
+
+// Set or clear a field's harvest date. Updates the local reactive field so the
+// panel/triage/exports react immediately; the DB is the source of truth.
+export async function setFieldHarvestDate(fieldId, harvestDate) {
+  const field = state.fields.find((f) => f.id === fieldId)
+  if (!field) throw new Error('field not found')
+  const value = harvestDate ? String(harvestDate).slice(0, 10) : null
+  await supabase.updateField(fieldId, { harvest_date: value })
+  field.harvestDate = value
 }
 
 export function loadBenchmark(geometry) {

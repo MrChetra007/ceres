@@ -695,7 +695,7 @@ Deno.serve(async (_req) => {
     const { data: fields, error } = await supabase
       .from("fields")
       .select(
-        "id, name, geojson, planting_date, crop_english, centroid_lat, centroid_lng, province_code, owner_id, profiles!inner(telegram_chat_id, preferred_language)",
+        "id, name, geojson, planting_date, harvest_date, crop_english, centroid_lat, centroid_lng, province_code, owner_id, profiles!inner(telegram_chat_id, preferred_language)",
       )
       .not("profiles.telegram_chat_id", "is", null);
 
@@ -711,6 +711,18 @@ Deno.serve(async (_req) => {
         const chatId = (field as any).profiles?.telegram_chat_id;
         const lang = (field as any).profiles?.preferred_language || "en";
         if (!chatId) continue;
+
+        // Harvested fields are not monitored: stop before any Earth Engine work
+        // or Telegram message. "On or after" is compared at day precision.
+        const harvestDate = (field as any).harvest_date;
+        if (harvestDate && String(harvestDate).slice(0, 10) <= new Date().toISOString().slice(0, 10)) {
+          results.push({
+            field: field.name,
+            skipped: true,
+            reason: "harvested",
+          });
+          continue;
+        }
 
         // Phase 2: respect an explicit acknowledgement (Done / Snooze / Dismiss)
         // before spending any Earth Engine compute or sending another message.

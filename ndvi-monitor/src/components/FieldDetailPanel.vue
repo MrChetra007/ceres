@@ -24,7 +24,7 @@
       <!-- AIM — composite health score card (light "readable outdoors" surface
            on the dark panel, per the chosen hybrid design). Score + one plain
            verdict first; component chips and any index disagreement below. -->
-      <div v-if="aimLoading || (aim && !aimSuppressed && !aim.noData)" class="detail-section aim-card">
+      <div v-if="!harvestedForView && (aimLoading || (aim && !aimSuppressed && !aim.noData))" class="detail-section aim-card">
         <div class="aim-card-head">
           <span class="aim-card-title">{{ t('aim.heading') }}</span>
           <span v-if="aimLoading" class="aim-loading">{{ t('aim.loading') }}</span>
@@ -72,7 +72,7 @@
           </div>
         </div>
       </div>
-      <div v-else-if="aim && (aim.noData || aimSuppressed)" class="detail-section aim-card aim-card--nodata">
+      <div v-else-if="!harvestedForView && aim && (aim.noData || aimSuppressed)" class="detail-section aim-card aim-card--nodata">
         <p class="aim-nodata">{{ t('aim.no_data') }}</p>
       </div>
 
@@ -82,6 +82,7 @@
           <span class="status-badge" :class="statusTone">{{ statusText }}</span>
         </div>
         <div class="hero-sub mono">{{ stageText }}</div>
+        <p class="hero-image-meta mono">{{ imageMetaText }}</p>
         <p v-if="radarSceneNote" class="hero-stale-note radar-scene-note">
           <i class="ti ti-satellite"></i>
           <span>{{ radarSceneNote }}</span>
@@ -91,11 +92,11 @@
           <span>{{ obsFallbackNote }}</span>
         </p>
         <p v-else-if="showHeroStaleNote" class="hero-stale-note">{{ heroLastClearNote }}</p>
-        <div class="hero-bench">
+        <div v-if="!harvestedForView" class="hero-bench">
           <span class="bench-dot"></span> {{ t('field.aoi_benchmark') }}
           <b class="mono">{{ benchmarkText }}</b>
         </div>
-        <ConfidenceBadge v-if="conf && conf.tier" :tier="conf.tier" :reason="conf.reason" showReason class="detail-conf" />
+        <ConfidenceBadge v-if="conf && conf.tier && !harvestedForView" :tier="conf.tier" :reason="conf.reason" showReason class="detail-conf" />
       </div>
 
       <div v-if="radarMapNote" class="detail-section radar-map-note">
@@ -106,7 +107,7 @@
            identical across the NDVI/NDWI/LSWI/RVI tabs. The "day since planting"
            is anchored to the NDVI (Sentinel-2) observation series — never the
            RVI (Sentinel-1) series, which has a different revisit cadence. -->
-      <div class="detail-section stage-card">
+      <div v-if="!harvestedForView" class="detail-section stage-card">
         <p class="detail-card-label">{{ t('field.growth_stage') }}</p>
         <p class="stage-name">{{ stageName }}</p>
         <div class="stage-bar">
@@ -117,19 +118,20 @@
 
       <!-- Seasonal timing nudge (Phase 3): stage-timed guidance that does not
            change the action tier — e.g. top-dressing window or pre-harvest drain. -->
-      <div v-if="season" class="detail-section season-card">
+      <div v-if="season && !harvestedForView" class="detail-section season-card">
         <div class="season-head">
           <p class="detail-card-label">{{ t('season.heading') }}</p>
           <span class="season-window">{{ t(season.windowKey) }}</span>
         </div>
         <p class="season-tip">{{ t(season.tipKey) }}</p>
+        <p v-if="season.phase === 'maturity'" class="season-disclaimer">{{ t('season.timing_only') }}</p>
       </div>
 
       <!-- Decision card (Phase 1): one deterministic "what to do" — tier,
            action window, next steps and what to verify. Built by the shared
            decision engine so the UI and Telegram always agree. -->
       <div
-        v-if="isField && state.currentIndex === 'ndvi' && decisionLocalized"
+        v-if="isField && state.currentIndex === 'ndvi' && decisionLocalized && !harvestedForView"
         class="detail-section decision-card"
         :class="'decision-' + decisionLocalized.tier"
       >
@@ -240,7 +242,7 @@
       <!-- Stress Alert is a NDVI-only health signal (no NDWI/LSWI thresholds
            exist yet) — hide the card on non-NDVI tabs instead of showing stale
            NDVI text. -->
-      <div v-if="isField && state.currentIndex === 'ndvi'" class="detail-section stress-card" :class="stressTone">
+      <div v-if="isField && state.currentIndex === 'ndvi' && !harvestedForView" class="detail-section stress-card" :class="stressTone">
         <p class="detail-card-label">{{ t('field.stress_alert') }}</p>
         <p class="stress-msg">{{ stressMsg }}</p>
       </div>
@@ -274,7 +276,7 @@
     <!-- Rainfall-watch stress note is built from the NDVI trend (checkStress only
            ever populates state.stressAlert for the ndvi index) — gate it so it
            never renders NDVI wording on the NDWI/LSWI tabs. -->
-    <div v-if="state.stressAlert && state.currentIndex === 'ndvi'" class="detail-section stress-card alert-msg">
+    <div v-if="state.stressAlert && state.currentIndex === 'ndvi' && !harvestedForView" class="detail-section stress-card alert-msg">
       <p class="detail-card-label">{{ t('field.rainfall_watch') }}</p>
       <p class="stress-msg">{{ state.stressAlert }}</p>
     </div>
@@ -291,7 +293,7 @@
 
     <div class="detail-section rain-card">
       <p class="detail-card-label">{{ t('field.rainfall') }} <span class="mono">({{ t('field.days_21') }})</span></p>
-      <p class="rain-value mono" :class="{ 'rain-unavailable': state.rainfallMm == null }">{{ rainText }}</p>
+      <p class="rain-value mono" :class="{ 'rain-unavailable': state.rainfallStatus === 'unavailable' }">{{ rainText }}</p>
     </div>
 
     <div class="detail-section forecast-card">
@@ -347,6 +349,15 @@
         <p class="detail-card-label">{{ t('field.metadata') }}</p>
         <div class="meta-row"><span>{{ t('field.crop') }}</span><b class="mono">{{ cropMetaText }}</b></div>
         <div class="meta-row"><span>{{ t('field.planting_date') }}</span><b class="mono">{{ plantingText }}</b></div>
+        <div class="meta-row">
+          <span>{{ t('field.harvest_date') }}</span>
+          <span class="meta-value">
+            <b class="mono">{{ harvestDateText }}</b>
+            <button type="button" class="meta-edit-btn" :aria-label="t('common.edit')" :title="t('common.edit')" @click="harvestModalOpen = true">
+              <i class="ti ti-pencil"></i>
+            </button>
+          </span>
+        </div>
         <div class="meta-row"><span>{{ t('field.area') }}</span><b class="mono">{{ formatHectares(areaHa).toUpperCase() }}</b></div>
         <div class="meta-row"><span>{{ t('field.added') }}</span><b class="mono">{{ addedText }}</b></div>
       </div>
@@ -419,6 +430,13 @@
       @close="obsModalOpen = false"
       @saved="loadObservations"
     />
+
+    <FieldHarvestModal
+      :visible="harvestModalOpen"
+      :field="currentField"
+      @close="harvestModalOpen = false"
+      @saved="harvestModalOpen = false"
+    />
   </div>
 </template>
 
@@ -432,6 +450,7 @@ import ConfidenceBadge from './ConfidenceBadge.vue'
 import IndexLegend from './IndexLegend.vue'
 import FieldLocationModal from './FieldLocationModal.vue'
 import FieldObservationModal from './FieldObservationModal.vue'
+import FieldHarvestModal from './FieldHarvestModal.vue'
 import { resolveLocation, getProvinceName } from '../services/adminBoundaries'
 import { getProvinceWeather } from '../services/dataefService'
 import { buildChartConfig } from '../services/chart'
@@ -450,6 +469,7 @@ import { getWeatherContext } from '../services/weatherService'
 import { getAimCache, setAimCache } from '../services/aimScoreCache'
 import { buildDecision, localizeDecision } from '../services/decision'
 import { calcTrendChange } from '../services/trend'
+import { isHarvestedForMonth } from '../services/harvest'
 import { seasonNudge } from '../services/season'
 import { downloadFieldJson } from '../services/fieldExport'
 import turfCentroid from '@turf/centroid'
@@ -497,9 +517,13 @@ const officialUpdatedText = computed(() => {
 
 const currentField = computed(() => state.fields.find((f) => f.id === state.currentFieldId) || null)
 const isField = computed(() => !!currentField.value)
+// Harvested for the SCRUBBED month: earlier months stay viewable, the harvest
+// month and later show "Harvested" and hide the health/action surfaces.
+const harvestedForView = computed(() => isHarvestedForMonth(currentField.value, MONTHS[state.mainMonth]))
 const { km, t, lang } = useI18n()
 
 const locationModalOpen = ref(false)
+const harvestModalOpen = ref(false)
 const locationNames = ref(null)
 const locationError = ref(false)
 const locationText = computed(() => {
@@ -588,6 +612,12 @@ const aimChips = computed(() => {
 async function loadAim() {
   const field = currentField.value
   if (!field || !state.eeReady) return
+  // Harvested view: the AIM card is hidden, so do not spend Earth Engine calls.
+  if (harvestedForView.value) {
+    aim.value = null
+    aimLoading.value = false
+    return
+  }
   // Scope the score to the scrubbed month (the same {year, month} the map tile
   // and hero NDVI badge use) so the score follows the slider, not "now".
   const m = MONTHS[state.mainMonth]
@@ -681,6 +711,7 @@ const pinnedSceneNoData = computed(() =>
 // RVI and True Color tabs are excluded: there the radar/true-color view IS the
 // point, not a substitution.
 const aimSuppressed = computed(() => {
+  if (harvestedForView.value) return true
   if (state.currentIndex === 'rvi' || state.currentIndex === 'truecolor') return false
   return pinnedSceneNoData.value || !!state.radarFallback.main || !!state.cloudBlock.main
 })
@@ -848,15 +879,23 @@ const prePlanting = computed(() => {
 
 const title = computed(() => (isField.value ? currentField.value.name : INDICES[state.chartIndex].name + ' ' + t('index.trend')))
 const statusText = computed(() => {
+  if (harvestedForView.value) return t('field.harvested')
   if (heroStatus.value && heroStatus.value.badgeText === '\u2014') return '\u2014'
   if (prePlanting.value) return t('field.pre_planting')
   return (heroStatus.value && heroStatus.value.badgeText) || '\u2014'
 })
 const statusTone = computed(() => {
+  if (harvestedForView.value) return 'tone-blue'
   if (prePlanting.value) return 'tone-blue'
   return (heroStatus.value && heroStatus.value.badgeClass) || 'healthy'
 })
 const stageText = computed(() => {
+  if (harvestedForView.value) {
+    const f = currentField.value
+    return f && f.harvestDate
+      ? t('field.harvested_on', { date: formatDate(f.harvestDate, state.preferredLanguage) })
+      : t('field.harvested')
+  }
   if (monthStatus.value && monthStatus.value.stageLabel) return monthStatus.value.stageLabel
   const st = status.value
   if (!st || !st.stageLabel) return ''
@@ -929,6 +968,28 @@ const displayedSceneDate = computed(() => {
 watch(displayedSceneDate, (val) => {
   state.displayedObservationDate = val
 }, { immediate: true })
+
+// Always show the image date + age next to the status. Uses the scene the
+// panel is actually displaying (including the last-clear fallback), not the
+// synthetic month-end date.
+const imageMeta = computed(() => {
+  const date = displayedSceneDate.value
+  if (!date) return { text: t('field.image_date_unknown'), days: null }
+  const ms = new Date(date + 'T00:00:00Z').getTime()
+  if (!Number.isFinite(ms)) return { text: t('field.image_date_unknown'), days: null }
+  const now = new Date()
+  const todayMs = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())
+  const days = Math.max(0, Math.round((todayMs - ms) / 86400000))
+  const daysText = state.preferredLanguage === 'km' ? toKhmerDigits(days) : String(days)
+  return {
+    text: t('field.image_date_age', {
+      date: formatDate(date, state.preferredLanguage),
+      days: daysText,
+    }),
+    days,
+  }
+})
+const imageMetaText = computed(() => imageMeta.value.text)
 
 const isObsFallback = computed(() => {
   if (!state.selectedObservationDate || state.currentIndex === 'truecolor') return false
@@ -1045,7 +1106,7 @@ const stressMsg = computed(() => {
 
 // Seasonal timing nudge (Phase 3) — stage-based, independent of the band tab.
 const season = computed(() => {
-  if (!isField.value || prePlanting.value) return null
+  if (!isField.value || prePlanting.value || harvestedForView.value) return null
   const f = currentField.value
   if (!f) return null
   const days = growthStageDays.value
@@ -1083,7 +1144,7 @@ const decisionConfidence = computed(() => {
 })
 
 const decision = computed(() => {
-  if (!isField.value || state.currentIndex !== 'ndvi') return null
+  if (!isField.value || state.currentIndex !== 'ndvi' || harvestedForView.value) return null
   const f = currentField.value
   if (!f) return null
   const obs = activeObservation.value
@@ -1130,7 +1191,11 @@ const decisionIcon = computed(() => {
 })
 
 const rainText = computed(() => {
+  if (state.rainfallStatus === 'loading') return t('field.loading')
+  if (state.rainfallStatus === 'idle') return t('field.not_loaded')
+  if (state.rainfallStatus === 'unavailable') return t('field.data_unavailable')
   if (state.rainfallMm != null) return state.rainfallMm.toFixed(0) + ' mm'
+  // Defensive fallback for state written by an older code path.
   if (!state.eeReady) return t('field.loading')
   return t('field.data_unavailable')
 })
@@ -1210,6 +1275,11 @@ const plantingText = computed(() => {
   if (!f || !f.plantingDate) return '\u2014'
   if (f.plantingDateSource === 'estimated') return f.plantingDate + ' (' + t('field.estimated_from_sat') + ')'
   return f.plantingDate
+})
+const harvestDateText = computed(() => {
+  const f = currentField.value
+  if (!f || !f.harvestDate) return t('field.harvest_not_set')
+  return formatDate(f.harvestDate, state.preferredLanguage)
 })
 const addedText = computed(() => (currentField.value && currentField.value.createdAt ? new Date(currentField.value.createdAt).toLocaleDateString() : '\u2014'))
 const areaHa = computed(() => (currentField.value ? getOrComputeArea(currentField.value) : 0))

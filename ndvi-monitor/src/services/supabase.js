@@ -14,6 +14,7 @@ export function mapRowToField(row) {
     areaHectares: row.area_ha,
     plantingDate: row.planting_date,
     plantingDateSource: row.planting_date_source || 'manual',
+    harvestDate: row.harvest_date ?? null,
     cropName: row.crop_name ?? null,
     cropEnglish: row.crop_english ?? null,
     provinceCode: row.province_code ?? null,

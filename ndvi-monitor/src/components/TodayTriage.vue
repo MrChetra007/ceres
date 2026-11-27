@@ -32,6 +32,7 @@ import { state, fieldStatus, fieldTrends, fieldConfidence, getGrowthStage, getOr
 import * as store from '../store'
 import { buildDecision } from '../services/decision'
 import { calcTrendChange } from '../services/trend'
+import { isHarvestedNow } from '../services/harvest'
 import { useI18n } from '../i18n'
 
 const { t } = useI18n()
@@ -59,6 +60,7 @@ function dayCountOf(f) {
 const triage = computed(() => {
   return state.fields
     .map((f) => {
+      if (isHarvestedNow(f)) return null
       const s = fieldStatus[f.id] || null
       if (!s) return null
       const dayCount = dayCountOf(f)

@@ -20,6 +20,8 @@ import { calcTrendChange } from './trend'
 import { seasonNudge } from './season'
 import { loadFieldObservations } from './supabase'
 import { getWeatherContext } from './weatherService'
+import { getRainfallDetail } from './earthEngine'
+import { isHarvestedNow } from './harvest'
 import { resolveLocation } from './adminBoundaries'
 
 export const FIELD_EXPORT_SCHEMA = 'ceres.field.v2'
@@ -79,6 +81,12 @@ function currentIndexName() {
   return i && i !== 'truecolor' ? i : 'ndvi'
 }
 
+function fetchRainfall(geometry) {
+  return new Promise((resolve) => {
+    getRainfallDetail(geometry, 21, (r) => resolve(r || null))
+  })
+}
+
 /**
  * Build the export object. `extras` lets the field panel pass richer local data
  * (AIM card, forecast, official weather, resolved location names, decision text)
@@ -86,6 +94,34 @@ function currentIndexName() {
  */
 export async function buildFieldExport(field, extras = {}) {
   if (!field) throw new Error('no field selected')
+
+  const harvested = isHarvestedNow(field)
+
+  // Rainfall has three honest states: ready (a number, including 0),
+  // unavailable (the source returned nothing), and not_loaded (never fetched).
+  // The menu export has no open panel, so it deliberately fetches when needed
+  // instead of silently writing null.
+  let rainfallMm = state.rainfallMm
+  let rainfallStatus =
+    state.rainfallStatus === 'ready'
+      ? 'ready'
+      : state.rainfallStatus === 'unavailable'
+        ? 'unavailable'
+        : 'not_loaded'
+  if (rainfallStatus === 'ready' && rainfallMm == null) rainfallStatus = 'unavailable'
+  if (rainfallStatus === 'not_loaded') {
+    const rainGeom = field.geojson && (field.geojson.geometry || field.geojson)
+    if (rainGeom && rainGeom.coordinates) {
+      try {
+        const rain = await fetchRainfall(rainGeom)
+        rainfallMm = rain && rain.mm != null ? rain.mm : null
+        rainfallStatus = rainfallMm == null ? 'unavailable' : 'ready'
+      } catch (e) {
+        rainfallMm = null
+        rainfallStatus = 'unavailable'
+      }
+    }
+  }
 
   const status = extras.status || fieldStatus[field.id] || null
   const confidence = extras.confidence || fieldConfidence(field) || null
@@ -104,22 +140,23 @@ export async function buildFieldExport(field, extras = {}) {
   const changePct = change ? change.pct : null
   const latest = trend.length ? trend[trend.length - 1] : null
 
-  const decision =
-    extras.decision ||
-    buildDecision({
-      index,
-      status: statusKeyOf(status),
-      stage,
-      dayCount,
-      prePlanting: dayCount !== null && dayCount < 0,
-      ndvi: status && status.value != null ? status.value : null,
-      rainfallMm: state.rainfallMm,
-      confidenceTier: confidence ? confidence.tier : null,
-      mode: status && status.cloudBlocked ? 'no_data' : 'optical',
-      trendPct: changePct,
-      cropEnglish: field.cropEnglish || null,
-    })
-  const season = extras.season || seasonNudge({ stage, cropEnglish: field.cropEnglish })
+  const decision = harvested
+    ? null
+    : (extras.decision ||
+      buildDecision({
+        index,
+        status: statusKeyOf(status),
+        stage,
+        dayCount,
+        prePlanting: dayCount !== null && dayCount < 0,
+        ndvi: status && status.value != null ? status.value : null,
+        rainfallMm,
+        confidenceTier: confidence ? confidence.tier : null,
+        mode: status && status.cloudBlocked ? 'no_data' : 'optical',
+        trendPct: changePct,
+        cropEnglish: field.cropEnglish || null,
+      }))
+  const season = harvested ? null : (extras.season || seasonNudge({ stage, cropEnglish: field.cropEnglish }))
 
   let observations = extras.observations
   if (!Array.isArray(observations)) {
@@ -181,6 +218,7 @@ export async function buildFieldExport(field, extras = {}) {
       area_ha: round(getOrComputeArea(field), 2),
       planting_date: dateOnly(field.plantingDate),
       planting_date_source: field.plantingDateSource || null,
+      harvest_date: dateOnly(field.harvestDate),
       created_at: isoTimestamp(field.createdAt),
       notes: field.notes || null,
       share_with_authorities: !!field.shareWithAuthorities,
@@ -204,8 +242,9 @@ export async function buildFieldExport(field, extras = {}) {
       index,
       as_of: latest ? latest.date : dateOnly(status && status.date),
       value: latest ? latest.value : round(status && status.value, 3),
-      status: statusKeyOf(status),
-      status_label: status && status.badgeText ? status.badgeText : null,
+      harvested,
+      status: harvested ? 'harvested' : statusKeyOf(status),
+      status_label: harvested ? null : (status && status.badgeText ? status.badgeText : null),
       growth_stage: stage,
       day_since_planting: dayCount,
       confidence: confidence
@@ -215,17 +254,19 @@ export async function buildFieldExport(field, extras = {}) {
       cloud_blocked: status ? !!status.cloudBlocked : null,
       radar_fallback: !!state.radarFallback.main,
     },
-    decision: {
-      tier: decision.tier,
-      severity: decision.severity,
-      urgency: decision.urgency,
-      action_window: decision.timeWindow,
-      headline: decisionText ? decisionText.headlineText : null,
-      likely_causes: decisionText ? decisionText.hypothesisTexts : [],
-      next_steps: decisionText ? decisionText.actionTexts : [],
-      field_checks: decisionText ? decisionText.verifyTexts : [],
-      reason: decisionText ? decisionText.reasonText : null,
-    },
+    decision: decision
+      ? {
+          tier: decision.tier,
+          severity: decision.severity,
+          urgency: decision.urgency,
+          action_window: decision.timeWindow,
+          headline: decisionText ? decisionText.headlineText : null,
+          likely_causes: decisionText ? decisionText.hypothesisTexts : [],
+          next_steps: decisionText ? decisionText.actionTexts : [],
+          field_checks: decisionText ? decisionText.verifyTexts : [],
+          reason: decisionText ? decisionText.reasonText : null,
+        }
+      : null,
     season_note: season
       ? {
           phase: season.phase,
@@ -233,7 +274,7 @@ export async function buildFieldExport(field, extras = {}) {
           tip: seasonText ? seasonText.tip : null,
         }
       : null,
-    aim: extras.aim
+    aim: !harvested && extras.aim
       ? {
           score: num(extras.aim.score),
           label: extras.aim.label || null,
@@ -247,7 +288,8 @@ export async function buildFieldExport(field, extras = {}) {
         }
       : null,
     weather: {
-      rainfall_21d_mm: round(state.rainfallMm, 1),
+      rainfall_21d_mm: round(rainfallMm, 1),
+      rainfall_status: rainfallStatus,
       forecast: Array.isArray(forecast)
         ? forecast.map((d) => ({
             date: dateOnly(d.date),
