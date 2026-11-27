@@ -104,6 +104,17 @@ const TRUE_COLOR_BANDS = ["B4", "B3", "B2"];
 const TRUE_COLOR_VIS = { min: 0, max: 3000, gamma: 1.4 };
 const DRY_MONTH_THRESHOLD = 50;
 
+// Sentinel-2 SR_HARMONIZED bands arrive as scaled integers (DN, ×10000).
+// SAVI/EVI contain ADDITIVE terms (L, +1) that only make sense on reflectance;
+// on raw DN those terms are negligible and EVI can exceed 1. Normalize the
+// inputs for these two expressions only — ratio indices (NDVI/NDWI/LSWI/...)
+// are scale-invariant and intentionally left untouched.
+const S2_REFLECTANCE_SCALE = 10000;
+
+function scaledBand(img: any, band: string) {
+  return img.select(band).divide(S2_REFLECTANCE_SCALE);
+}
+
 // Apply the band math for a given index to a (single) image and rename the
 // result band to `name`. NDVI/NDWI/LSWI/GNDVI/NDRE are 2-band ratios that map cleanly
 // onto ee.Image.normalizedDifference(); SAVI and EVI need a custom expression
@@ -115,8 +126,8 @@ function applyIndex(img: any, index: string, name: string) {
     const L = 0.5;
     return img
       .expression("((NIR - RED) / (NIR + RED + L)) * (1 + L)", {
-        NIR: img.select("B8"),
-        RED: img.select("B4"),
+        NIR: scaledBand(img, "B8"),
+        RED: scaledBand(img, "B4"),
         L: L,
       })
       .rename(name);
@@ -128,14 +139,17 @@ function applyIndex(img: any, index: string, name: string) {
       L = 1;
     return img
       .expression("G * ((NIR - RED) / (NIR + C1 * RED - C2 * BLUE + L))", {
-        NIR: img.select("B8"),
-        RED: img.select("B4"),
-        BLUE: img.select("B2"),
+        NIR: scaledBand(img, "B8"),
+        RED: scaledBand(img, "B4"),
+        BLUE: scaledBand(img, "B2"),
         G,
         C1,
         C2,
         L,
       })
+      // Standard EVI is bounded to [-1, 1]; clamp so a rare denormalized pixel
+      // cannot dominate a mean, a tile palette or the AIM blend.
+      .clamp(-1, 1)
       .rename(name);
   }
   if (index === "gci") {

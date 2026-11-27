@@ -12,7 +12,11 @@
 
 const DB_NAME = 'ceres-tile-cache'
 const STORE = 'tiles'
-const DB_VERSION = 1
+// v2 (2026-11): the SAVI/EVI reflectance fix changes every cached SAVI/EVI tile.
+// Bumping the IndexedDB version drops the v1 store on the next open so no old
+// value survives its TTL. This clears all tile rows once, which is safe — it is
+// only a cache.
+const DB_VERSION = 2
 const MAX_ENTRIES = 60
 const CLOSED_TTL_MS = 2 * 60 * 60 * 1000
 const OPEN_TTL_MS = 20 * 60 * 1000
@@ -42,8 +46,11 @@ function openDb() {
       resolve(null)
       return
     }
-    req.onupgradeneeded = () => {
+    req.onupgradeneeded = (event) => {
       const db = req.result
+      if (event.oldVersion < 2 && db.objectStoreNames.contains(STORE)) {
+        db.deleteObjectStore(STORE)
+      }
       if (!db.objectStoreNames.contains(STORE)) {
         const store = db.createObjectStore(STORE, { keyPath: 'key' })
         store.createIndex('at', 'at')

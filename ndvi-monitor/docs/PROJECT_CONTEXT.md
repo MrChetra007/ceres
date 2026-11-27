@@ -83,7 +83,7 @@ The important product distinction: **Ceres is not just a map viewer.** It is a f
   - stage-timed "Season note" in the field panel + prompt context for AI/Telegram
   - timing only — never changes the action tier
 - Clean exports (2026-11-24):
-  - per-field JSON (`ceres.field.v1`) from the field panel and the export menu
+  - per-field JSON (`ceres.field.v2`) from the field panel and the export menu
   - readable PNG chart (white frame + title) and a multi-page PDF field report
 
 ### Decision engine (Phase 1 — 2026-11-24)
@@ -156,7 +156,7 @@ Stage-based timing guidance shown as a "Season note" card in `FieldDetailPanel.v
 
 ### Exports (2026-11-24)
 
-- **Per-field JSON:** `src/services/fieldExport.js` builds a clean `ceres.field.v1` document: field metadata + location names/codes + centroid, current index/status/stage/confidence, decision (tier + localized next steps/checks), season note, AIM (when the panel has it), rainfall + forecast + official current conditions, the trend series, and field-check observations. Exposed from the field-panel header download icon and the export menu (menu path exports the canonical NDVI trend without panel-only extras).
+- **Per-field JSON:** `src/services/fieldExport.js` builds a clean `ceres.field.v2` document: field metadata + location names/codes + centroid, current index/status/stage/confidence, decision (tier + localized next steps/checks), season note, AIM (when the panel has it), rainfall + forecast + official current conditions, the trend series, and field-check observations. Exposed from the field-panel header download icon and the export menu (menu path exports the canonical NDVI trend without panel-only extras). `aim.components` are normalized 0..1; `aim.raw_values` are the un-normalized index readings.
 - **PNG:** `store.exportChart` composites the active chart canvas (large modal if open, else the panel) onto a white page with the field name/index title, so it is readable outside the dark UI.
 - **PDF:** `store.exportPdf` writes a multi-page field report (field/crop/area/planting/location, latest value + status + confidence, 21-day rainfall, chart, index explanation, data-source footer). It checks page space before each block.
 - **Notes:** both PNG/PDF use the chart currently on screen (`state.chartData`); without a loaded chart they show a toast. PDF text is English because jsPDF's built-in font cannot render Khmer.
@@ -233,7 +233,7 @@ ndvi-monitor/
 │   │   ├── weatherService.js    # Open-Meteo forecast
 │   │   ├── decision.js          # Phase 1 decision engine (client mirror)
 │   │   ├── season.js            # Phase 3 seasonal timing (client mirror)
-│   │   ├── fieldExport.js       # per-field JSON export (ceres.field.v1)
+│   │   ├── fieldExport.js       # per-field JSON export (ceres.field.v2)
 │   │   └── geocode.js           # Nominatim reverse geocode
 │   ├── i18n/en.js               # English
 │   ├── i18n/km.js               # Khmer

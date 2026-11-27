@@ -20,6 +20,11 @@ export const AIM_CACHE_TTL_MS = 5 * 24 * 60 * 60 * 1000 // 5 days
 // old polygon.
 const USE_AIM_CACHE = true
 
+// Bump when the index math changes in a way that invalidates stored scores.
+// v2 (2026-11): SAVI/EVI now run on reflectance instead of raw DN, so a score
+// cached before that fix must not be reused.
+const AIM_CACHE_VERSION = 'v2'
+
 const aimCache = new Map()
 
 export function getAimCache(field, month) {
@@ -52,5 +57,5 @@ function cacheKey(field, month) {
     month && month.year != null && month.month != null
       ? month.year + '-' + month.month
       : ''
-  return field.id + '|' + (field.plantingDate || '') + '|' + geometrySignature(field) + '|' + mKey
+  return AIM_CACHE_VERSION + '|' + field.id + '|' + (field.plantingDate || '') + '|' + geometrySignature(field) + '|' + mKey
 }

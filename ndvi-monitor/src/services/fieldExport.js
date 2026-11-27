@@ -21,7 +21,7 @@ import { loadFieldObservations } from './supabase'
 import { getWeatherContext } from './weatherService'
 import { resolveLocation } from './adminBoundaries'
 
-export const FIELD_EXPORT_SCHEMA = 'ceres.field.v1'
+export const FIELD_EXPORT_SCHEMA = 'ceres.field.v2'
 
 function num(v) {
   if (v === null || v === undefined || v === '') return null
@@ -246,7 +246,10 @@ export async function buildFieldExport(field, extras = {}) {
           label: extras.aim.label || null,
           primary_index: extras.aim.primaryIndex || null,
           phrase: extras.aimPhrase || null,
-          components: extras.aim.rawValues || null,
+          // v2: `components` are the normalized 0..1 values actually blended
+          // into the score; `raw_values` are the un-normalized index readings.
+          components: extras.aim.components || null,
+          raw_values: extras.aim.rawValues || null,
           weights: extras.aim.weights || null,
         }
       : null,
