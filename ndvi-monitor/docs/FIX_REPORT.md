@@ -4,7 +4,7 @@ Branch: `fix/audit-2026-11`
 Scope: `docs/fixes/ceres-fix-prompt.md` (Phases 1–4), investigation evidence in `docs/INVESTIGATION_REPORT.md`.
 No Edge Function was deployed, no migration was run, and no live data was changed. The SQL/commands below are for the owner to run.
 
-**Remote note:** `origin` is still `https://github.com/MrChetra007/ndvi.git`, but GitHub now reports the repo as `https://github.com/MrChetra007/ceres.git`. The push to the old URL redirected successfully. The branch was pushed through commit `9e40bfc`; the Phase 4 commit is local until you ask to push it.
+**Remote note:** `origin` is still `https://github.com/MrChetra007/ndvi.git`, but GitHub now reports the repo as `https://github.com/MrChetra007/ceres.git`. The push to the old URL redirected successfully. The branch is pushed through commit `c9679a1` (all phases).
 
 ---
 
