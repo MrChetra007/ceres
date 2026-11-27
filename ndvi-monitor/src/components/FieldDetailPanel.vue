@@ -449,6 +449,7 @@ import { getRecentIndexValue, getRainfallDetail, getFieldHealthScore, polygonGeo
 import { getWeatherContext } from '../services/weatherService'
 import { getAimCache, setAimCache } from '../services/aimScoreCache'
 import { buildDecision, localizeDecision } from '../services/decision'
+import { calcTrendChange } from '../services/trend'
 import { seasonNudge } from '../services/season'
 import { downloadFieldJson } from '../services/fieldExport'
 import turfCentroid from '@turf/centroid'
@@ -1064,28 +1065,16 @@ const decisionStatus = computed(() => {
   return 'unknown'
 })
 
-// % change of the NDVI series: most recent reading vs the last reading ~14+
-// days earlier (negative = greenness declining). Mirrors the worker's
-// getNdviTrendPct so the app and Telegram reach the same "declining" flag.
-const ndviTrendPct = computed(() => {
+// % change of the NDVI series: latest clean reading vs the clean reading
+// closest to 14 days earlier (only in a 10–24 day window; negative = declining).
+// Mirrors the worker and consult-ai via the shared calcTrendChange helper.
+const ndviTrend = computed(() => {
   const series = state.currentIndex === 'ndvi' && Array.isArray(state.chartData)
     ? state.chartData
     : (Array.isArray(state.ndviChartData) ? state.ndviChartData : null)
-  if (!series || series.length < 2) return null
-  const pts = series
-    .filter((p) => p && p.date && typeof p.value === 'number' && isFinite(p.value))
-    .slice()
-    .sort((a, b) => String(a.date).localeCompare(String(b.date)))
-  if (pts.length < 2) return null
-  const recent = pts[pts.length - 1]
-  let earlier = null
-  for (let i = pts.length - 2; i >= 0; i--) {
-    const days = (new Date(recent.date) - new Date(pts[i].date)) / 86400000
-    if (days >= 14) { earlier = pts[i]; break }
-  }
-  if (!earlier || !earlier.value) return null
-  return ((recent.value - earlier.value) / earlier.value) * 100
+  return calcTrendChange(series)
 })
+const ndviTrendPct = computed(() => (ndviTrend.value ? ndviTrend.value.pct : null))
 
 const decisionConfidence = computed(() => {
   // A radar reading is a rough proxy — treat it as medium, never high.
@@ -1635,6 +1624,14 @@ async function consultAi() {
         reason: aiReason,
         lang: state.preferredLanguage,
         observationHistory,
+        // The clean, pixel-masked NDVI trend (fieldTrends is always NDVI) so
+        // consult-ai applies the same cloud filter as the app decision card.
+        ndviTrend: (fieldTrends[field.id] || []).map((p) => ({
+          date: p.date,
+          value: p.value,
+          cloudPct: p.cloudPct,
+          status: p.status,
+        })),
         cropEnglish: field.cropEnglish || null,
         locationName,
       }),

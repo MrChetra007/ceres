@@ -31,6 +31,7 @@ import { computed } from 'vue'
 import { state, fieldStatus, fieldTrends, fieldConfidence, getGrowthStage, getOrComputeArea } from '../store'
 import * as store from '../store'
 import { buildDecision } from '../services/decision'
+import { calcTrendChange } from '../services/trend'
 import { useI18n } from '../i18n'
 
 const { t } = useI18n()
@@ -43,24 +44,11 @@ function statusKeyOf(s) {
   return 'unknown'
 }
 
-// Same 14-day comparison as the field panel / worker, computed from whatever
-// trend series is already loaded (no extra Earth Engine calls).
+// Same 14-day comparison as the field panel / consult-ai / worker, computed
+// from whatever trend series is already loaded (no extra Earth Engine calls).
 function trendPctOf(f) {
-  const data = fieldTrends[f.id]
-  if (!Array.isArray(data) || data.length < 2) return null
-  const pts = data
-    .filter((d) => d && d.date && typeof d.value === 'number' && isFinite(d.value))
-    .slice()
-    .sort((a, b) => String(a.date).localeCompare(String(b.date)))
-  if (pts.length < 2) return null
-  const recent = pts[pts.length - 1]
-  let earlier = null
-  for (let i = pts.length - 2; i >= 0; i--) {
-    const days = (new Date(recent.date) - new Date(pts[i].date)) / 86400000
-    if (days >= 14) { earlier = pts[i]; break }
-  }
-  if (!earlier || !earlier.value) return null
-  return ((recent.value - earlier.value) / earlier.value) * 100
+  const change = calcTrendChange(fieldTrends[f.id])
+  return change ? change.pct : null
 }
 
 function dayCountOf(f) {

@@ -16,6 +16,7 @@ import {
   fieldConfidence,
 } from '../store'
 import { buildDecision } from './decision'
+import { calcTrendChange } from './trend'
 import { seasonNudge } from './season'
 import { loadFieldObservations } from './supabase'
 import { getWeatherContext } from './weatherService'
@@ -73,18 +74,6 @@ function cleanPoints(points) {
     .sort((a, b) => String(a.date).localeCompare(String(b.date)))
 }
 
-function trendPct(points) {
-  if (!Array.isArray(points) || points.length < 2) return null
-  const recent = points[points.length - 1]
-  let earlier = null
-  for (let i = points.length - 2; i >= 0; i--) {
-    const days = (new Date(recent.date) - new Date(points[i].date)) / 86400000
-    if (days >= 14) { earlier = points[i]; break }
-  }
-  if (!earlier || !earlier.value) return null
-  return ((recent.value - earlier.value) / earlier.value) * 100
-}
-
 function currentIndexName() {
   const i = state.currentIndex
   return i && i !== 'truecolor' ? i : 'ndvi'
@@ -107,8 +96,12 @@ export async function buildFieldExport(field, extras = {}) {
   // The field panel passes the live chart series (whatever band is open); the
   // menu path has no live series, so it exports the canonical NDVI trend.
   const index = Array.isArray(extras.trend) ? currentIndexName() : 'ndvi'
-  const trend = cleanPoints(extras.trend || fieldTrends[field.id] || [])
-  const changePct = trendPct(trend)
+  // Compute the change from the RAW series (it carries cloudPct/status needed
+  // for the shared cloud filter); cleanPoints() below is only for the export.
+  const trendSeries = extras.trend || fieldTrends[field.id] || []
+  const trend = cleanPoints(trendSeries)
+  const change = calcTrendChange(trendSeries)
+  const changePct = change ? change.pct : null
   const latest = trend.length ? trend[trend.length - 1] : null
 
   const decision =
@@ -277,6 +270,9 @@ export async function buildFieldExport(field, extras = {}) {
     trend: {
       index,
       change_14d_pct: changePct === null ? null : round(changePct, 1),
+      compared_from: change ? change.comparedFrom : null,
+      compared_to: change ? change.comparedTo : null,
+      gap_days: change ? change.gapDays : null,
       points: trend,
     },
     observations: (Array.isArray(observations) ? observations : []).map((o) => ({

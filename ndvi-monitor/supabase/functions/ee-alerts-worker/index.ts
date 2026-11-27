@@ -14,6 +14,8 @@ import {
 // Phase 3 seasonal timing nudge — shared phase rules with the client
 // (src/services/season.js). Timing only; never overrides the decision tier.
 import { seasonNudge, seasonPromptBlock } from "../_shared/season.ts";
+import { calcTrendChange } from "../_shared/trend.ts";
+import type { TrendChange } from "../_shared/trend.ts";
 import { getWeatherContext } from "../_shared/weather.ts";
 import type { WeatherContext } from "../_shared/weather.ts";
 import {
@@ -304,20 +306,24 @@ function getLswiForGeometry(geojson: any): Promise<number | null> {
   });
 }
 
-// NDVI today vs. ~14+ days earlier, expressed as a % change (mirrors the app's
-// stress-window logic), so the advisory can say "NDVI fell X%". Returns null
-// when we can't compare two points cleanly.
-function getNdviTrendPct(geojson: any): Promise<number | null> {
+// NDVI trend for the advisory. Uses the SAME pixel-level cloud mask as the
+// map/trend/field-status paths (s2cloudless + SCL + no-data), then the shared
+// calcTrendChange helper (latest clean point vs. the point closest to 14 days
+// earlier, only in a 10–24 day window). Returns null when no clean comparison
+// exists. The caller keeps its existing "positive = fall" convention.
+function getNdviTrend(geojson: any): Promise<TrendChange | null> {
   return new Promise((resolve, reject) => {
     const geom = toEeGeometry(geojson);
     const end = ee.Date(Date.now());
     const start = end.advance(-90, "day");
-    const collection = ee
-      .ImageCollection("COPERNICUS/S2_SR_HARMONIZED")
-      .filterBounds(geom)
-      .filterDate(start, end)
-      .filter(ee.Filter.lt("CLOUDY_PIXEL_PERCENTAGE", 40))
-      .sort("system:time_start", false);
+    const collection = addCloudProbability(
+      ee
+        .ImageCollection("COPERNICUS/S2_SR_HARMONIZED")
+        .filterBounds(geom)
+        .filterDate(start, end)
+        .filter(ee.Filter.lt("CLOUDY_PIXEL_PERCENTAGE", 40)),
+      ee,
+    ).map((scene: any) => scene.updateMask(validPixelMask(scene, ee)));
     const series = collection.map((img: any) => {
       const ndvi = img.normalizedDifference(["B8", "B4"]).rename("ndvi");
       const value = ndvi.reduceRegion({
@@ -328,6 +334,7 @@ function getNdviTrendPct(geojson: any): Promise<number | null> {
       });
       return ee.Feature(null, {
         date: img.date().format("YYYY-MM-dd"),
+        cloudPct: ee.Number(img.get("CLOUDY_PIXEL_PERCENTAGE")),
         value: value.get("ndvi"),
       });
     });
@@ -335,30 +342,12 @@ function getNdviTrendPct(geojson: any): Promise<number | null> {
       .filter(ee.Filter.notNull(["value"]))
       .evaluate((result: any, err: string) => {
         if (err) return reject(new Error(err));
-        const pts = (result?.features || [])
-          .map((f: any) => ({
-            date: f.properties.date,
-            value: f.properties.value,
-          }))
-          .sort((a: any, b: any) => a.date.localeCompare(b.date));
-        if (pts.length < 2) return resolve(null);
-        const recent = pts[pts.length - 1].value;
-        let earlier = null;
-        for (let i = pts.length - 2; i >= 0; i--) {
-          const d = pts[i];
-          if (d.value != null) {
-            const diffDays =
-              (new Date(pts[pts.length - 1].date).getTime() -
-                new Date(d.date).getTime()) /
-              86400000;
-            if (diffDays >= 14) {
-              earlier = d.value;
-              break;
-            }
-          }
-        }
-        if (earlier === null || !earlier) return resolve(null);
-        resolve(((earlier - recent) / earlier) * 100);
+        const pts = (result?.features || []).map((f: any) => ({
+          date: f.properties.date,
+          value: f.properties.value,
+          cloudPct: f.properties.cloudPct,
+        }));
+        resolve(calcTrendChange(pts));
       });
   });
 }
@@ -542,7 +531,10 @@ async function buildAdvisoryPrompt(
   confidence: string | null = null,
 ): Promise<{ prompt: string; decision: ReturnType<typeof buildDecision> }> {
   const lswi = await getLswiForGeometry(field.geojson).catch(() => null);
-  const pct = await getNdviTrendPct(field.geojson).catch(() => null);
+  const trend = await getNdviTrend(field.geojson).catch(() => null);
+  // Keep this worker's local sign convention: positive = a fall, for the
+  // human-readable prompt line. The decision engine gets the signed value.
+  const pct = trend ? -trend.pct : null;
   const pctLine =
     pct == null || !isFinite(pct)
       ? "n/a"
@@ -581,7 +573,7 @@ async function buildAdvisoryPrompt(
     confidenceTier: confidence,
     observationAgeDays: null,
     mode: "optical",
-    trendPct: pct == null ? null : -pct,
+    trendPct: trend ? trend.pct : null,
     cropEnglish: (field as any).crop_english || null,
   });
   const decisionBlock = decisionPromptBlock(decision);

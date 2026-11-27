@@ -2229,11 +2229,9 @@ async function actionGetAllFieldTrends(payload: any) {
 
     const trends = fc.map((ft: any) => {
       const geom = ee.Feature(ft).geometry();
-      const all = ee
-        .ImageCollection("COPERNICUS/S2_SR_HARMONIZED")
-        .filterBounds(geom)
-        .filterDate(startDate, endDate)
-        .filter(ee.Filter.lt("CLOUDY_PIXEL_PERCENTAGE", 40));
+      // Same pixel-level cloud mask as actionGetIndexTimeSeries (s2Collection),
+      // so the dashboard/triage series cannot disagree with the per-field chart.
+      const all = s2Collection(geom, startDate, endDate);
       const series = all
         .map((img: any) => {
           const idxImg = applyIndex(img, index, name);

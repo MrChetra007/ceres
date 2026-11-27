@@ -1,6 +1,7 @@
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { generateExplanation, languageLine } from "../_shared/llm.ts";
 import { buildDecision, decisionPromptBlock } from "../_shared/decision.ts";
+import { calcTrendChange } from "../_shared/trend.ts";
 import { seasonNudge, seasonPromptBlock } from "../_shared/season.ts";
 import { getCorsHeaders } from "../_shared/cors.ts";
 
@@ -41,32 +42,6 @@ function jsonResponse(body: unknown, status = 200, corsHeaders: Record<string, s
   });
 }
 
-// % change of the NDVI observation history: most recent vs ~14+ days earlier
-// (negative = declining). Mirrors the client and the alerts worker so all three
-// reach the same "declining" decision.
-function trendPctFromHistory(raw: unknown): number | null {
-  const list = Array.isArray(raw) ? raw : [];
-  const pts = list
-    .filter(
-      (h: any) =>
-        h && typeof h.date === "string" && typeof h.ndvi === "number" && isFinite(h.ndvi),
-    )
-    .slice(0, 10)
-    .sort((a: any, b: any) => String(a.date).localeCompare(String(b.date)));
-  if (pts.length < 2) return null;
-  const recent = pts[pts.length - 1];
-  let earlier = null;
-  for (let i = pts.length - 2; i >= 0; i--) {
-    const days = (new Date(recent.date).getTime() - new Date(pts[i].date).getTime()) / 86400000;
-    if (days >= 14) {
-      earlier = pts[i];
-      break;
-    }
-  }
-  if (!earlier || !earlier.ndvi) return null;
-  return ((recent.ndvi - earlier.ndvi) / earlier.ndvi) * 100;
-}
-
 Deno.serve(async (req) => {
   const corsHeaders = getCorsHeaders(req);
   if (req.method === "OPTIONS") {
@@ -95,6 +70,9 @@ Deno.serve(async (req) => {
       confidenceReason,
       lang,
       observationHistory,
+      // Clean, pixel-masked NDVI series from the client (preferred for trend);
+      // older clients only send observationHistory, so keep that fallback.
+      ndviTrend,
       cropEnglish,
       locationName,
       // Cloud-resilience metadata: which sensor/reading the value came from, so
@@ -157,6 +135,20 @@ Deno.serve(async (req) => {
     // become an "act" here because buildDecision forbids it.
     const canonicalMode =
       typeof mode === "string" && mode ? mode : rviValue != null ? "radar" : "optical";
+    const trendPoints = Array.isArray(ndviTrend) && ndviTrend.length
+      ? ndviTrend.map((p: any) => ({
+          date: p?.date,
+          value: p?.value,
+          cloudPct: p?.cloudPct,
+          status: p?.status,
+        }))
+      : (Array.isArray(observationHistory) ? observationHistory : []).map((h: any) => ({
+          date: h?.date,
+          value: h?.ndvi,
+          cloudPct: h?.cloudPct,
+          status: h?.status,
+        }));
+    const trend = calcTrendChange(trendPoints);
     const decision = buildDecision({
       index: "ndvi",
       status: typeof statusKey === "string" && statusKey ? statusKey : "unknown",
@@ -172,7 +164,7 @@ Deno.serve(async (req) => {
       observationAgeDays:
         typeof observationAgeDays === "number" ? observationAgeDays : null,
       mode: canonicalMode,
-      trendPct: trendPctFromHistory(observationHistory),
+      trendPct: trend ? trend.pct : null,
       cropEnglish: typeof cropEnglish === "string" ? cropEnglish : null,
     });
     const decisionBlock = decisionPromptBlock(decision);
