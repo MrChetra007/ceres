@@ -26,3 +26,6 @@ dist-ssr
 
 # env
 .env
+
+# local test commands / tokens — never commit
+testcommand.txt

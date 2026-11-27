@@ -111,6 +111,27 @@ Deno.serve(async (req) => {
       forecastDays,
     } = await req.json();
 
+    // Authorization: a caller may only explain a field they own. This must run
+    // before any service-role read/write keyed on fieldId (the cache, ai_usage,
+    // ai_explanations) so a leaked/guessed field id cannot read or overwrite
+    // another user's field-scoped data.
+    if (!fieldId || typeof fieldId !== "string") {
+      return jsonResponse({ ok: false, error: "field_required" }, 400, corsHeaders);
+    }
+    const { data: ownedField, error: ownErr } = await supabase
+      .from("fields")
+      .select("id")
+      .eq("id", fieldId)
+      .eq("owner_id", user.id)
+      .maybeSingle();
+    if (ownErr) {
+      console.error("field ownership check failed:", ownErr);
+      return jsonResponse({ ok: false, error: "ownership_check_failed" }, 500, corsHeaders);
+    }
+    if (!ownedField) {
+      return jsonResponse({ ok: false, error: "forbidden" }, 403, corsHeaders);
+    }
+
     // The farmer's own profile language wins; fall back to what the client
     // sent (Feature 1b — Khmer localization).
     const { data: profile } = await supabase
